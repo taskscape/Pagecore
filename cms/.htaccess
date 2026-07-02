@@ -1,0 +1,5 @@
+# Engine internals are not directly reachable
+<FilesMatch "^(config|engine|auth)\.php$">
+    Require all denied
+</FilesMatch>
+RedirectMatch 404 ^/cms/(lib|tools)/

@@ -1,0 +1,115 @@
+/* CMS inline editor — all selectors prefixed cms- to avoid host-site collisions */
+
+/* --- editable region affordances ------------------------------------- */
+.cms-editable { position: relative; }
+.cms-editable:hover { outline: 2px dashed rgba(156, 63, 46, .55); outline-offset: 4px; }
+.cms-edit-btn {
+    position: absolute; top: -14px; right: -10px; z-index: 9990;
+    display: none; padding: 4px 10px; font: 600 12px/1.4 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    color: #fff; background: #9c3f2e; border: 0; border-radius: 14px; cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
+.cms-editable:hover > .cms-edit-btn { display: block; }
+.cms-empty { color: #8a8072; font-style: italic; }
+
+/* --- toolbar ----------------------------------------------------------- */
+.cms-toolbar {
+    position: fixed; right: 16px; bottom: 16px; z-index: 9995;
+    display: flex; gap: 10px; align-items: center;
+    padding: 8px 14px; background: #2b2620; color: #f4f1ea; border-radius: 22px;
+    font: 600 12px/1.4 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    box-shadow: 0 4px 16px rgba(0,0,0,.3);
+}
+.cms-toolbar a { color: #e8b9ad; text-decoration: none; cursor: pointer; }
+.cms-toolbar a:hover { text-decoration: underline; }
+
+/* --- listing controls --------------------------------------------------- */
+.cms-listing-controls { margin: 24px 0; }
+.cms-add-post {
+    padding: 10px 18px; font: 600 13px/1.4 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    color: #fff; background: #9c3f2e; border: 0; border-radius: 4px; cursor: pointer;
+}
+.cms-add-post:hover { background: #83341f; }
+
+/* --- editor panel -------------------------------------------------------- */
+.cms-overlay {
+    position: fixed; inset: 0; z-index: 9996; background: rgba(43,38,32,.35);
+}
+.cms-panel {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 9997;
+    width: min(680px, 92vw); display: flex; flex-direction: column;
+    background: #faf8f3; border-left: 1px solid #d8d2c4;
+    box-shadow: -8px 0 32px rgba(0,0,0,.2);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #2b2620;
+}
+.cms-panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 18px; border-bottom: 1px solid #e2ddd2; background: #fff;
+}
+.cms-panel-head strong { font-size: 13px; letter-spacing: .04em; }
+.cms-panel-close { background: none; border: 0; font-size: 20px; cursor: pointer; color: #8a8072; }
+.cms-panel-body { flex: 1; display: flex; flex-direction: column; overflow: auto; padding: 14px 18px; gap: 12px; }
+
+.cms-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cms-meta .cms-field-wide { grid-column: 1 / -1; }
+.cms-field label { display: block; font-size: 11px; font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; color: #8a8072; margin-bottom: 3px; }
+.cms-field input, .cms-field select {
+    width: 100%; box-sizing: border-box; padding: 8px 10px; font: inherit;
+    border: 1px solid #d8d2c4; border-radius: 4px; background: #fff;
+}
+
+.cms-editor-area { display: flex; flex-direction: column; gap: 6px; min-height: 220px; }
+.cms-textarea {
+    width: 100%; box-sizing: border-box; min-height: 220px; flex: 1; resize: vertical;
+    padding: 12px; font: 13px/1.6 ui-monospace, Consolas, "Courier New", monospace;
+    border: 1px solid #d8d2c4; border-radius: 4px; background: #fff; color: #2b2620;
+}
+.cms-textarea.cms-dragover { border-color: #9c3f2e; background: #fdf3f0; }
+.cms-hint { font-size: 11.5px; color: #8a8072; }
+
+.cms-preview-label { font-size: 11px; font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; color: #8a8072; margin-top: 4px; }
+.cms-preview {
+    border: 1px dashed #d8d2c4; border-radius: 4px; background: #fff;
+    padding: 14px 16px; min-height: 60px; overflow: auto; max-height: 40vh;
+}
+.cms-preview img { max-width: 100%; height: auto; }
+.cms-preview table, .cms-table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+.cms-preview th, .cms-preview td { border: 1px solid #d8d2c4; padding: 6px 10px; text-align: left; }
+
+.cms-panel-foot {
+    display: flex; gap: 10px; align-items: center; padding: 12px 18px;
+    border-top: 1px solid #e2ddd2; background: #fff;
+}
+.cms-btn {
+    padding: 9px 18px; font: 600 13px/1.4 inherit; border-radius: 4px; cursor: pointer; border: 0;
+}
+.cms-btn-primary { color: #fff; background: #9c3f2e; }
+.cms-btn-primary:hover { background: #83341f; }
+.cms-btn-primary[disabled] { opacity: .6; cursor: default; }
+.cms-btn-ghost { color: #2b2620; background: none; border: 1px solid #d8d2c4; }
+.cms-status { font-size: 12px; color: #8a8072; margin-left: auto; }
+.cms-status.cms-err { color: #8c2f1c; font-weight: 600; }
+
+/* --- small modal (add post) ---------------------------------------------- */
+.cms-modal {
+    position: fixed; inset: 0; z-index: 9998; display: flex; align-items: center; justify-content: center;
+    background: rgba(43,38,32,.45);
+}
+.cms-modal-box {
+    background: #fff; border-radius: 8px; padding: 24px; width: 360px;
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    box-shadow: 0 8px 32px rgba(0,0,0,.3);
+}
+.cms-modal-box h3 { margin: 0 0 14px; font-size: 15px; }
+.cms-modal-box input {
+    width: 100%; box-sizing: border-box; padding: 9px 11px; font: inherit;
+    border: 1px solid #d8d2c4; border-radius: 4px; margin-bottom: 14px;
+}
+.cms-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* markdown table styling for the live site (regions rendered by the engine) */
+.cms-table th, .cms-table td { border: 1px solid #d8d2c4; padding: 8px 12px; }
+.cms-table th { font-family: var(--font-sans, sans-serif); font-size: 13px;
+    text-transform: uppercase; letter-spacing: .04em; }
