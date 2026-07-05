@@ -50,6 +50,11 @@
 .cms-panel-close { background: none; border: 0; font-size: 20px; cursor: pointer; color: #8a8072; }
 .cms-panel-body { flex: 1; display: flex; flex-direction: column; overflow: auto; padding: 14px 18px; gap: 12px; }
 
+.cms-draft-state {
+    padding: 8px 10px; border: 1px solid #e2ddd2; border-radius: 4px;
+    background: #fff; color: #6f665c; font-size: 12px;
+}
+
 .cms-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .cms-meta .cms-field-wide { grid-column: 1 / -1; }
 .cms-field label { display: block; font-size: 11px; font-weight: 600; letter-spacing: .06em;
@@ -78,8 +83,25 @@
 .cms-preview table, .cms-table { border-collapse: collapse; width: 100%; margin: 12px 0; }
 .cms-preview th, .cms-preview td { border: 1px solid #d8d2c4; padding: 6px 10px; text-align: left; }
 
+.cms-revisions {
+    border: 1px solid #e2ddd2; border-radius: 4px; background: #fff;
+    max-height: 170px; overflow: auto;
+}
+.cms-revision-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 8px 10px; border-bottom: 1px solid #eee9df; font-size: 12px;
+}
+.cms-revision-row:last-child { border-bottom: 0; }
+.cms-revision-restore {
+    flex: 0 0 auto; padding: 5px 9px; border: 1px solid #d8d2c4; border-radius: 4px;
+    background: #faf8f3; color: #2b2620; font: 600 12px/1.3 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    cursor: pointer;
+}
+.cms-revision-restore:hover { background: #f1ede4; }
+.cms-revisions-empty { margin: 0; padding: 9px 10px; color: #8a8072; font-size: 12px; }
+
 .cms-panel-foot {
-    display: flex; gap: 10px; align-items: center; padding: 12px 18px;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 18px;
     border-top: 1px solid #e2ddd2; background: #fff;
 }
 .cms-btn {
@@ -87,8 +109,11 @@
 }
 .cms-btn-primary { color: #fff; background: #9c3f2e; }
 .cms-btn-primary:hover { background: #83341f; }
-.cms-btn-primary[disabled] { opacity: .6; cursor: default; }
+.cms-btn-publish { color: #fff; background: #2f6b52; }
+.cms-btn-publish:hover { background: #285940; }
 .cms-btn-ghost { color: #2b2620; background: none; border: 1px solid #d8d2c4; }
+.cms-btn-danger { color: #8c2f1c; }
+.cms-btn[disabled] { opacity: .6; cursor: default; }
 .cms-status { font-size: 12px; color: #8a8072; margin-left: auto; }
 .cms-status.cms-err { color: #8c2f1c; font-weight: 600; }
 

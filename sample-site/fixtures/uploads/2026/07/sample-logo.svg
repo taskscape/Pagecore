@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180" role="img" aria-labelledby="title desc">
+  <title id="title">Pagecore sample logo</title>
+  <desc id="desc">A compact Pagecore sample mark used by the media library tests.</desc>
+  <rect width="320" height="180" fill="#f7f5ef"/>
+  <rect x="22" y="22" width="276" height="136" rx="8" fill="#ffffff" stroke="#2f6b52" stroke-width="6"/>
+  <circle cx="92" cy="90" r="34" fill="#9c3f2e"/>
+  <path d="M145 62h86v18h-86zM145 92h112v16H145zM145 120h68v14h-68z" fill="#2b2620"/>
+</svg>

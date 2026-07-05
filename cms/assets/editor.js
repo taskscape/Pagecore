@@ -3,6 +3,8 @@
     'use strict';
     var CFG = window.CMS_CONFIG || {};
     var API = CFG.api || '/cms/api.php';
+    var CONTENT = CFG.content || '/cms/content.php';
+    var MEDIA = CFG.media || '/cms/media.php';
     var TOKEN = CFG.token || '';
 
     /* ---------------------------------------------------------- helpers */
@@ -29,6 +31,11 @@
             headers: { 'X-CMS-Token': TOKEN }
         }).then(function (r) { return r.json(); });
     }
+    function apiGetAction(action, key) {
+        return fetch(API + '?action=' + encodeURIComponent(action) + '&key=' + encodeURIComponent(key), {
+            headers: { 'X-CMS-Token': TOKEN }
+        }).then(function (r) { return r.json(); });
+    }
     function insertAtCaret(ta, text) {
         var s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
         var pad = (s > 0 && v[s - 1] !== '\n') ? '\n\n' : '';
@@ -43,6 +50,16 @@
     function buildToolbar() {
         var bar = h('div', 'cms-toolbar');
         bar.appendChild(h('span', null, 'CMS • zalogowano'));
+        var content = h('a', null, 'Content');
+        content.href = CONTENT;
+        content.target = '_blank';
+        content.rel = 'noopener';
+        bar.appendChild(content);
+        var media = h('a', null, 'Media');
+        media.href = MEDIA;
+        media.target = '_blank';
+        media.rel = 'noopener';
+        bar.appendChild(media);
         var out = h('a', null, 'Wyloguj');
         out.addEventListener('click', function () {
             fetch(API + '?action=logout', { method: 'POST', headers: { 'X-CMS-Token': TOKEN } })
@@ -73,6 +90,7 @@
         if (!panel) return;
         if (!force && panel._dirty && !confirm('Porzucić niezapisane zmiany?')) return;
         document.removeEventListener('keydown', panel._keys);
+        window.cmsInsertMedia = null;
         panel._overlay.remove();
         panel.remove();
         panel = null;
@@ -82,6 +100,8 @@
         if (panel) closeEditor(true);
         var key = regionEl.getAttribute('data-cms-key');
         var isPost = key.indexOf('post:') === 0;
+        var currentDraft = null;
+        var busy = false;
 
         var overlay = h('div', 'cms-overlay');
         overlay.addEventListener('click', function () { closeEditor(false); });
@@ -101,6 +121,9 @@
         var body = h('div', 'cms-panel-body');
         panel.appendChild(body);
 
+        var draftState = h('div', 'cms-draft-state', 'Ładuję…');
+        body.appendChild(draftState);
+
         /* post meta form */
         var metaInputs = null;
         if (isPost) {
@@ -117,7 +140,6 @@
                 var input;
                 if (def[2] === 'select') {
                     input = document.createElement('select');
-                    // categories injected server-side into CMS_CONFIG? keep static list from DOM if absent
                     (CFG.categories || []).forEach(function (c) {
                         var o = document.createElement('option');
                         o.value = c[0]; o.textContent = c[1];
@@ -151,42 +173,225 @@
         body.appendChild(prevLabel);
         body.appendChild(preview);
 
+        var revLabel = h('div', 'cms-preview-label', 'Kopie zapasowe');
+        var revisions = h('div', 'cms-revisions', 'Ładuję kopie…');
+        body.appendChild(revLabel);
+        body.appendChild(revisions);
+
         var foot = h('div', 'cms-panel-foot');
-        var save = h('button', 'cms-btn cms-btn-primary', 'Zapisz');
-        save.type = 'button';
+        var draftBtn = h('button', 'cms-btn cms-btn-primary', 'Zapisz szkic');
+        draftBtn.type = 'button';
+        var mediaBtn = h('button', 'cms-btn cms-btn-ghost cms-media-open', 'Media library');
+        mediaBtn.type = 'button';
+        var previewBtn = h('button', 'cms-btn cms-btn-ghost', 'Podgląd szkicu');
+        previewBtn.type = 'button';
+        var publishBtn = h('button', 'cms-btn cms-btn-publish', 'Opublikuj');
+        publishBtn.type = 'button';
+        var discardBtn = h('button', 'cms-btn cms-btn-ghost cms-btn-danger', 'Usuń szkic');
+        discardBtn.type = 'button';
         var cancel = h('button', 'cms-btn cms-btn-ghost', 'Anuluj');
         cancel.type = 'button';
         cancel.addEventListener('click', function () { closeEditor(false); });
         var status = h('span', 'cms-status', '');
-        foot.appendChild(save); foot.appendChild(cancel); foot.appendChild(status);
+        foot.appendChild(draftBtn);
+        foot.appendChild(mediaBtn);
+        foot.appendChild(previewBtn);
+        foot.appendChild(publishBtn);
+        foot.appendChild(discardBtn);
+        foot.appendChild(cancel);
+        foot.appendChild(status);
         panel.appendChild(foot);
 
         document.body.appendChild(overlay);
         document.body.appendChild(panel);
 
-        /* load current content */
-        apiGet(key).then(function (res) {
-            if (!res.ok) { status.className = 'cms-status cms-err'; status.textContent = res.error || 'Błąd'; return; }
-            ta.value = res.markdown || '';
-            ta.disabled = false;
-            ta.placeholder = '';
-            ta.focus();
-            if (isPost && res.meta && metaInputs) {
-                metaInputs.title.value = res.meta.title || '';
-                metaInputs.date.value = res.meta.date || '';
-                metaInputs.category.value = res.meta.category || '';
-                metaInputs.excerpt.value = res.meta.excerpt || '';
+        function setStatus(text, isError) {
+            status.className = isError ? 'cms-status cms-err' : 'cms-status';
+            status.textContent = text || '';
+        }
+        function syncButtons() {
+            var disabled = busy || ta.disabled;
+            draftBtn.disabled = disabled;
+            mediaBtn.disabled = disabled;
+            previewBtn.disabled = disabled;
+            publishBtn.disabled = disabled;
+            discardBtn.disabled = disabled || !currentDraft;
+        }
+        function setBusy(value) {
+            busy = value;
+            syncButtons();
+        }
+        window.cmsInsertMedia = function (markdown) {
+            if (!markdown) { return; }
+            insertAtCaret(ta, markdown);
+            setStatus('Wstawiono plik z biblioteki.');
+        };
+        function currentMeta() {
+            if (!isPost || !metaInputs) { return {}; }
+            return {
+                title: metaInputs.title.value,
+                date: metaInputs.date.value,
+                category: metaInputs.category.value,
+                excerpt: metaInputs.excerpt.value
+            };
+        }
+        function currentPayload() {
+            var out = { key: key, markdown: ta.value };
+            var meta = currentMeta();
+            Object.keys(meta).forEach(function (k) { out[k] = meta[k]; });
+            return out;
+        }
+        function setMeta(meta) {
+            if (!isPost || !metaInputs) { return; }
+            meta = meta || {};
+            metaInputs.title.value = meta.title || '';
+            metaInputs.date.value = meta.date || '';
+            metaInputs.category.value = meta.category || '';
+            metaInputs.excerpt.value = meta.excerpt || '';
+        }
+        function fillEditor(payload) {
+            ta.value = payload.markdown || '';
+            setMeta(payload.meta || {});
+        }
+        function updateDraftState(draft) {
+            currentDraft = draft || null;
+            draftState.textContent = currentDraft
+                ? 'Wczytano szkic zapisany: ' + currentDraft.updated
+                : 'Brak zapisanego szkicu. Edycja zaczyna się od wersji opublikowanej.';
+            syncButtons();
+        }
+        function replaceRegionHtml(html) {
+            var btn = regionEl.querySelector('.cms-edit-btn');
+            regionEl.innerHTML = html || '<p class="cms-empty">(pusty fragment — kliknij, aby edytować)</p>';
+            if (btn) regionEl.appendChild(btn);
+        }
+        function applyPayloadToPage(payload) {
+            replaceRegionHtml(payload.html || '');
+            if (isPost && payload.meta) {
+                var h1 = document.querySelector('main h1');
+                if (h1 && payload.meta.title) { h1.textContent = payload.meta.title; }
             }
-            renderPreview();
-        });
-
-        /* preview (debounced server render) */
-        var t = null;
+        }
+        function renderRevisions(items) {
+            revisions.innerHTML = '';
+            if (!items || !items.length) {
+                revisions.appendChild(h('p', 'cms-revisions-empty', 'Brak kopii zapasowych dla tego fragmentu.'));
+                return;
+            }
+            items.slice(0, 10).forEach(function (rev) {
+                var row = h('div', 'cms-revision-row');
+                row.appendChild(h('span', null, rev.label));
+                var restore = h('button', 'cms-revision-restore', 'Przywróć');
+                restore.type = 'button';
+                restore.addEventListener('click', function () { restoreRevision(rev.id, rev.label); });
+                row.appendChild(restore);
+                revisions.appendChild(row);
+            });
+        }
+        function loadRevisions() {
+            apiGetAction('revisions', key).then(function (res) {
+                if (!res.ok) { throw new Error(res.error || 'Nie można pobrać kopii.'); }
+                renderRevisions(res.revisions || []);
+            }).catch(function (err) {
+                revisions.innerHTML = '';
+                revisions.appendChild(h('p', 'cms-revisions-empty', err.message));
+            });
+        }
         function renderPreview() {
             api('preview', { markdown: ta.value }).then(function (res) {
                 if (res.ok) preview.innerHTML = res.html;
             });
         }
+        function saveDraft(openPreview) {
+            var win = openPreview ? window.open('about:blank', '_blank') : null;
+            setBusy(true);
+            setStatus('Zapisywanie szkicu…');
+            return api('save-draft', currentPayload()).then(function (res) {
+                if (!res.ok) { throw new Error(res.error || 'Nie udało się zapisać szkicu.'); }
+                panel._dirty = false;
+                updateDraftState(res.draft);
+                setStatus('Szkic zapisany.');
+                if (win && res.draft && res.draft.preview_url) {
+                    win.location.href = res.draft.preview_url;
+                }
+                return res;
+            }).catch(function (err) {
+                if (win) { win.close(); }
+                setStatus(err.message, true);
+            }).then(function (res) {
+                setBusy(false);
+                return res;
+            });
+        }
+        function publishCurrent() {
+            if (!confirm('Opublikować tę wersję na stronie?')) { return; }
+            setBusy(true);
+            setStatus('Publikowanie…');
+            api('publish', currentPayload()).then(function (res) {
+                if (!res.ok) { throw new Error(res.error || 'Nie udało się opublikować.'); }
+                panel._dirty = false;
+                updateDraftState(null);
+                applyPayloadToPage(res);
+                closeEditor(true);
+            }).catch(function (err) {
+                setStatus(err.message, true);
+            }).then(function () {
+                setBusy(false);
+            });
+        }
+        function discardDraft() {
+            if (!currentDraft || !confirm('Usunąć zapisany szkic i wrócić do wersji opublikowanej?')) { return; }
+            setBusy(true);
+            setStatus('Usuwanie szkicu…');
+            api('discard-draft', { key: key }).then(function (res) {
+                if (!res.ok) { throw new Error(res.error || 'Nie udało się usunąć szkicu.'); }
+                fillEditor(res);
+                panel._dirty = false;
+                updateDraftState(null);
+                renderPreview();
+                setStatus('Szkic usunięty.');
+            }).catch(function (err) {
+                setStatus(err.message, true);
+            }).then(function () {
+                setBusy(false);
+            });
+        }
+        function restoreRevision(id, label) {
+            if (!confirm('Przywrócić kopię z ' + label + '? Zastąpi ona opublikowaną wersję.')) { return; }
+            setBusy(true);
+            setStatus('Przywracanie kopii…');
+            api('restore', { key: key, revision: id }).then(function (res) {
+                if (!res.ok) { throw new Error(res.error || 'Nie udało się przywrócić kopii.'); }
+                fillEditor(res);
+                applyPayloadToPage(res);
+                panel._dirty = false;
+                updateDraftState(null);
+                renderPreview();
+                loadRevisions();
+                setStatus('Kopia przywrócona.');
+            }).catch(function (err) {
+                setStatus(err.message, true);
+            }).then(function () {
+                setBusy(false);
+            });
+        }
+
+        /* load current content */
+        apiGet(key).then(function (res) {
+            if (!res.ok) { setStatus(res.error || 'Błąd', true); return; }
+            fillEditor(res.draft || res);
+            ta.disabled = false;
+            ta.placeholder = '';
+            ta.focus();
+            updateDraftState(res.draft || null);
+            renderPreview();
+            loadRevisions();
+        }).catch(function () {
+            setStatus('Błąd sieci przy pobieraniu treści.', true);
+        });
+
+        /* preview (debounced server render) */
+        var t = null;
         ta.addEventListener('input', function () {
             panel._dirty = true;
             clearTimeout(t);
@@ -196,21 +401,15 @@
         /* uploads: paste + drag/drop */
         function uploadFile(file) {
             if (!file) return;
-            status.className = 'cms-status';
-            status.textContent = 'Przesyłanie: ' + file.name + '…';
+            setStatus('Przesyłanie: ' + file.name + '…');
             var fd = new FormData();
             fd.append('file', file, file.name);
             api('upload', fd, true).then(function (res) {
-                if (!res.ok) {
-                    status.className = 'cms-status cms-err';
-                    status.textContent = res.error || 'Błąd przesyłania';
-                    return;
-                }
-                status.textContent = 'Przesłano: ' + res.url;
+                if (!res.ok) { throw new Error(res.error || 'Błąd przesyłania'); }
+                setStatus('Przesłano: ' + res.url);
                 insertAtCaret(ta, res.markdown);
-            }).catch(function () {
-                status.className = 'cms-status cms-err';
-                status.textContent = 'Błąd sieci przy przesyłaniu.';
+            }).catch(function (err) {
+                setStatus(err.message || 'Błąd sieci przy przesyłaniu.', true);
             });
         }
         ta.addEventListener('paste', function (ev) {
@@ -239,49 +438,20 @@
             }
         });
 
-        /* save */
-        function doSave() {
-            save.disabled = true;
-            status.className = 'cms-status';
-            status.textContent = 'Zapisywanie…';
-            var chain = Promise.resolve({ ok: true });
-            if (isPost && metaInputs) {
-                chain = api('save-post-meta', {
-                    slug: key.slice(5),
-                    title: metaInputs.title.value,
-                    date: metaInputs.date.value,
-                    category: metaInputs.category.value,
-                    excerpt: metaInputs.excerpt.value
-                });
-            }
-            chain.then(function (m) {
-                if (!m.ok) throw new Error(m.error || 'Błąd metadanych');
-                return api('save', { key: key, markdown: ta.value });
-            }).then(function (res) {
-                if (!res.ok) throw new Error(res.error || 'Błąd zapisu');
-                /* swap the fragment in place (keep the edit button) */
-                var btn = regionEl.querySelector('.cms-edit-btn');
-                regionEl.innerHTML = res.html;
-                if (btn) regionEl.appendChild(btn);
-                panel._dirty = false;
-                if (isPost && metaInputs) {
-                    var h1 = document.querySelector('main h1');
-                    if (h1) h1.textContent = metaInputs.title.value;
-                }
-                closeEditor(true);
-            }).catch(function (err) {
-                save.disabled = false;
-                status.className = 'cms-status cms-err';
-                status.textContent = err.message;
-            });
-        }
-        save.addEventListener('click', doSave);
+        draftBtn.addEventListener('click', function () { saveDraft(false); });
+        mediaBtn.addEventListener('click', function () {
+            window.open(MEDIA + '?picker=1', 'cms-media', 'width=1100,height=760');
+        });
+        previewBtn.addEventListener('click', function () { saveDraft(true); });
+        publishBtn.addEventListener('click', publishCurrent);
+        discardBtn.addEventListener('click', discardDraft);
+        syncButtons();
 
         panel._keys = function (ev) {
             if (ev.key === 'Escape') { closeEditor(false); }
             if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 's') {
                 ev.preventDefault();
-                doSave();
+                saveDraft(false);
             }
         };
         document.addEventListener('keydown', panel._keys);

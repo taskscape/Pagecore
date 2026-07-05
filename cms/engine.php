@@ -20,7 +20,9 @@ if (defined('CMS_LOADED')) { return; }
 define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
-$GLOBALS['CMS_CONFIG'] = require __DIR__ . '/config.php';
+$cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
+if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
+$GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
 
 /* ---------------------------------------------------------------- session */
 if (session_status() === PHP_SESSION_NONE && PHP_SAPI !== 'cli') {
@@ -114,6 +116,257 @@ function cms_backup($relKey, $path) {
         sort($files); // timestamped names sort chronologically
         foreach (array_slice($files, 0, count($files) - $keep) as $old) { @unlink($old); }
     }
+}
+
+function cms_target_rel_key($kind, $id) {
+    return $kind === 'post' ? 'posts/' . $id : 'pages/' . $id;
+}
+
+function cms_draft_region_path($key, $mustExist = false) {
+    if (!preg_match('~^[a-z0-9-]+(/[a-z0-9-]+){0,2}$~', $key)) { return null; }
+    $path = cms_cfg('content_dir') . '/.drafts/pages/' . $key . '.md';
+    if ($mustExist && !is_file($path)) { return null; }
+    return $path;
+}
+
+function cms_draft_post_path($slug, $mustExist = false) {
+    if (!preg_match('~^[a-z0-9-]+$~', $slug)) { return null; }
+    $path = cms_cfg('content_dir') . '/.drafts/posts/' . $slug . '.md';
+    if ($mustExist && !is_file($path)) { return null; }
+    return $path;
+}
+
+function cms_draft_path($kind, $id, $mustExist = false) {
+    return $kind === 'post'
+        ? cms_draft_post_path($id, $mustExist)
+        : cms_draft_region_path($id, $mustExist);
+}
+
+function cms_remove_empty_dirs($dir, $stop) {
+    $dir = rtrim($dir, '/\\');
+    $stop = rtrim($stop, '/\\');
+    while ($dir !== '' && str_replace('\\', '/', $dir) !== str_replace('\\', '/', $stop) && is_dir($dir)) {
+        $items = @scandir($dir);
+        if ($items === false || count($items) > 2) { break; }
+        if (!@rmdir($dir)) { break; }
+        $dir = dirname($dir);
+    }
+}
+
+function cms_clear_draft($kind, $id) {
+    $path = cms_draft_path($kind, $id, true);
+    if (!$path) { return; }
+    @unlink($path);
+    cms_remove_empty_dirs(dirname($path), cms_cfg('content_dir') . '/.drafts');
+}
+
+function cms_revision_id($file) {
+    $base = realpath(cms_cfg('backup_dir'));
+    $real = realpath($file);
+    if ($base === false || $real === false) { return null; }
+    $base = rtrim(str_replace('\\', '/', $base), '/') . '/';
+    $real = str_replace('\\', '/', $real);
+    if (strpos($real, $base) !== 0) { return null; }
+    return substr($real, strlen($base));
+}
+
+function cms_revision_path($id) {
+    if (!preg_match('~^[A-Za-z0-9._/-]+\.md$~', (string) $id)) { return null; }
+    if (strpos($id, '..') !== false) { return null; }
+    $path = cms_cfg('backup_dir') . '/' . str_replace('/', DIRECTORY_SEPARATOR, $id);
+    if (!is_file($path)) { return null; }
+    $base = realpath(cms_cfg('backup_dir'));
+    $real = realpath($path);
+    if ($base === false || $real === false) { return null; }
+    $base = rtrim(str_replace('\\', '/', $base), '/') . '/';
+    $real = str_replace('\\', '/', $real);
+    return strpos($real, $base) === 0 ? $path : null;
+}
+
+function cms_revision_belongs_to($id, $relKey) {
+    $prefix = dirname($relKey);
+    if ($prefix === '.' || $prefix === '') {
+        $prefix = '';
+    } else {
+        $prefix .= '/';
+    }
+    $prefix .= basename($relKey) . '.';
+    return strpos($id, $prefix) === 0 && substr($id, -3) === '.md';
+}
+
+function cms_revision_label($file, $relKey) {
+    $name = basename($file);
+    $pattern = '~^' . preg_quote(basename($relKey), '~') . '\.(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.[a-f0-9]+\.md$~';
+    if (preg_match($pattern, $name, $m)) {
+        return $m[1] . '-' . $m[2] . '-' . $m[3] . ' ' . $m[4] . ':' . $m[5] . ':' . $m[6];
+    }
+    return date('Y-m-d H:i:s', filemtime($file));
+}
+
+function cms_revisions($relKey) {
+    $dir = cms_cfg('backup_dir') . '/' . dirname($relKey);
+    $files = glob($dir . '/' . basename($relKey) . '.*.md');
+    if (!$files) { return array(); }
+    rsort($files, SORT_STRING);
+    $out = array();
+    foreach ($files as $file) {
+        $id = cms_revision_id($file);
+        if ($id === null) { continue; }
+        $out[] = array(
+            'id'      => $id,
+            'label'   => cms_revision_label($file, $relKey),
+            'size'    => filesize($file),
+            'modified'=> filemtime($file),
+        );
+    }
+    return $out;
+}
+
+/* --------------------------------------------------------------- media */
+function cms_media_exts() {
+    return array_map('strtolower', cms_cfg('allowed_ext', array('jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf')));
+}
+
+function cms_media_is_valid_rel($rel) {
+    $rel = str_replace('\\', '/', (string) $rel);
+    if ($rel === '' || $rel[0] === '/' || strpos($rel, '..') !== false) { return false; }
+    if (!preg_match('~^[A-Za-z0-9._/-]+$~', $rel)) { return false; }
+    $ext = strtolower(pathinfo($rel, PATHINFO_EXTENSION));
+    return in_array($ext, cms_media_exts(), true);
+}
+
+function cms_media_path($rel, $mustExist = true) {
+    if (!cms_media_is_valid_rel($rel)) { return null; }
+    $base = rtrim(cms_cfg('uploads_dir'), '/\\');
+    $path = $base . '/' . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+    if ($mustExist && !is_file($path)) { return null; }
+    $baseReal = realpath($base);
+    $dirReal = realpath(dirname($path));
+    if ($baseReal === false || $dirReal === false) { return null; }
+    $baseNorm = rtrim(str_replace('\\', '/', $baseReal), '/') . '/';
+    $dirNorm = rtrim(str_replace('\\', '/', $dirReal), '/') . '/';
+    if (strpos($dirNorm, $baseNorm) !== 0 && $dirNorm !== $baseNorm) { return null; }
+    return $path;
+}
+
+function cms_media_rel_from_path($path) {
+    $base = realpath(cms_cfg('uploads_dir'));
+    $real = realpath($path);
+    if ($base === false || $real === false) { return null; }
+    $base = rtrim(str_replace('\\', '/', $base), '/') . '/';
+    $real = str_replace('\\', '/', $real);
+    if (strpos($real, $base) !== 0) { return null; }
+    return substr($real, strlen($base));
+}
+
+function cms_media_url($rel) {
+    return rtrim(cms_cfg('uploads_url'), '/') . '/' . str_replace('%2F', '/', rawurlencode(str_replace('\\', '/', $rel)));
+}
+
+function cms_media_kind($rel) {
+    return strtolower(pathinfo($rel, PATHINFO_EXTENSION)) === 'pdf' ? 'pdf' : 'image';
+}
+
+function cms_media_meta_path($path) {
+    return $path . '.meta.json';
+}
+
+function cms_media_read_meta($path) {
+    $metaPath = cms_media_meta_path($path);
+    if (!is_file($metaPath)) { return array('alt' => '', 'caption' => ''); }
+    $data = json_decode((string) file_get_contents($metaPath), true);
+    if (!is_array($data)) { return array('alt' => '', 'caption' => ''); }
+    return array(
+        'alt' => isset($data['alt']) ? (string) $data['alt'] : '',
+        'caption' => isset($data['caption']) ? (string) $data['caption'] : '',
+    );
+}
+
+function cms_media_write_meta($path, array $meta) {
+    $data = array(
+        'alt' => str_replace(array("\r", "\n"), ' ', isset($meta['alt']) ? (string) $meta['alt'] : ''),
+        'caption' => str_replace(array("\r", "\n"), ' ', isset($meta['caption']) ? (string) $meta['caption'] : ''),
+    );
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    return $json !== false && cms_atomic_write(cms_media_meta_path($path), $json . "\n");
+}
+
+function cms_media_markdown(array $asset) {
+    $label = $asset['meta']['caption'] !== '' ? $asset['meta']['caption'] : $asset['filename_base'];
+    if ($asset['kind'] === 'pdf') {
+        return 'pdf:' . $asset['url'] . ' "' . str_replace('"', '', $label) . '"';
+    }
+    $alt = $asset['meta']['alt'] !== '' ? $asset['meta']['alt'] : $asset['filename_base'];
+    $caption = $asset['meta']['caption'] !== '' ? ' "' . str_replace('"', '', $asset['meta']['caption']) . '"' : '';
+    return '![' . str_replace(array('[', ']'), '', $alt) . '](' . $asset['url'] . $caption . ')';
+}
+
+function cms_media_asset($rel) {
+    $path = cms_media_path($rel, true);
+    if (!$path) { return null; }
+    $rel = str_replace('\\', '/', $rel);
+    $meta = cms_media_read_meta($path);
+    $asset = array(
+        'rel' => $rel,
+        'url' => cms_media_url($rel),
+        'kind' => cms_media_kind($rel),
+        'filename' => basename($rel),
+        'filename_base' => pathinfo($rel, PATHINFO_FILENAME),
+        'size' => filesize($path),
+        'modified' => filemtime($path),
+        'meta' => $meta,
+    );
+    if ($asset['kind'] === 'image') {
+        $size = @getimagesize($path);
+        if ($size) {
+            $asset['width'] = $size[0];
+            $asset['height'] = $size[1];
+        }
+    }
+    $asset['markdown'] = cms_media_markdown($asset);
+    return $asset;
+}
+
+function cms_media_assets($query = '') {
+    $base = cms_cfg('uploads_dir');
+    if (!is_dir($base)) { return array(); }
+    $query = strtolower(trim((string) $query));
+    $files = array();
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($base, FilesystemIterator::SKIP_DOTS));
+    foreach ($it as $file) {
+        if (!$file->isFile()) { continue; }
+        $rel = cms_media_rel_from_path($file->getPathname());
+        if ($rel === null || !cms_media_is_valid_rel($rel)) { continue; }
+        $asset = cms_media_asset($rel);
+        if (!$asset) { continue; }
+        $haystack = strtolower($asset['rel'] . ' ' . $asset['meta']['alt'] . ' ' . $asset['meta']['caption']);
+        if ($query !== '' && strpos($haystack, $query) === false) { continue; }
+        $files[] = $asset;
+    }
+    usort($files, function ($a, $b) {
+        $c = $b['modified'] - $a['modified'];
+        return $c !== 0 ? $c : strcmp($a['rel'], $b['rel']);
+    });
+    return $files;
+}
+
+function cms_media_is_referenced($url) {
+    $roots = array(
+        cms_cfg('content_dir') . '/pages',
+        cms_cfg('content_dir') . '/posts',
+        cms_cfg('content_dir') . '/.drafts',
+    );
+    foreach ($roots as $root) {
+        if (!is_dir($root)) { continue; }
+        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+        foreach ($it as $file) {
+            if (!$file->isFile() || strtolower($file->getExtension()) !== 'md') { continue; }
+            if (strpos((string) file_get_contents($file->getPathname()), $url) !== false) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /* ------------------------------------------------------------ front matter */
@@ -286,6 +539,256 @@ function cms_post($slug) {
     );
 }
 
+/* -------------------------------------------------------- content / nav */
+function cms_nav_file() {
+    return cms_cfg('nav_file', cms_cfg('content_dir') . '/nav.json');
+}
+
+function cms_default_nav_items() {
+    $items = array();
+    foreach (cms_cfg('search_pages', array()) as $url => $def) {
+        $items[] = array(
+            'label' => isset($def[0]) ? (string) $def[0] : $url,
+            'url' => $url,
+            'children' => array(),
+        );
+    }
+    return $items;
+}
+
+function cms_normalize_nav_item($item) {
+    if (!is_array($item)) { return null; }
+    $label = trim(isset($item['label']) ? (string) $item['label'] : '');
+    $url = trim(isset($item['url']) ? (string) $item['url'] : '');
+    if ($label === '' || $url === '') { return null; }
+    if (!preg_match('~^(https?://|/)~i', $url)) { return null; }
+    $children = array();
+    if (isset($item['children']) && is_array($item['children'])) {
+        foreach ($item['children'] as $child) {
+            $normalized = cms_normalize_nav_item($child);
+            if ($normalized) { $children[] = $normalized; }
+        }
+    }
+    return array('label' => $label, 'url' => $url, 'children' => $children);
+}
+
+function cms_normalize_nav_items($items) {
+    if (!is_array($items)) { return null; }
+    $out = array();
+    foreach ($items as $item) {
+        $normalized = cms_normalize_nav_item($item);
+        if ($normalized) { $out[] = $normalized; }
+    }
+    return $out;
+}
+
+function cms_nav_items() {
+    $file = cms_nav_file();
+    if (is_file($file)) {
+        $data = json_decode((string) file_get_contents($file), true);
+        $items = cms_normalize_nav_items($data);
+        if ($items !== null) { return $items; }
+    }
+    return cms_default_nav_items();
+}
+
+function cms_nav_json() {
+    return json_encode(cms_nav_items(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+}
+
+function cms_write_nav_json($raw, &$error = null) {
+    $data = json_decode((string) $raw, true);
+    if (!is_array($data)) {
+        $error = 'Navigation must be a JSON array.';
+        return false;
+    }
+    $items = cms_normalize_nav_items($data);
+    if ($items === null) {
+        $error = 'Navigation JSON is not valid.';
+        return false;
+    }
+    $json = json_encode($items, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    if ($json === false) {
+        $error = 'Navigation JSON could not be encoded.';
+        return false;
+    }
+    if (!cms_atomic_write(cms_nav_file(), $json . "\n")) {
+        $error = 'Navigation file could not be written.';
+        return false;
+    }
+    return true;
+}
+
+function cms_nav_html_items(array $items) {
+    $html = '';
+    foreach ($items as $item) {
+        $html .= '<li><a href="' . htmlspecialchars($item['url'], ENT_QUOTES, 'UTF-8') . '">'
+            . htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') . '</a>';
+        if (!empty($item['children'])) {
+            $html .= '<ul>' . cms_nav_html_items($item['children']) . '</ul>';
+        }
+        $html .= '</li>';
+    }
+    return $html;
+}
+
+function cms_nav_html() {
+    return '<ul class="cms-nav-list">' . cms_nav_html_items(cms_nav_items()) . '</ul>';
+}
+
+function cms_content_rel_path($path, $base) {
+    $base = realpath($base);
+    $real = realpath($path);
+    if ($base === false || $real === false) { return null; }
+    $base = rtrim(str_replace('\\', '/', $base), '/') . '/';
+    $real = str_replace('\\', '/', $real);
+    if (strpos($real, $base) !== 0) { return null; }
+    return substr($real, strlen($base));
+}
+
+function cms_region_files() {
+    $base = cms_cfg('content_dir') . '/pages';
+    if (!is_dir($base)) { return array(); }
+    $out = array();
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($base, FilesystemIterator::SKIP_DOTS));
+    foreach ($it as $file) {
+        if (!$file->isFile() || strtolower($file->getExtension()) !== 'md') { continue; }
+        $rel = cms_content_rel_path($file->getPathname(), $base);
+        if ($rel === null) { continue; }
+        $key = preg_replace('~\.md$~i', '', str_replace('\\', '/', $rel));
+        if (cms_region_path($key, true)) { $out[] = $key; }
+    }
+    sort($out, SORT_STRING);
+    return $out;
+}
+
+function cms_template_region_keys() {
+    $root = cms_cfg('site_root');
+    if (!is_dir($root)) { return array(); }
+    $skip = array(
+        '.git' => true,
+        'cms' => true,
+        'content' => true,
+        'uploads' => true,
+        'working-content' => true,
+        'working-uploads' => true,
+        'fixtures' => true,
+        'node_modules' => true,
+        'vendor' => true,
+        'playwright-report' => true,
+        'test-results' => true,
+    );
+    $keys = array();
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+    foreach ($it as $file) {
+        if (!$file->isFile() || strtolower($file->getExtension()) !== 'php') { continue; }
+        $rel = cms_content_rel_path($file->getPathname(), $root);
+        if ($rel === null) { continue; }
+        $parts = explode('/', str_replace('\\', '/', $rel));
+        if (isset($skip[$parts[0]])) { continue; }
+        $src = (string) file_get_contents($file->getPathname());
+        if (preg_match_all('~cms_editable\(\s*[\'"]([a-z0-9-]+(?:/[a-z0-9-]+){0,2})[\'"]~', $src, $m)) {
+            foreach ($m[1] as $key) { $keys[$key] = true; }
+        }
+        if (preg_match_all('~data-cms-key\s*=\s*[\'"]([a-z0-9-]+(?:/[a-z0-9-]+){0,2})[\'"]~', $src, $m)) {
+            foreach ($m[1] as $key) { $keys[$key] = true; }
+        }
+    }
+    $out = array_keys($keys);
+    sort($out, SORT_STRING);
+    return $out;
+}
+
+function cms_content_file_summary($path) {
+    if (!is_file($path)) { return array('exists' => false, 'size' => 0, 'modified' => null); }
+    return array('exists' => true, 'size' => filesize($path), 'modified' => filemtime($path));
+}
+
+function cms_content_inventory() {
+    $searchPages = cms_cfg('search_pages', array());
+    $pages = array();
+    $regionSources = array();
+    $regionUrls = array();
+
+    foreach ($searchPages as $url => $def) {
+        $region = isset($def[2]) ? (string) $def[2] : '';
+        if ($region !== '') {
+            if (!isset($regionSources[$region])) { $regionSources[$region] = array(); }
+            $regionSources[$region]['search_pages'] = true;
+            $regionUrls[$region] = $url;
+        }
+        $summary = $region !== '' ? cms_content_file_summary(cms_region_path($region, false)) : array('exists' => null, 'size' => 0, 'modified' => null);
+        $pages[] = array(
+            'title' => isset($def[0]) ? (string) $def[0] : $url,
+            'type' => isset($def[1]) ? (string) $def[1] : 'Page',
+            'url' => $url,
+            'region' => $region,
+            'exists' => $summary['exists'],
+        );
+    }
+
+    foreach (cms_region_files() as $key) {
+        if (!isset($regionSources[$key])) { $regionSources[$key] = array(); }
+        $regionSources[$key]['file'] = true;
+    }
+    foreach (cms_template_region_keys() as $key) {
+        if (!isset($regionSources[$key])) { $regionSources[$key] = array(); }
+        $regionSources[$key]['template'] = true;
+    }
+
+    ksort($regionSources, SORT_STRING);
+    $regions = array();
+    $missing = array();
+    foreach ($regionSources as $key => $sources) {
+        $path = cms_region_path($key, false);
+        $summary = $path ? cms_content_file_summary($path) : array('exists' => false, 'size' => 0, 'modified' => null);
+        $draft = cms_draft_region_path($key, true);
+        $item = array(
+            'key' => $key,
+            'path' => $path,
+            'url' => isset($regionUrls[$key]) ? $regionUrls[$key] : '',
+            'sources' => array_keys($sources),
+            'exists' => $summary['exists'],
+            'size' => $summary['size'],
+            'modified' => $summary['modified'],
+            'draft' => $draft ? true : false,
+        );
+        $regions[] = $item;
+        if (!$item['exists']) { $missing[] = $item; }
+    }
+
+    $posts = cms_posts();
+    $counts = array();
+    foreach (cms_cfg('categories', array()) as $slug => $def) { $counts[$slug] = 0; }
+    foreach ($posts as $post) {
+        if (!isset($counts[$post['category']])) { $counts[$post['category']] = 0; }
+        $counts[$post['category']]++;
+    }
+    $categories = array();
+    foreach (cms_cfg('categories', array()) as $slug => $def) {
+        $categories[] = array(
+            'slug' => $slug,
+            'label' => isset($def[0]) ? (string) $def[0] : $slug,
+            'url' => isset($def[1]) ? (string) $def[1] : '',
+            'posts' => isset($counts[$slug]) ? $counts[$slug] : 0,
+        );
+    }
+
+    return array(
+        'pages' => $pages,
+        'regions' => $regions,
+        'missing' => $missing,
+        'posts' => $posts,
+        'categories' => $categories,
+        'nav' => array(
+            'file' => cms_nav_file(),
+            'exists' => is_file(cms_nav_file()),
+            'items' => cms_nav_items(),
+            'json' => cms_nav_json(),
+        ),
+    );
+}
+
 /** Slugify a title (Polish transliteration), ensure uniqueness. */
 function cms_slugify($title) {
     $map = array(
@@ -365,6 +868,8 @@ function cms_assets() {
     foreach (cms_cfg('categories') as $slug => $def) { $cats[] = array($slug, $def[0]); }
     $cfg = json_encode(array(
         'api'   => '/cms/api.php',
+        'content' => '/cms/content.php',
+        'media' => '/cms/media.php',
         'token' => cms_csrf_token(),
         'maxUploadMb' => cms_cfg('max_upload_mb'),
         'categories' => $cats,

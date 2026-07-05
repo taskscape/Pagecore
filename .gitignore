@@ -10,3 +10,15 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+### Node / Playwright
+node_modules/
+playwright-report/
+test-results/
+
+### Pagecore sample site runtime
+sample-site/working-content/
+sample-site/working-uploads/
+sample-site/search-index.json
+sample-site/sitemap.xml
+php

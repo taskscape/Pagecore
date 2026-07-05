@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="Content workflow diagram">
+  <rect width="800" height="600" fill="#263329"/>
+  <g fill="none" stroke="#f7efe2" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity=".88">
+    <path d="M126 172h178v112H126z"/>
+    <path d="M496 172h178v112H496z"/>
+    <path d="M310 392h178v112H310z"/>
+    <path d="M304 228h192"/>
+    <path d="M215 284l184 108"/>
+    <path d="M585 284L399 392"/>
+  </g>
+  <g fill="#f7efe2" font-family="Arial, sans-serif" font-weight="700" text-anchor="middle">
+    <text x="215" y="236" font-size="34">Draft</text>
+    <text x="585" y="236" font-size="34">Preview</text>
+    <text x="399" y="456" font-size="34">Publish</text>
+  </g>
+</svg>

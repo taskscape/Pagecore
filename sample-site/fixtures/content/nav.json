@@ -1,0 +1,22 @@
+[
+  {
+    "label": "Home",
+    "url": "/sample-site/",
+    "children": []
+  },
+  {
+    "label": "Posts",
+    "url": "/sample-site/news/",
+    "children": []
+  },
+  {
+    "label": "Search",
+    "url": "/sample-site/search/",
+    "children": []
+  },
+  {
+    "label": "Contact",
+    "url": "/sample-site/contact.php",
+    "children": []
+  }
+]

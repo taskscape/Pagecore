@@ -31,21 +31,68 @@ Paste the output into `password_hash` in `cms/config.php`.
    `<?= cms_listing_controls('category') ?>` to listing pages.
 7. Create empty `content/` and `uploads/` directories; copy the bundled
    `.htaccess` files from this site's `content/` and `uploads/` dirs.
-8. The web server user needs **write access** to `content/`, `uploads/`,
-   and the files regenerated on save (`search-index.json`, `sitemap.xml`).
+8. The web server user needs **write access** to `content/`,
+   `content/.drafts/`, `uploads/`, and the files regenerated on publish
+   (`search-index.json`, `sitemap.xml`).
 
 ## Day-to-day editing
 
 - Log in → browse the site → hover an outlined fragment → **✎ Edytuj**.
 - Markdown with tables; paste or drag images/PDFs straight into the editor.
-- `Ctrl+S` saves, `Esc` cancels.
+- Open **Content** in the toolbar to browse `/cms/content.php`, which lists
+  configured pages, editable regions, posts, categories, missing Markdown
+  files, and the editable navigation JSON.
+- Open **Media** in the toolbar or **Media library** in the editor to browse
+  `/cms/media.php`, search existing uploads, insert an existing asset, and edit
+  alt text or captions stored as `<file>.meta.json` sidecar files.
+- `Ctrl+S` saves a draft under `content/.drafts/`; **Podgląd szkicu** opens a
+  preview link; **Opublikuj** updates the live Markdown file.
+- Use the **Kopie zapasowe** list in the editor to restore an older saved
+  version in one click.
 - On listing pages (**Orzeczenia / Wydarzenia / Uchwały**): **＋ Dodaj wpis**.
 
-## Backups & restore
+## Media library
 
-Every save first copies the previous version to
-`content/.backups/<key>.<timestamp>.md` (last 20 kept per fragment).
-To restore: copy a backup file back over the live file — that's all.
+`/cms/media.php` lists files from the configured `uploads_dir` and searches by
+relative path, alt text and caption. Images show as thumbnails; PDFs show as a
+file tile with a direct preview link. Picker mode (`/cms/media.php?picker=1`)
+inserts the correct Markdown back into the active editor panel.
+
+Metadata is stored beside the upload as JSON, for example
+`uploads/2026/07/photo.jpg.meta.json`. Deleting is blocked while the asset URL
+is still referenced by published pages, posts or saved drafts.
+
+## Content inventory & navigation
+
+`/cms/content.php` is the small content overview. It combines configured
+`search_pages`, Markdown files under `content/pages/`, editable region keys
+found in PHP templates, posts, categories and missing Markdown placeholders.
+Missing region files can be created from this screen; it creates Markdown only,
+not PHP templates or routes.
+
+Navigation is stored as JSON at `content/nav.json` by default:
+
+```json
+[
+  { "label": "Home", "url": "/", "children": [] },
+  { "label": "News", "url": "/news/", "children": [] }
+]
+```
+
+Templates can render it with `cms_nav_items()` or `cms_nav_html()`. If the file
+is missing or invalid, Pagecore falls back to `search_pages`.
+
+## Drafts, backups & restore
+
+Drafts are stored as shadow Markdown files under `content/.drafts/pages/` and
+`content/.drafts/posts/`. They are not shown to visitors. Publishing writes the
+current editor state to the live file and removes the matching draft.
+
+Every publish or direct save first copies the previous live version to
+`content/.backups/<key>.<timestamp>.md` (last 20 kept per fragment). To restore
+from the browser, open the fragment and click **Przywróć** next to the backup
+you want. Manual restore is still just copying a backup file back over the live
+file.
 
 ## Deleting a post
 
