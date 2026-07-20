@@ -104,6 +104,15 @@ main { min-height: 70vh; }
   border-radius: 8px;
   background: var(--panel);
 }
+.post-card-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  margin-bottom: 16px;
+  border-radius: 6px;
+  background: #f0e8dc;
+}
 .post-card h3 { margin: 4px 0 8px; line-height: 1.25; }
 .post-card p:last-child { color: var(--muted); }
 .toolbar-band {
@@ -124,6 +133,67 @@ main { min-height: 70vh; }
 .toolbar-band a.active { color: #fff; background: var(--green); border-color: var(--green); }
 .listing-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
 .article { max-width: 940px; margin: 0 auto; }
+.article-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  margin: 24px 0 28px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #f0e8dc;
+}
+.showcase-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, .8fr);
+  gap: clamp(24px, 5vw, 56px);
+  align-items: center;
+  padding: clamp(40px, 7vw, 86px) clamp(18px, 5vw, 64px);
+}
+.showcase-copy h1 {
+  margin: 0 0 16px;
+  font-size: clamp(36px, 6vw, 64px);
+  line-height: 1.04;
+}
+.showcase-copy p { max-width: 720px; color: var(--muted); font-size: 18px; }
+.meta-preview, .file-tree {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgba(37, 33, 27, .08);
+}
+.meta-preview-head {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--green);
+  font-weight: 800;
+  font-size: 13px;
+}
+.meta-preview pre {
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  color: #25211b;
+  font: 13px/1.55 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+.showcase-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  gap: clamp(24px, 5vw, 48px);
+  align-items: start;
+}
+.file-tree {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+}
+.file-tree strong { color: var(--green); }
+.file-tree span {
+  padding-left: 18px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+}
 .search-form {
   max-width: 720px;
   margin-bottom: 24px;
@@ -167,6 +237,7 @@ main { min-height: 70vh; }
 @media (max-width: 760px) {
   .site-header, .site-footer { align-items: flex-start; flex-direction: column; }
   .hero { grid-template-columns: 1fr; }
+  .showcase-hero, .showcase-layout { grid-template-columns: 1fr; }
   .hero-media { min-height: 240px; }
   .search-form div { flex-direction: column; }
 }

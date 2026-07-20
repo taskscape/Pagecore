@@ -27,6 +27,7 @@ return array(
     'search_pages' => array(
         '/sample-site/' => array('Home', 'Page', 'home/hero'),
         '/sample-site/news/' => array('News', 'Listing', null),
+        '/sample-site/showcase/' => array('Showcase', 'Page', 'showcase/intro'),
         '/sample-site/contact.php' => array('Contact', 'Page', 'contact/body'),
     ),
 );

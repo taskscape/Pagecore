@@ -65,8 +65,21 @@ test('visitor sees rendered sample site without editor chrome', async ({ page })
   await expect(page.getByRole('heading', { name: 'Pagecore sample site' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'CMS features on this page' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Launch notes for the sample site' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Showcase' })).toBeVisible();
   await expect(page.locator('.cms-toolbar')).toHaveCount(0);
   await expect(page.locator('link[href="/cms/assets/editor.css"]')).toHaveCount(0);
+});
+
+test('showcase demonstrates file-based featured images', async ({ page }) => {
+  await page.goto('/sample-site/showcase/');
+
+  await expect(page.getByRole('heading', { name: 'Pagecore file-based content showcase' })).toBeVisible();
+  await expect(page.locator('.meta-preview')).toContainText('image: /sample-site/working-uploads/2026/07/featured-pagecore.svg');
+  await expect(page.locator('.post-card-image[alt="Launch notes for the sample site"]')).toBeVisible();
+
+  await page.getByRole('link', { name: 'Launch notes for the sample site' }).click();
+  await expect(page).toHaveURL(/\/sample-site\/post\/launch-notes\/$/);
+  await expect(page.locator('.article-image[alt="Launch notes for the sample site"]')).toBeVisible();
 });
 
 test('published Markdown escapes executable HTML and unsafe links by default', async ({ page }) => {
@@ -301,11 +314,12 @@ test('content inventory lists pages, regions, posts, categories, creates missing
 
   const navFile = JSON.parse(fs.readFileSync(path.join(workingContent, 'nav.json'), 'utf8'));
   expect(navFile[1].label).toBe('Articles');
-  expect(navFile[4].label).toBe('Inventory');
+  expect(navFile.some(item => item.label === 'Inventory')).toBe(true);
 
   await page.goto('/sample-site/');
   const primaryNav = page.getByRole('navigation', { name: 'Primary navigation' });
   await expect(primaryNav.getByRole('link', { name: 'Articles' })).toBeVisible();
+  await expect(primaryNav.getByRole('link', { name: 'Showcase' })).toBeVisible();
   await expect(primaryNav.getByRole('link', { name: 'Inventory' })).toBeVisible();
   await expect(page.getByText('New content.')).toBeVisible();
 });

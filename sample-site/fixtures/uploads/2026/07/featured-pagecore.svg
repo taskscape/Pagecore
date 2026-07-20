@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">Pagecore featured image sample</title>
+  <desc id="desc">A visual card showing Markdown files, uploaded media, and generated indexes in Pagecore.</desc>
+  <rect width="960" height="540" fill="#f8f4ea"/>
+  <rect x="56" y="56" width="848" height="428" rx="16" fill="#ffffff" stroke="#d8cfbf" stroke-width="3"/>
+  <rect x="96" y="100" width="292" height="340" rx="10" fill="#2f6b52"/>
+  <path d="M128 152h180v20H128zM128 196h224v16H128zM128 228h192v16H128zM128 284h236v16H128zM128 316h164v16H128z" fill="#f8f4ea"/>
+  <rect x="444" y="108" width="356" height="84" rx="10" fill="#f1e6d7" stroke="#d8cfbf"/>
+  <rect x="444" y="228" width="356" height="84" rx="10" fill="#f1e6d7" stroke="#d8cfbf"/>
+  <rect x="444" y="348" width="356" height="84" rx="10" fill="#f1e6d7" stroke="#d8cfbf"/>
+  <circle cx="482" cy="150" r="15" fill="#9c3f2e"/>
+  <circle cx="482" cy="270" r="15" fill="#9c3f2e"/>
+  <circle cx="482" cy="390" r="15" fill="#9c3f2e"/>
+  <path d="M526 137h182v18H526zM526 164h112v12H526zM526 257h202v18H526zM526 284h144v12H526zM526 377h166v18H526zM526 404h126v12H526z" fill="#25211b"/>
+  <path d="M388 270h56" stroke="#9c3f2e" stroke-width="10" stroke-linecap="round"/>
+  <path d="M424 238l32 32-32 32" fill="none" stroke="#9c3f2e" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
