@@ -69,6 +69,42 @@ test('visitor sees rendered sample site without editor chrome', async ({ page })
   await expect(page.locator('link[href="/cms/assets/editor.css"]')).toHaveCount(0);
 });
 
+test('published Markdown escapes executable HTML and unsafe links by default', async ({ page }) => {
+  await login(page);
+
+  const panel = await openEditor(page, 'home/hero');
+  await panel.locator('textarea').fill([
+    '# Safe Markdown',
+    '',
+    '<script>window.__pagecoreExecutableHtml = "script"</script>',
+    '',
+    '<img src="x" onerror="window.__pagecoreExecutableHtml = \'event-handler\'">',
+    '',
+    '[Unsafe link](javascript:window.__pagecoreExecutableHtml="link")'
+  ].join('\n'));
+  page.once('dialog', dialog => dialog.accept());
+  await panel.getByRole('button', { name: 'Opublikuj' }).click();
+
+  await page.goto('/sample-site/');
+  expect(await page.evaluate(() => window.__pagecoreExecutableHtml)).toBeUndefined();
+  await expect(page.locator('main script')).toHaveCount(0);
+  await expect(page.locator('main img[src="x"]')).toHaveCount(0);
+  await expect(page.locator('main')).toContainText('<script>window.__pagecoreExecutableHtml');
+
+  const unsafeLink = page.getByRole('link', { name: 'Unsafe link' });
+  await expect(unsafeLink).toBeVisible();
+  expect(await unsafeLink.getAttribute('href')).not.toMatch(/^javascript:/i);
+});
+
+test('reusable content and uploads directories ship Apache hardening', () => {
+  const contentRules = fs.readFileSync(path.join(repoRoot, 'content', '.htaccess'), 'utf8');
+  const uploadRules = fs.readFileSync(path.join(repoRoot, 'uploads', '.htaccess'), 'utf8');
+
+  expect(contentRules).toContain('Require all denied');
+  expect(uploadRules).toContain('php_flag engine off');
+  expect(uploadRules).toMatch(/FilesMatch[\s\S]*php[\s\S]*Require all denied/);
+});
+
 test('editor saves a draft, previews it, publishes, and restores a backup', async ({ page }) => {
   await login(page);
 

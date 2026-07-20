@@ -20,6 +20,8 @@ Paste the output into `password_hash` in `cms/config.php`.
 
 1. Copy `cms/` next to the site's document-root files.
 2. Edit `cms/config.php` (credentials, categories, `search_pages`, `site_url`).
+   Raw HTML is disabled by default. Set `allow_html => true` only when all
+   Markdown is trusted or has passed through a separate HTML sanitizer.
 3. Add `require __DIR__ . '/cms/engine.php';` to the site's bootstrap
    (any file included by every page).
 4. Emit `<?= cms_assets() ?>` once before `</body>`.
@@ -29,8 +31,12 @@ Paste the output into `password_hash` in `cms/config.php`.
    `title`, `date`, `category`, optional `excerpt`), render listings with
    `cms_posts('category')`, single posts with `cms_post($slug)` and add
    `<?= cms_listing_controls('category') ?>` to listing pages.
-7. Create empty `content/` and `uploads/` directories; copy the bundled
-   `.htaccess` files from this site's `content/` and `uploads/` dirs.
+   Configure `post_url` with a literal `{slug}` placeholder. `cms_post_url()`
+   derives every public URL from the stored slug and repairs malformed legacy
+   patterns that omitted the placeholder.
+7. Copy the bundled `content/` and `uploads/` directories, including their
+   hidden `.htaccess` files. Add content beneath them; do not replace them with
+   newly created empty directories.
 8. The web server user needs **write access** to `content/`,
    `content/.drafts/`, `uploads/`, and the files regenerated on publish
    (`search-index.json`, `sitemap.xml`).
@@ -101,7 +107,9 @@ and sitemap update on the next save; or touch any fragment to force it.
 
 ## Requirements
 
-PHP 7.4+ with `fileinfo` (standard). Apache honoring `.htaccess`, or map the
-equivalent rules (post permalinks → `post.php?slug=…`, deny `content/`,
-`cms/lib/`, `cms/config.php`, block PHP execution under `uploads/`).
+PHP 7.4+ with `fileinfo` (standard). The reusable `cms/`, `content/`, and
+`uploads/` directories ship Apache `.htaccess` hardening. Apache must honor
+those files; on another web server, map the equivalent rules (post permalinks
+→ `post.php?slug=…`, deny `content/`, `cms/lib/`, `cms/config.php`, and block
+PHP execution under `uploads/`).
 For the PHP built-in server use: `php -S host:port -t <root> <root>/router.php`.

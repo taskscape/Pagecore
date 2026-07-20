@@ -22,3 +22,7 @@ sample-site/working-uploads/
 sample-site/search-index.json
 sample-site/sitemap.xml
 php
+zagozda
+playwright.zagozda.config.js
+tests/zagozda.spec.js
+scripts/Start-ZagozdaSite.ps1

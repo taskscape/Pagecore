@@ -18,7 +18,6 @@ return array(
     'uploads_url' => '/sample-site/working-uploads',
     'max_upload_mb' => 8,
     'allowed_ext' => array('jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf'),
-    'allow_html' => true,
     'post_url' => '/sample-site/post/{slug}/',
     'categories' => array(
         'news' => array('News', '/sample-site/news/'),

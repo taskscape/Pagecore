@@ -132,7 +132,8 @@
             [['title', 'Tytuł', 'text', 'cms-field-wide'],
              ['date', 'Data (RRRR-MM-DD)', 'text', ''],
              ['category', 'Kategoria', 'select', ''],
-             ['excerpt', 'Zajawka (lead — opcjonalna)', 'text', 'cms-field-wide']
+             ['excerpt', 'Zajawka (lead — opcjonalna)', 'text', 'cms-field-wide'],
+             ['tags', 'Tagi (oddzielone przecinkami)', 'text', 'cms-field-wide']
             ].forEach(function (def) {
                 var field = h('div', 'cms-field' + (def[3] ? ' ' + def[3] : ''));
                 var lab = h('label', null, def[1]);
@@ -232,7 +233,8 @@
                 title: metaInputs.title.value,
                 date: metaInputs.date.value,
                 category: metaInputs.category.value,
-                excerpt: metaInputs.excerpt.value
+                excerpt: metaInputs.excerpt.value,
+                tags: metaInputs.tags.value
             };
         }
         function currentPayload() {
@@ -248,6 +250,7 @@
             metaInputs.date.value = meta.date || '';
             metaInputs.category.value = meta.category || '';
             metaInputs.excerpt.value = meta.excerpt || '';
+            metaInputs.tags.value = meta.tags || '';
         }
         function fillEditor(payload) {
             ta.value = payload.markdown || '';

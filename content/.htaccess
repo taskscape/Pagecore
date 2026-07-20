@@ -1,0 +1,3 @@
+# Content is read from the filesystem by Pagecore and must never be served
+# directly over HTTP. This also protects drafts, backups, and cached indexes.
+Require all denied

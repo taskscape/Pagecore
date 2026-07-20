@@ -405,7 +405,11 @@ function cms_parsedown() {
         require_once CMS_DIR . '/lib/Parsedown.php';
         $pd = new Parsedown();
         $pd->setBreaksEnabled(false);
-        $pd->setMarkupEscaped(!cms_cfg('allow_html', true));
+        // Editor-authored Markdown is untrusted by default. Parsedown safe
+        // mode escapes raw HTML and also neutralizes unsafe Markdown URLs.
+        // Integrations that have a separate HTML sanitizer can deliberately
+        // restore legacy raw-HTML rendering with allow_html => true.
+        $pd->setSafeMode(!cms_cfg('allow_html', false));
         $pd->setUrlsLinked(false);
     }
     return $pd;
@@ -476,6 +480,12 @@ function cms_date_display($iso) {
     return ((int) $m[3]) . ' ' . $months[(int) $m[2]] . ' ' . $m[1];
 }
 
+/** Estimated reading time in whole minutes (~250 words/min, min 1). */
+function cms_reading_minutes($md) {
+    $n = preg_match_all('~\S+~u', (string) $md, $ignore);
+    return (int) max(1, (int) ceil($n / 250));
+}
+
 function cms_excerpt_from($md, $words = 28) {
     $html = preg_replace('~<[^>]+>~', ' ', cms_render_markdown($md));
     $html = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -485,37 +495,235 @@ function cms_excerpt_from($md, $words = 28) {
     return implode(' ', array_slice($parts, 0, $words)) . '…';
 }
 
-/** All posts (newest first), optionally filtered by category slug. */
+/** Absolute path of the server-side posts index cache (never HTTP-served). */
+function cms_posts_index_path() {
+    return cms_cfg('content_dir') . '/posts-index.json';
+}
+
+/**
+ * Parse a front-matter `tags` value ("A, B, C") into a de-duplicated list of
+ * array('slug' => ..., 'label' => ...). Labels are kept as authored; slugs are
+ * derived with the same Polish-aware transliteration used for post slugs.
+ */
+function cms_parse_tags($value) {
+    $out = array();
+    $seen = array();
+    foreach (preg_split('~\s*,\s*~u', (string) $value) as $label) {
+        $label = trim($label);
+        if ($label === '') { continue; }
+        $slug = cms_tag_slugify($label);
+        if ($slug === '' || isset($seen[$slug])) { continue; }
+        $seen[$slug] = true;
+        $out[] = array('slug' => $slug, 'label' => $label);
+    }
+    return $out;
+}
+
+/** Slugify a tag label (Polish transliteration; no uniqueness/file check). */
+function cms_tag_slugify($label) {
+    $map = array(
+        'ą'=>'a','ć'=>'c','ę'=>'e','ł'=>'l','ń'=>'n','ó'=>'o','ś'=>'s','ź'=>'z','ż'=>'z',
+        'Ą'=>'a','Ć'=>'c','Ę'=>'e','Ł'=>'l','Ń'=>'n','Ó'=>'o','Ś'=>'s','Ź'=>'z','Ż'=>'z',
+    );
+    $s = strtolower(strtr((string) $label, $map));
+    $s = preg_replace('~[^a-z0-9]+~', '-', $s);
+    return trim($s, '-');
+}
+
+/**
+ * Public URL for a post slug.
+ *
+ * A valid post_url contains {slug}. If a migrated config accidentally loses
+ * that placeholder (for example, an unquoted PowerShell argument), append it
+ * defensively so every listing link remains unique and usable.
+ */
+function cms_post_url($slug) {
+    $pattern = (string) cms_cfg('post_url', '/post/{slug}/');
+    if (strpos($pattern, '{slug}') === false) {
+        $pattern = rtrim($pattern, '/') . '/{slug}/';
+    }
+    return str_replace('{slug}', (string) $slug, $pattern);
+}
+
+/**
+ * Build the full post list by scanning every Markdown file on disk.
+ * This is the source of truth; it is expensive (one read per post) and is
+ * only used when (re)building the cached index, never on a normal page load.
+ */
+function cms_posts_from_disk() {
+    $list = array();
+    $cats = cms_cfg('categories');
+    foreach (glob(cms_cfg('content_dir') . '/posts/*.md') as $file) {
+        $slug = basename($file, '.md');
+        list($meta, $body) = cms_parse_front_matter(file_get_contents($file));
+        $cat = isset($meta['category']) ? $meta['category'] : '';
+        $list[] = array(
+            'slug'           => $slug,
+            'title'          => isset($meta['title']) ? $meta['title'] : $slug,
+            'date'           => isset($meta['date']) ? $meta['date'] : '1970-01-01',
+            'date_display'   => cms_date_display(isset($meta['date']) ? $meta['date'] : ''),
+            'category'       => $cat,
+            'category_label' => isset($cats[$cat]) ? $cats[$cat][0] : $cat,
+            'excerpt'        => isset($meta['excerpt']) && $meta['excerpt'] !== ''
+                                ? $meta['excerpt'] : cms_excerpt_from($body),
+            'image'          => isset($meta['image']) ? $meta['image'] : '',
+            'mins'           => cms_reading_minutes($body),
+            'tags'           => cms_parse_tags(isset($meta['tags']) ? $meta['tags'] : ''),
+            'url'            => cms_post_url($slug),
+        );
+    }
+    usort($list, function ($a, $b) {
+        $c = strcmp($b['date'], $a['date']);
+        return $c !== 0 ? $c : strcmp($a['slug'], $b['slug']);
+    });
+    return $list;
+}
+
+/** Write the cached posts index; returns the list that was written. */
+function cms_write_posts_index($list = null) {
+    if ($list === null) { $list = cms_posts_from_disk(); }
+    $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+    if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) { $flags |= JSON_INVALID_UTF8_SUBSTITUTE; }
+    $json = json_encode($list, $flags);
+    if ($json !== false) {
+        cms_atomic_write(cms_posts_index_path(), $json);
+    } else {
+        error_log('CMS: posts index json_encode failed — index left unchanged');
+    }
+    return $list;
+}
+
+/**
+ * Is the cached index fresh? It is stale when missing, or when the posts
+ * directory has changed (a file added or removed) more recently than the
+ * index was written. In-place edits through the editor rebuild the index
+ * explicitly via cms_regenerate_indexes(), so this cheap one-stat check is
+ * enough for the normal workflow. (Direct FTP edits of an existing file can
+ * be picked up with a manual rebuild — see scripts/reindex.php.)
+ */
+function cms_posts_index_fresh() {
+    $index = cms_posts_index_path();
+    if (!is_file($index)) { return false; }
+    $postsDir = cms_cfg('content_dir') . '/posts';
+    if (is_dir($postsDir) && @filemtime($postsDir) > @filemtime($index)) { return false; }
+    return true;
+}
+
+/**
+ * All posts (newest first), optionally filtered by category slug.
+ *
+ * Reads the cached posts-index.json (one file) on a normal request. When the
+ * cache is missing or stale it self-heals by scanning disk once and rewriting
+ * the index, so the very first hit after an import pays the cost and every
+ * later hit is a single JSON decode.
+ */
 function cms_posts($category = null) {
     static $cache = null;
     if ($cache === null) {
-        $cache = array();
-        $cats = cms_cfg('categories');
-        foreach (glob(cms_cfg('content_dir') . '/posts/*.md') as $file) {
-            $slug = basename($file, '.md');
-            list($meta, $body) = cms_parse_front_matter(file_get_contents($file));
-            $cat = isset($meta['category']) ? $meta['category'] : '';
-            $cache[] = array(
-                'slug'           => $slug,
-                'title'          => isset($meta['title']) ? $meta['title'] : $slug,
-                'date'           => isset($meta['date']) ? $meta['date'] : '1970-01-01',
-                'date_display'   => cms_date_display(isset($meta['date']) ? $meta['date'] : ''),
-                'category'       => $cat,
-                'category_label' => isset($cats[$cat]) ? $cats[$cat][0] : $cat,
-                'excerpt'        => isset($meta['excerpt']) && $meta['excerpt'] !== ''
-                                    ? $meta['excerpt'] : cms_excerpt_from($body),
-                'url'            => str_replace('{slug}', $slug, cms_cfg('post_url')),
-            );
+        $cache = false;
+        if (cms_posts_index_fresh()) {
+            $raw = file_get_contents(cms_posts_index_path());
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) { $cache = $decoded; }
         }
-        usort($cache, function ($a, $b) {
-            $c = strcmp($b['date'], $a['date']);
-            return $c !== 0 ? $c : strcmp($a['slug'], $b['slug']);
-        });
+        if ($cache === false) {
+            $cache = cms_write_posts_index(cms_posts_from_disk());
+        }
+        // URLs are derived data. Recompute them from each slug so a stale index
+        // cannot retain a broken post_url pattern after configuration is fixed.
+        foreach ($cache as &$cachedPost) {
+            if (isset($cachedPost['slug'])) { $cachedPost['url'] = cms_post_url($cachedPost['slug']); }
+        }
+        unset($cachedPost);
     }
     if ($category === null) { return $cache; }
     $out = array();
     foreach ($cache as $p) { if ($p['category'] === $category) { $out[] = $p; } }
     return $out;
+}
+
+/**
+ * One page of posts for a listing view. Returns a slice plus paging metadata:
+ *   items, total, page, per_page, pages, has_prev, has_next.
+ * Page numbers are 1-based and clamped into range.
+ */
+function cms_paginate(array $all, $page = 1, $per_page = 10) {
+    $total = count($all);
+    $per_page = max(1, (int) $per_page);
+    $pages = (int) max(1, ceil($total / $per_page));
+    $page = (int) $page;
+    if ($page < 1) { $page = 1; }
+    if ($page > $pages) { $page = $pages; }
+    $offset = ($page - 1) * $per_page;
+    return array(
+        'items'    => array_slice($all, $offset, $per_page),
+        'total'    => $total,
+        'page'     => $page,
+        'per_page' => $per_page,
+        'pages'    => $pages,
+        'has_prev' => $page > 1,
+        'has_next' => $page < $pages,
+    );
+}
+
+function cms_posts_page($category = null, $page = 1, $per_page = 10) {
+    return cms_paginate(cms_posts($category), $page, $per_page);
+}
+
+/* -------------------------------------------------------------------- tags */
+/** Posts (newest first) carrying a given tag slug. */
+function cms_posts_by_tag($tagSlug) {
+    $out = array();
+    foreach (cms_posts() as $p) {
+        if (empty($p['tags'])) { continue; }
+        foreach ($p['tags'] as $t) {
+            if ($t['slug'] === $tagSlug) { $out[] = $p; break; }
+        }
+    }
+    return $out;
+}
+
+/** One page of posts for a tag listing. */
+function cms_posts_page_by_tag($tagSlug, $page = 1, $per_page = 10) {
+    return cms_paginate(cms_posts_by_tag($tagSlug), $page, $per_page);
+}
+
+/**
+ * Tag registry derived from all posts: slug => array('label'=>, 'count'=>).
+ * Labels use the most common spelling seen across posts. Cheap — built from the
+ * in-memory index, cached per request.
+ */
+function cms_tags() {
+    static $tags = null;
+    if ($tags !== null) { return $tags; }
+    $labels = array(); // slug => [label => hits]
+    $count = array();  // slug => count
+    foreach (cms_posts() as $p) {
+        if (empty($p['tags'])) { continue; }
+        foreach ($p['tags'] as $t) {
+            $s = $t['slug'];
+            $count[$s] = isset($count[$s]) ? $count[$s] + 1 : 1;
+            $labels[$s][$t['label']] = isset($labels[$s][$t['label']]) ? $labels[$s][$t['label']] + 1 : 1;
+        }
+    }
+    $tags = array();
+    foreach ($count as $slug => $n) {
+        arsort($labels[$slug]);
+        $label = key($labels[$slug]);
+        $tags[$slug] = array('label' => $label, 'count' => $n);
+    }
+    // stable: highest count first, then label
+    uasort($tags, function ($a, $b) {
+        if ($a['count'] !== $b['count']) { return $b['count'] - $a['count']; }
+        return strcasecmp($a['label'], $b['label']);
+    });
+    return $tags;
+}
+
+/** Display label for a tag slug (falls back to the slug). */
+function cms_tag_label($slug) {
+    $tags = cms_tags();
+    return isset($tags[$slug]) ? $tags[$slug]['label'] : $slug;
 }
 
 /** One post with rendered body; null when unknown. */
@@ -533,9 +741,12 @@ function cms_post($slug) {
         'category'       => $cat,
         'category_label' => isset($cats[$cat]) ? $cats[$cat][0] : $cat,
         'lead'           => isset($meta['excerpt']) ? $meta['excerpt'] : '',
+        'image'          => isset($meta['image']) ? $meta['image'] : '',
+        'mins'           => cms_reading_minutes($body),
+        'tags'           => cms_parse_tags(isset($meta['tags']) ? $meta['tags'] : ''),
         'body_md'        => $body,
         'body_html'      => cms_render_markdown($body),
-        'url'            => str_replace('{slug}', $slug, cms_cfg('post_url')),
+        'url'            => cms_post_url($slug),
     );
 }
 
@@ -813,6 +1024,10 @@ function cms_regenerate_indexes() {
     $root = cms_cfg('site_root');
     $site = rtrim(cms_cfg('site_url'), '/');
 
+    // Scan disk once, then reuse the same list for every generated artifact.
+    $posts = cms_posts_from_disk();
+    cms_write_posts_index($posts);
+
     $index = array();
     foreach (cms_cfg('search_pages', array()) as $url => $def) {
         $excerpt = '';
@@ -822,7 +1037,7 @@ function cms_regenerate_indexes() {
         }
         $index[] = array('t' => $def[0], 'u' => $url, 'k' => $def[1], 'e' => $excerpt);
     }
-    foreach (cms_posts() as $p) {
+    foreach ($posts as $p) {
         $index[] = array('t' => $p['title'], 'u' => $p['url'],
                          'k' => $p['category_label'] !== '' ? $p['category_label'] : 'Wpis',
                          'e' => $p['excerpt']);
@@ -837,7 +1052,7 @@ function cms_regenerate_indexes() {
     }
 
     $urls = array_keys(cms_cfg('search_pages', array()));
-    foreach (cms_posts() as $p) { $urls[] = $p['url']; }
+    foreach ($posts as $p) { $urls[] = $p['url']; }
     foreach (cms_cfg('categories') as $def) { $urls[] = $def[1]; }
     $urls[] = '/szukaj/';
     $urls[] = '/kontakt/';

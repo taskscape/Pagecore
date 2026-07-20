@@ -106,7 +106,10 @@ function cms_post_meta_from_request(array $meta, $strict) {
     $date  = trim(isset($_POST['date']) ? (string) $_POST['date'] : (isset($meta['date']) ? $meta['date'] : ''));
     $cat   = trim(isset($_POST['category']) ? (string) $_POST['category'] : (isset($meta['category']) ? $meta['category'] : ''));
     $exc   = trim(isset($_POST['excerpt']) ? (string) $_POST['excerpt'] : (isset($meta['excerpt']) ? $meta['excerpt'] : ''));
+    $img   = trim(isset($_POST['image']) ? (string) $_POST['image'] : (isset($meta['image']) ? $meta['image'] : ''));
+    $tags  = trim(isset($_POST['tags']) ? (string) $_POST['tags'] : (isset($meta['tags']) ? $meta['tags'] : ''));
     cms_utf8_or_fail($title, $exc);
+    cms_utf8_or_fail($tags, $tags);
     if ($strict) {
         if ($title === '') { cms_fail('Tytuł jest wymagany.'); }
         if (!preg_match('~^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?$~', $date)) {
@@ -115,10 +118,23 @@ function cms_post_meta_from_request(array $meta, $strict) {
         $cats = cms_cfg('categories');
         if (!isset($cats[$cat])) { cms_fail('Nieznana kategoria.'); }
     }
+    if ($strict && $img !== '' && !preg_match('~^(/|https?://)[^\s"<>]+$~', $img)) {
+        cms_fail('Obrazek musi być ścieżką zaczynającą się od / lub adresem http(s).');
+    }
     $meta['title'] = $title;
     $meta['date'] = $date;
     $meta['category'] = $cat;
     if ($exc !== '') { $meta['excerpt'] = $exc; } else { unset($meta['excerpt']); }
+    if ($img !== '') { $meta['image'] = $img; } else { unset($meta['image']); }
+    // normalise tags to a clean, de-duplicated "A, B, C" string
+    if ($tags !== '') {
+        $parsed = cms_parse_tags($tags);
+        $labels = array();
+        foreach ($parsed as $t) { $labels[] = $t['label']; }
+        if ($labels) { $meta['tags'] = implode(', ', $labels); } else { unset($meta['tags']); }
+    } else {
+        unset($meta['tags']);
+    }
     return $meta;
 }
 

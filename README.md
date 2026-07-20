@@ -109,6 +109,9 @@ is simply deleting its `.md` file.
 Markdown is rendered server-side with Parsedown, with a few site-friendly
 extras:
 
+- Raw HTML and unsafe Markdown URL schemes are escaped or neutralized by
+  default. `allow_html => true` is an explicit opt-in for content that is
+  trusted or processed by a separate HTML sanitizer.
 - `pdf:/uploads/path/file.pdf "Label"` on its own line becomes an embedded PDF
   viewer with a labelled download link.
 - Standalone images are wrapped in `<figure>` for styling.
@@ -164,6 +167,7 @@ Add `require 'cms/engine.php';` to the site bootstrap, then:
 | `cms_editable('page/region')` | Render a fragment; wraps it in an editable element only for logged-in editors. |
 | `cms_posts('category')` | List posts (newest first) for a listing page — title, date, excerpt, URL. |
 | `cms_post($slug)` | Fetch one post with rendered body for a post template. |
+| `cms_post_url($slug)` | Build a post URL from `post_url`; defensively restores a missing `{slug}` segment. |
 | `cms_listing_controls('category')` | "Add post" button on listing pages (editors only). |
 | `cms_nav_items()` / `cms_nav_html()` | Read or render the editable navigation tree from `content/nav.json`. |
 | `cms_assets()` | Emit editor CSS/JS before `</body>` (empty for visitors). |
@@ -181,7 +185,8 @@ server-side PHP logic. Convert only the content that editors should control.
 ### 1. Install the engine beside the existing site
 
 Put `cms/`, `content/` and `uploads/` at the same web-root level as the
-existing PHP pages:
+existing PHP pages. Copy the bundled directories themselves so the hidden
+`.htaccess` protections in all three directories are preserved:
 
 ```
 public/
@@ -390,6 +395,10 @@ If your server supports pretty URLs, route `/post/my-title/` to
 `post.php?slug=my-title`. Otherwise set `post_url` to a query-string pattern,
 for example `/post.php?slug={slug}`.
 
+Keep the literal `{slug}` placeholder in the configured pattern. Pagecore
+recomputes cached listing URLs from each post slug and defensively appends the
+placeholder if a migrated configuration accidentally omitted it.
+
 ### 6. Move existing list items into Markdown posts
 
 Each existing list item becomes one file in `content/posts/`:
@@ -439,6 +448,8 @@ from `content/posts/` and `categories`.
 - Direct HTTP access to `content/`, `cms/config.php`, `cms/engine.php`,
   `cms/auth.php` and `cms/lib/` is denied.
 - PHP execution is blocked under `uploads/`.
+- The bundled `.htaccess` files remain present under `cms/`, `content/`, and
+  `uploads/`; equivalent rules are configured when Apache is not used.
 - Post URL rewrites match the configured `post_url`.
 - Every page that calls `cms_editable()`, `cms_posts()`, `cms_post()` or
   `cms_listing_controls()` has loaded `cms/engine.php`.
@@ -461,6 +472,9 @@ Pagecore in-place editing workflow.
   token header.
 - **Path safety** — fragment keys and post slugs are strictly validated and
   resolved inside `content/` only.
+- **Safe Markdown by default** — raw HTML is escaped and unsafe Markdown URL
+  schemes are neutralized. Raw HTML requires an explicit `allow_html => true`
+  opt-in and should only be used with trusted or separately sanitized content.
 - **Upload validation** — extension allowlist, size limit, server-side MIME
   sniffing (never trusts the client), image integrity check, and rejection of
   SVGs containing scripts or event handlers. Uploaded files get randomized
@@ -526,6 +540,6 @@ cms/                  # the reusable engine
 sample-site/          # runnable demo site and content fixtures
 scripts/              # sample reset/start helpers
 tests/                # Playwright browser tests
-content/              # site content (Markdown) — created per installation
-uploads/              # editor-uploaded media — created per installation
+content/              # protected site-content root; add Markdown beneath it
+uploads/              # protected media root; PHP execution is blocked here
 ```
