@@ -80,13 +80,23 @@ function cms_content_sources(array $sources) {
     }
     .tag-ok { background: #dfece5; color: #25543f; }
     .tag-missing { background: #f4ddd8; color: #8c2f1c; }
+    /* Action links share the button treatment so edit and view controls remain visually distinct from ordinary links. */
     .button {
       border: 1px solid #d8d2c4; border-radius: 4px; background: #faf8f3; color: #2b2620;
-      padding: 7px 10px; font: 700 12px/1.3 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      display: inline-block; padding: 7px 10px; font: 700 12px/1.3 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      text-decoration: none;
       cursor: pointer;
     }
     .button-primary { border-color: #9c3f2e; background: #9c3f2e; color: #fff; }
     .button[disabled] { opacity: .55; cursor: default; }
+    /* The modal keeps post creation available from the inventory without leaving this management screen first. */
+    .post-modal { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 20px; background: rgba(43, 38, 32, .45); }
+    .post-modal[hidden] { display: none; }
+    .post-modal-box { width: min(420px, 100%); padding: 20px; border-radius: 6px; background: #fff; box-shadow: 0 16px 40px rgba(43, 38, 32, .24); }
+    .post-modal-box h3 { margin: 0 0 14px; }
+    .post-modal-box label { display: grid; gap: 6px; margin-top: 12px; color: #71675d; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+    .post-modal-box input, .post-modal-box select { width: 100%; padding: 9px 10px; border: 1px solid #cfc8b9; border-radius: 4px; color: #2b2620; background: #fff; font: inherit; }
+    .post-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
     .nav-editor { display: grid; gap: 10px; padding: 14px 16px; }
     .nav-editor label { display: grid; gap: 6px; font-weight: 800; color: #71675d; text-transform: uppercase; letter-spacing: .05em; font-size: 11px; }
     textarea {
@@ -204,23 +214,54 @@ function cms_content_sources(array $sources) {
           <h2 id="posts-title">Posts</h2>
           <p>Markdown posts grouped by configured categories.</p>
         </div>
+        <!-- A global create action lets editors start a post from the inventory and choose its category explicitly. -->
+        <button type="button" class="button button-primary" id="add-post">＋ Dodaj wpis</button>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Title</th><th>Category</th><th>Date</th><th>URL</th></tr></thead>
+          <!-- The actions column separates editorial work from opening the published post. -->
+          <thead><tr><th>Title</th><th>Category</th><th>Date</th><th>URL</th><th>Actions</th></tr></thead>
           <tbody>
             <?php foreach ($inventory['posts'] as $post): ?>
               <tr>
-                <td><?= cms_content_e($post['title']) ?></td>
+                <!-- The title is an editor shortcut so an inventory is also useful for day-to-day editing. -->
+                <td><a href="<?= cms_content_e($post['url']) ?>#cms-edit"><?= cms_content_e($post['title']) ?></a></td>
                 <td><?= cms_content_e($post['category_label']) ?> <span class="muted">(<?= cms_content_e($post['category']) ?>)</span></td>
                 <td><?= cms_content_e($post['date']) ?></td>
                 <td><a href="<?= cms_content_e($post['url']) ?>"><?= cms_content_e($post['url']) ?></a></td>
+                <td>
+                  <!-- Keep both actions visible so editors can choose editing or public-page review deliberately. -->
+                  <a class="button button-primary" href="<?= cms_content_e($post['url']) ?>#cms-edit">Edit</a>
+                  <a class="button" href="<?= cms_content_e($post['url']) ?>">View</a>
+                </td>
               </tr>
             <?php endforeach; ?>
           </tbody>
         </table>
       </div>
     </section>
+
+    <!-- This dialog provides the category that a public listing page normally supplies as context. -->
+    <div class="post-modal" id="post-modal" role="dialog" aria-modal="true" aria-labelledby="post-modal-title" hidden>
+      <form class="post-modal-box" id="post-form">
+        <h3 id="post-modal-title">Nowy wpis</h3>
+        <label for="post-title">Tytuł wpisu
+          <input id="post-title" name="title" type="text" required autofocus>
+        </label>
+        <label for="post-category">Kategoria
+          <select id="post-category" name="category" required>
+            <?php foreach ($inventory['categories'] as $category): ?>
+              <option value="<?= cms_content_e($category['slug']) ?>"><?= cms_content_e($category['label']) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </label>
+        <div class="post-modal-actions">
+          <button type="button" class="button" id="cancel-post">Anuluj</button>
+          <button type="submit" class="button button-primary" id="create-post">Utwórz</button>
+        </div>
+        <div class="status" id="post-status" role="status" aria-live="polite"></div>
+      </form>
+    </div>
 
     <section class="section" aria-labelledby="categories-title">
       <div class="section-head">
@@ -295,6 +336,47 @@ function cms_content_sources(array $sources) {
       el.className = error ? 'status error' : 'status';
       el.textContent = text || '';
     }
+
+    // The inventory has no category context, so this handler collects it before calling the existing create-post API.
+    var addPost = document.getElementById('add-post');
+    var postModal = document.getElementById('post-modal');
+    var postForm = document.getElementById('post-form');
+    var postTitle = document.getElementById('post-title');
+    var postCategory = document.getElementById('post-category');
+    var createPost = document.getElementById('create-post');
+    var cancelPost = document.getElementById('cancel-post');
+    var postStatus = document.getElementById('post-status');
+
+    function closePostModal() {
+      postModal.hidden = true;
+      postForm.reset();
+      setStatus(postStatus, '');
+    }
+
+    addPost.addEventListener('click', function () {
+      postModal.hidden = false;
+      postTitle.focus();
+    });
+    cancelPost.addEventListener('click', closePostModal);
+    postModal.addEventListener('click', function (ev) {
+      if (ev.target === postModal) { closePostModal(); }
+    });
+    postForm.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var title = postTitle.value.trim();
+      if (!title) { postTitle.focus(); return; }
+      createPost.disabled = true;
+      setStatus(postStatus, 'Creating...');
+      post('create-post', { title: title, category: postCategory.value })
+        .then(function (res) {
+          // The destination post page loads the standard editor and opens it through this hash.
+          location.href = res.url + '#cms-edit';
+        })
+        .catch(function (err) {
+          setStatus(postStatus, err.message, true);
+          createPost.disabled = false;
+        });
+    });
 
     document.addEventListener('click', function (ev) {
       var create = ev.target.closest('[data-action="create-region"]');
