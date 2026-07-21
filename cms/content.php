@@ -92,6 +92,8 @@ function cms_content_sources(array $sources) {
       cursor: pointer;
     }
     .button-primary { border-color: #9c3f2e; background: #9c3f2e; color: #fff; }
+    /* The destructive post action is visually distinct from edit and view controls. */
+    .button-danger { border-color: #b7432f; background: #fff4f1; color: #8c2f1c; }
     .button[disabled] { opacity: .55; cursor: default; }
     /* The modal keeps post creation available from the inventory without leaving this management screen first. */
     .post-modal { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 20px; background: rgba(43, 38, 32, .45); }
@@ -101,7 +103,7 @@ function cms_content_sources(array $sources) {
     .post-modal-box label { display: grid; gap: 6px; margin-top: 12px; color: #71675d; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
     .post-modal-box input, .post-modal-box select { width: 100%; padding: 9px 10px; border: 1px solid #cfc8b9; border-radius: 4px; color: #2b2620; background: #fff; font: inherit; }
     .post-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
-    /* Keep each post's edit and public-view controls together when the inventory table narrows. */
+    /* Keep each post's edit, public-view, and delete controls together when the inventory table narrows. */
     .post-actions { display: flex; flex-wrap: nowrap; gap: 6px; white-space: nowrap; }
     .nav-editor { display: grid; gap: 10px; padding: 14px 16px; }
     .nav-editor label { display: grid; gap: 6px; font-weight: 800; color: #71675d; text-transform: uppercase; letter-spacing: .05em; font-size: 11px; }
@@ -229,18 +231,21 @@ function cms_content_sources(array $sources) {
           <thead><tr><th>Title</th><th>Category</th><th>Date</th><th>URL</th><th>Actions</th></tr></thead>
           <tbody>
             <?php foreach ($inventory['posts'] as $post): ?>
-              <tr>
+              <!-- The row key lets the successful delete action remove exactly the affected post. -->
+              <tr data-content-post="<?= cms_content_e($post['slug']) ?>">
                 <!-- The title is an editor shortcut so an inventory is also useful for day-to-day editing. -->
                 <td><a href="<?= cms_content_e($post['url']) ?>#cms-edit"><?= cms_content_e($post['title']) ?></a></td>
                 <td><?= cms_content_e($post['category_label']) ?> <span class="muted">(<?= cms_content_e($post['category']) ?>)</span></td>
                 <td><?= cms_content_e($post['date']) ?></td>
                 <td><a href="<?= cms_content_e($post['url']) ?>"><?= cms_content_e($post['url']) ?></a></td>
                 <td>
-                  <!-- Keep both actions visible so editors can choose editing or public-page review deliberately. -->
+                  <!-- Keep all post actions together so deletion is deliberate but available beside Edit and View. -->
                   <div class="post-actions">
                     <a class="button button-primary" href="<?= cms_content_e($post['url']) ?>#cms-edit">Edit</a>
                     <a class="button" href="<?= cms_content_e($post['url']) ?>">View</a>
+                    <button type="button" class="button button-danger" data-action="delete-post" data-slug="<?= cms_content_e($post['slug']) ?>" data-title="<?= cms_content_e($post['title']) ?>">Delete</button>
                   </div>
+                  <div class="status" role="status" aria-live="polite"></div>
                 </td>
               </tr>
             <?php endforeach; ?>
@@ -387,6 +392,26 @@ function cms_content_sources(array $sources) {
     });
 
     document.addEventListener('click', function (ev) {
+      var remove = ev.target.closest('[data-action="delete-post"]');
+      if (remove) {
+        var postRow = remove.closest('[data-content-post]');
+        var postStatus = postRow.querySelector('.status');
+        var title = remove.getAttribute('data-title') || remove.getAttribute('data-slug');
+        // Confirmation prevents an accidental removal from the same compact action group as Edit and View.
+        if (!confirm('Delete the published post “' + title + '”? Its draft will also be removed.')) { return; }
+        remove.disabled = true;
+        setStatus(postStatus, 'Deleting...');
+        post('delete-post', { slug: remove.getAttribute('data-slug') })
+          .then(function () {
+            // Removing the row mirrors the server state without requiring a full inventory reload.
+            postRow.remove();
+          })
+          .catch(function (err) {
+            remove.disabled = false;
+            setStatus(postStatus, err.message, true);
+          });
+        return;
+      }
       var create = ev.target.closest('[data-action="create-region"]');
       if (create) {
         var row = create.closest('[data-content-region]');

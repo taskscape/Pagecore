@@ -50,8 +50,9 @@ files, and a folder of uploads.
 4. **Manage posts** on listing pages (e.g. *Orzeczenia / Wydarzenia /
    Uchwały*): a **＋ Dodaj wpis** (Add post) button creates a new post in that
    category. Each post has a title, date, category and optional excerpt
-   (editable as post metadata), plus a Markdown body edited the same way as
-   any other fragment. Post URLs are generated automatically from the title
+   (editable as post metadata), a featured-image drop area (JPEG/PNG only,
+   using the configured upload limit, uploaded and saved to the draft automatically), plus a
+   Markdown body edited the same way as any other fragment. Post URLs are generated automatically from the title
    (with Polish-character transliteration, e.g. *"Uchwała nr 5"* →
    `uchwala-nr-5`).
 

@@ -16,6 +16,7 @@
  * POST ?action=restore              -> {ok, html, markdown, meta?}
  * POST ?action=save-post-meta       -> {ok, meta}
  * POST ?action=create-post          -> {ok, slug, url}
+ * POST ?action=delete-post          -> {ok, slug}
  * POST ?action=save-media-meta      -> {ok, asset}
  * POST ?action=delete-media         -> {ok}
  * POST ?action=save-nav             -> {ok, nav}
@@ -380,6 +381,19 @@ case 'create-post':
     cms_json(array('ok' => true, 'slug' => $slug,
         'url' => str_replace('{slug}', $slug, cms_cfg('post_url'))));
 
+case 'delete-post':
+    $slug = trim(isset($_POST['slug']) ? (string) $_POST['slug'] : '');
+    cms_utf8_or_fail($slug);
+    $path = cms_post_path($slug, true);
+    if (!$path) { cms_fail('Nie znaleziono wpisu.', 404); }
+    // Preserve a revision before removal so an administrator can recover an accidentally deleted post.
+    cms_backup('posts/' . $slug, $path);
+    if (!@unlink($path)) { cms_fail('Nie udało się skasować wpisu.', 500); }
+    // A deleted post must not retain a draft that could later reintroduce stale content.
+    cms_clear_draft('post', $slug);
+    cms_regenerate_indexes();
+    cms_json(array('ok' => true, 'slug' => $slug));
+
 case 'save-nav':
     $raw = isset($_POST['json']) ? (string) $_POST['json'] : '';
     cms_utf8_or_fail($raw);
@@ -431,15 +445,23 @@ case 'delete-media':
     cms_json(array('ok' => true));
 
 case 'upload':
+    // A feature flag keeps post-image restrictions in the shared secure upload pipeline.
+    $featuredImageOnly = !empty($_POST['featured_image']);
     if (empty($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
         cms_fail('Brak pliku.');
     }
     $f = $_FILES['file'];
     if ($f['error'] !== UPLOAD_ERR_OK) { cms_fail('Błąd przesyłania (kod ' . $f['error'] . ').'); }
-    $maxBytes = cms_cfg('max_upload_mb') * 1024 * 1024;
-    if ($f['size'] > $maxBytes) { cms_fail('Plik przekracza limit ' . cms_cfg('max_upload_mb') . ' MB.'); }
+    // Read the configured cap once so regular and featured uploads enforce the same limit.
+    $maxUploadMb = max(1, (int) cms_cfg('max_upload_mb', 8));
+    $maxBytes = $maxUploadMb * 1024 * 1024;
+    if ($f['size'] > $maxBytes) { cms_fail('Plik przekracza limit ' . $maxUploadMb . ' MB.'); }
 
     $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
+    // The featured-image scope prevents non-JPEG/PNG files from becoming featured images.
+    if ($featuredImageOnly && !in_array($ext, array('jpg', 'jpeg', 'png'), true)) {
+        cms_fail('Featured image musi być plikiem JPEG lub PNG.');
+    }
     if (!in_array($ext, cms_cfg('allowed_ext'), true)) { cms_fail('Niedozwolony typ pliku.'); }
 
     // MIME sniff — never trust the client. finfo when available,

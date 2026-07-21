@@ -122,6 +122,30 @@ test('editor can see the installed Pagecore version', async ({ page }) => {
   await expect(page.getByText('Pagecore 0.1.0')).toBeVisible();
 });
 
+test('post editor uploads a JPEG or PNG featured image and saves it to the draft automatically', async ({ page }) => {
+  await login(page, '/sample-site/post/launch-notes/');
+  const panel = await openEditor(page, 'post:launch-notes');
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+    'base64'
+  );
+
+  // Selecting the file exercises the same automatic-save path used by drag and drop.
+  await expect(panel.getByLabel('Choose featured image')).toHaveAttribute('accept', /image\/jpeg,image\/png/);
+  await expect(panel.locator('.cms-featured-image-drop')).toContainText('maximum 8 MB');
+  await panel.getByLabel('Choose featured image').setInputFiles({
+    name: 'featured-image.png',
+    mimeType: 'image/png',
+    buffer: png
+  });
+
+  await expect(panel.locator('.cms-status')).toHaveText('Featured image zapisany automatycznie w szkicu.');
+  await expect(panel.locator('.cms-featured-image-selection')).toContainText('featured-image');
+  await expect(panel.locator('.cms-featured-image-preview')).toBeVisible();
+  const draft = fs.readFileSync(path.join(workingContent, '.drafts', 'posts', 'launch-notes.md'), 'utf8');
+  expect(draft).toMatch(/image: \/sample-site\/working-uploads\/\d{4}\/\d{2}\/featured-image-[a-f0-9]{6}\.png/);
+});
+
 test('reusable content and uploads directories ship Apache hardening', () => {
   const contentRules = fs.readFileSync(path.join(repoRoot, 'content', '.htaccess'), 'utf8');
   const uploadRules = fs.readFileSync(path.join(repoRoot, 'uploads', '.htaccess'), 'utf8');
@@ -348,4 +372,14 @@ test('content inventory lists pages, regions, posts, categories, creates missing
   await expect(primaryNav.getByRole('link', { name: 'Showcase' })).toBeVisible();
   await expect(primaryNav.getByRole('link', { name: 'Inventory' })).toBeVisible();
   await expect(page.getByText('New content.')).toBeVisible();
+
+  // The inventory delete action removes the published post and refreshes its derived index data.
+  await page.goto('/cms/content.php');
+  const inventoryPost = page.locator('[data-content-post="inventory-post"]');
+  page.once('dialog', dialog => dialog.accept());
+  await inventoryPost.getByRole('button', { name: 'Delete' }).click();
+  await expect(inventoryPost).toHaveCount(0);
+  expect(fs.existsSync(path.join(workingContent, 'posts', 'inventory-post.md'))).toBe(false);
+  const deletedPostIndex = await page.request.get('/sample-site/search-index.json');
+  expect(await deletedPostIndex.text()).not.toContain('Inventory post');
 });

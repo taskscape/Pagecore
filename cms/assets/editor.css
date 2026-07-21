@@ -65,6 +65,25 @@
     width: 100%; box-sizing: border-box; padding: 8px 10px; font: inherit;
     border: 1px solid #d8d2c4; border-radius: 4px; background: #fff;
 }
+/* The hidden native input keeps selection accessible while the drop area provides the visible control. */
+.cms-featured-image-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.cms-featured-image-drop {
+    display: flex; flex-direction: column; gap: 2px; align-items: center; justify-content: center;
+    min-height: 82px; padding: 12px; box-sizing: border-box; text-align: center; cursor: pointer;
+    border: 2px dashed #b9ad9b; border-radius: 4px; background: #fff; color: #6f665c;
+}
+.cms-featured-image-drop strong { color: #2b2620; }
+.cms-featured-image-drop span, .cms-featured-image-selection { font-size: 12px; }
+.cms-featured-image-drop:hover, .cms-featured-image-drop:focus, .cms-featured-image-dragover {
+    outline: 0; border-color: #9c3f2e; background: #fdf3f0;
+}
+.cms-featured-image-disabled { opacity: .6; cursor: default; }
+.cms-featured-image-preview { display: block; max-width: 100%; max-height: 180px; margin-top: 8px; border-radius: 4px; }
+.cms-featured-image-selection { display: block; margin-top: 6px; color: #6f665c; overflow-wrap: anywhere; }
+.cms-featured-image-remove {
+    margin-top: 7px; padding: 5px 8px; color: #8c2f1c; background: none; border: 1px solid #d8d2c4;
+    border-radius: 4px; font: 600 12px/1.3 inherit; cursor: pointer;
+}
 
 .cms-editor-area { display: flex; flex-direction: column; gap: 6px; min-height: 220px; }
 .cms-textarea {

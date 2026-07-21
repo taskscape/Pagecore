@@ -130,13 +130,19 @@
 
         /* post meta form */
         var metaInputs = null;
+        var featuredDrop = null;
+        var featuredFileInput = null;
+        var featuredPreview = null;
+        var featuredSelection = null;
+        var featuredRemove = null;
+        // Reuse the installation-wide upload limit instead of giving featured images a separate cap.
+        var maxFeaturedImageMb = Number(CFG.maxUploadMb || 8);
         if (isPost) {
             var meta = h('div', 'cms-meta');
             metaInputs = {};
             [['title', 'Tytuł', 'text', 'cms-field-wide'],
              ['date', 'Data (RRRR-MM-DD)', 'text', ''],
              ['category', 'Kategoria', 'select', ''],
-             ['image', 'Featured image URL', 'text', 'cms-field-wide'],
              ['excerpt', 'Zajawka (lead — opcjonalna)', 'text', 'cms-field-wide'],
              ['tags', 'Tagi (oddzielone przecinkami)', 'text', 'cms-field-wide']
             ].forEach(function (def) {
@@ -160,6 +166,40 @@
                 metaInputs[def[0]] = input;
                 meta.appendChild(field);
             });
+
+            // Featured images use a file picker/drop target so editors never need to paste asset URLs.
+            var featuredField = h('div', 'cms-field cms-field-wide');
+            featuredField.appendChild(h('label', null, 'Featured image'));
+            featuredFileInput = document.createElement('input');
+            featuredFileInput.type = 'file';
+            featuredFileInput.className = 'cms-featured-image-file';
+            featuredFileInput.accept = 'image/jpeg,image/png,.jpg,.jpeg,.png';
+            featuredFileInput.setAttribute('aria-label', 'Choose featured image');
+            featuredDrop = h('div', 'cms-featured-image-drop');
+            featuredDrop.tabIndex = 0;
+            featuredDrop.setAttribute('role', 'button');
+            featuredDrop.setAttribute('aria-label', 'Drag and drop a featured image or choose a file');
+            featuredDrop.appendChild(h('strong', null, 'Drop a JPEG or PNG here'));
+            featuredDrop.appendChild(h('span', null, 'or click to choose a file — maximum ' + maxFeaturedImageMb + ' MB'));
+            featuredPreview = document.createElement('img');
+            featuredPreview.className = 'cms-featured-image-preview';
+            featuredPreview.alt = 'Selected featured image';
+            featuredPreview.hidden = true;
+            featuredSelection = h('span', 'cms-featured-image-selection', 'No featured image selected.');
+            featuredRemove = h('button', 'cms-featured-image-remove', 'Remove image');
+            featuredRemove.type = 'button';
+            featuredRemove.hidden = true;
+            // Keep the persisted front-matter value out of sight while replacing the editable URL field.
+            var featuredImageValue = document.createElement('input');
+            featuredImageValue.type = 'hidden';
+            metaInputs.image = featuredImageValue;
+            featuredField.appendChild(featuredFileInput);
+            featuredField.appendChild(featuredDrop);
+            featuredField.appendChild(featuredPreview);
+            featuredField.appendChild(featuredSelection);
+            featuredField.appendChild(featuredRemove);
+            featuredField.appendChild(featuredImageValue);
+            meta.appendChild(featuredField);
             body.appendChild(meta);
         }
 
@@ -222,6 +262,13 @@
             previewBtn.disabled = disabled;
             publishBtn.disabled = disabled;
             discardBtn.disabled = disabled || !currentDraft;
+            // Keep the dedicated upload control in sync with saves and the initial content load.
+            if (featuredFileInput) { featuredFileInput.disabled = disabled; }
+            if (featuredDrop) {
+                featuredDrop.classList.toggle('cms-featured-image-disabled', disabled);
+                featuredDrop.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+            }
+            if (featuredRemove) { featuredRemove.disabled = disabled; }
         }
         function setBusy(value) {
             busy = value;
@@ -258,6 +305,17 @@
             metaInputs.image.value = meta.image || '';
             metaInputs.excerpt.value = meta.excerpt || '';
             metaInputs.tags.value = meta.tags || '';
+            updateFeaturedImageDisplay();
+        }
+        // Show the selected upload while retaining support for images stored by older posts.
+        function updateFeaturedImageDisplay() {
+            if (!metaInputs || !metaInputs.image || !featuredSelection) { return; }
+            var url = metaInputs.image.value;
+            featuredSelection.textContent = url ? 'Selected: ' + url : 'No featured image selected.';
+            featuredPreview.hidden = !url;
+            featuredPreview.removeAttribute('src');
+            if (url) { featuredPreview.src = url; }
+            featuredRemove.hidden = !url;
         }
         function fillEditor(payload) {
             ta.value = payload.markdown || '';
@@ -447,6 +505,83 @@
                 Array.prototype.forEach.call(files, uploadFile);
             }
         });
+
+        // Upload a featured image and immediately persist its URL in the post's draft metadata.
+        function saveFeaturedImage(file) {
+            if (!file || !isPost || busy || ta.disabled) { return; }
+            var validMime = file.type === 'image/jpeg' || file.type === 'image/png';
+            var validExtension = /\.(jpe?g|png)$/i.test(file.name || '');
+            if ((file.type && !validMime) || (!file.type && !validExtension)) {
+                setStatus('Featured image musi być plikiem JPEG lub PNG.', true);
+                return;
+            }
+            if (file.size > maxFeaturedImageMb * 1024 * 1024) {
+                setStatus('Featured image przekracza limit ' + maxFeaturedImageMb + ' MB.', true);
+                return;
+            }
+            setBusy(true);
+            setStatus('Przesyłanie featured image: ' + file.name + '…');
+            var fd = new FormData();
+            fd.append('file', file, file.name);
+            // The shared endpoint receives the scope flag for JPEG/PNG-only server validation.
+            fd.append('featured_image', '1');
+            api('upload', fd, true).then(function (upload) {
+                if (!upload.ok) { throw new Error(upload.error || 'Błąd przesyłania featured image.'); }
+                metaInputs.image.value = upload.url;
+                updateFeaturedImageDisplay();
+                panel._dirty = true;
+                setStatus('Zapisywanie featured image w szkicu…');
+                return api('save-draft', currentPayload());
+            }).then(function (saved) {
+                if (!saved.ok) { throw new Error(saved.error || 'Nie udało się zapisać featured image w szkicu.'); }
+                panel._dirty = false;
+                updateDraftState(saved.draft);
+                setStatus('Featured image zapisany automatycznie w szkicu.');
+            }).catch(function (err) {
+                setStatus(err.message || 'Błąd sieci przy przesyłaniu featured image.', true);
+            }).then(function () {
+                setBusy(false);
+            });
+        }
+        // The drop target and picker share validation and automatic draft persistence.
+        if (featuredFileInput) {
+            featuredFileInput.addEventListener('change', function () {
+                var file = featuredFileInput.files && featuredFileInput.files[0];
+                featuredFileInput.value = '';
+                saveFeaturedImage(file);
+            });
+            featuredDrop.addEventListener('click', function () {
+                if (!busy && !ta.disabled) { featuredFileInput.click(); }
+            });
+            featuredDrop.addEventListener('keydown', function (ev) {
+                if ((ev.key === 'Enter' || ev.key === ' ') && !busy && !ta.disabled) {
+                    ev.preventDefault();
+                    featuredFileInput.click();
+                }
+            });
+            ['dragover', 'dragenter'].forEach(function (evName) {
+                featuredDrop.addEventListener(evName, function (ev) {
+                    ev.preventDefault();
+                    if (!busy && !ta.disabled) { featuredDrop.classList.add('cms-featured-image-dragover'); }
+                });
+            });
+            ['dragleave', 'drop'].forEach(function (evName) {
+                featuredDrop.addEventListener(evName, function (ev) {
+                    ev.preventDefault();
+                    featuredDrop.classList.remove('cms-featured-image-dragover');
+                });
+            });
+            featuredDrop.addEventListener('drop', function (ev) {
+                var files = ev.dataTransfer && ev.dataTransfer.files;
+                if (files && files.length) { saveFeaturedImage(files[0]); }
+            });
+            featuredRemove.addEventListener('click', function () {
+                // Removing a selection keeps the existing asset intact and marks only post metadata as changed.
+                metaInputs.image.value = '';
+                updateFeaturedImageDisplay();
+                panel._dirty = true;
+            });
+        }
 
         draftBtn.addEventListener('click', function () { saveDraft(false); });
         mediaBtn.addEventListener('click', function () {

@@ -44,6 +44,8 @@ Paste the output into `password_hash` in `cms/config.php`.
 ## Day-to-day editing
 
 - Log in → browse the site → hover an outlined fragment → **✎ Edytuj**.
+- Post metadata includes a featured-image drop area. Drop or choose a JPEG/PNG
+  within the configured upload limit; Pagecore uploads it and saves its URL to the post draft automatically.
 - Markdown with tables; paste or drag images/PDFs straight into the editor.
 - Open **Content** in the toolbar to browse `/cms/content.php`, which lists
   configured pages, editable regions, posts, categories, missing Markdown
@@ -105,8 +107,10 @@ file.
 
 ## Deleting a post
 
-Delete its `content/posts/<slug>.md` file (FTP/SSH). Listings, search index
-and sitemap update on the next save; or touch any fragment to force it.
+In **Content inventory**, click **Delete** beside the post's **Edit** and
+**View** controls, then confirm. Pagecore removes the published Markdown file
+and any draft, preserves a backup revision, and regenerates the listings,
+search index, and sitemap.
 
 ## Requirements
 

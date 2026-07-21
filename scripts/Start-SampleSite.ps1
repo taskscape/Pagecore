@@ -5,12 +5,13 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
-$PhpExe = Join-Path $RepoRoot 'php\php.exe'
+# An override lets local contributors use an installed PHP runtime when the bundled runtime is absent.
+$PhpExe = if ($env:PAGECORE_PHP_EXE) { $env:PAGECORE_PHP_EXE } else { Join-Path $RepoRoot 'php\php.exe' }
 $Router = Join-Path $RepoRoot 'sample-site\router.php'
 $Config = Join-Path $RepoRoot 'sample-site\config.php'
 
 if (-not (Test-Path -LiteralPath $PhpExe)) {
-    throw "Bundled PHP executable not found at $PhpExe"
+    throw "PHP executable not found at $PhpExe"
 }
 
 & (Join-Path $PSScriptRoot 'Reset-SampleSite.ps1')
