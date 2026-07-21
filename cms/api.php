@@ -6,6 +6,7 @@
  * GET  ?action=revisions&key=…      -> {ok, revisions[]}
  * GET  ?action=media-list&q=…       -> {ok, assets[]}
  * GET  ?action=content-inventory    -> {ok, inventory}
+ * GET  ?action=version              -> {ok, version}
  * GET  ?action=preview-draft&key=…  -> standalone HTML preview of saved draft
  * POST ?action=preview              -> {ok, html}
  * POST ?action=save                 -> {ok, html}
@@ -232,6 +233,9 @@ case 'media-list':
 
 case 'content-inventory':
     cms_json(array('ok' => true, 'inventory' => cms_content_inventory()));
+
+case 'version':
+    cms_json(array('ok' => true, 'version' => cms_version()));
 
 case 'preview-draft':
     $key = isset($_GET['key']) ? $_GET['key'] : '';
