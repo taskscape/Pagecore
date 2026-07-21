@@ -303,6 +303,19 @@ test('content inventory lists pages, regions, posts, categories, creates missing
   await expect(page.getByRole('cell', { name: 'Launch notes for the sample site' })).toBeVisible();
   await expect(page.locator('[data-content-region="home/hero"]')).toContainText('Markdown present');
 
+  // Inventory creation requires an explicit category because it is not scoped to a public listing page.
+  await page.getByRole('button', { name: '＋ Dodaj wpis' }).click();
+  await page.getByLabel('Tytuł wpisu').fill('Inventory post');
+  await page.getByLabel('Kategoria').selectOption('news');
+  await page.getByRole('button', { name: 'Utwórz' }).click();
+  await expect(page).toHaveURL(/\/sample-site\/post\/inventory-post\/#cms-edit$/);
+  await expect(page.locator('.cms-panel')).toBeVisible();
+
+  await page.goto('/cms/content.php');
+  await expect(page.getByRole('cell', { name: 'Inventory post' })).toBeVisible();
+  // The post title doubles as the inventory's edit shortcut, matching the explicit edit action.
+  await expect(page.getByRole('link', { name: 'Inventory post' })).toHaveAttribute('href', '/sample-site/post/inventory-post/#cms-edit');
+
   const missing = page.locator('[data-content-region="home/missing-callout"]');
   await expect(missing).toBeVisible();
   await expect(missing).toHaveAttribute('data-content-missing', '1');
