@@ -3,6 +3,7 @@ title: Editor workflow checklist
 date: 2026-07-02
 category: docs
 excerpt: A documentation-style post that explains the expected save draft, preview, publish, and restore flow.
+image: /sample-site/working-uploads/2026/07/featured-pagecore.svg
 ---
 The safe editing loop is intentionally short:
 

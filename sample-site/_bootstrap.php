@@ -41,10 +41,21 @@ function sample_footer() {
 <?php
 }
 
+function sample_post_image(array $post, $className) {
+    if (empty($post['image'])) { return; }
+?>
+  <img class="<?= htmlspecialchars($className, ENT_QUOTES, 'UTF-8') ?>"
+       src="<?= htmlspecialchars($post['image'], ENT_QUOTES, 'UTF-8') ?>"
+       alt="<?= htmlspecialchars($post['title'], ENT_QUOTES, 'UTF-8') ?>"
+       loading="lazy">
+<?php
+}
+
 function sample_post_card(array $post) {
 ?>
   <article class="post-card">
-    <p class="eyebrow"><?= htmlspecialchars($post['category_label'], ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars($post['date_display'], ENT_QUOTES, 'UTF-8') ?></p>
+    <?php sample_post_image($post, 'post-card-image'); ?>
+    <p class="eyebrow"><?= htmlspecialchars($post['category_label'], ENT_QUOTES, 'UTF-8') ?> &middot; <?= htmlspecialchars($post['date_display'], ENT_QUOTES, 'UTF-8') ?></p>
     <h3><a href="<?= htmlspecialchars($post['url'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($post['title'], ENT_QUOTES, 'UTF-8') ?></a></h3>
     <p><?= htmlspecialchars($post['excerpt'], ENT_QUOTES, 'UTF-8') ?></p>
   </article>

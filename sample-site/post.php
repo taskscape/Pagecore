@@ -15,11 +15,12 @@ sample_header($post['title']);
 ?>
 <main>
   <article class="article">
-    <p class="eyebrow"><?= htmlspecialchars($post['category_label'], ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars($post['date_display'], ENT_QUOTES, 'UTF-8') ?></p>
+    <p class="eyebrow"><?= htmlspecialchars($post['category_label'], ENT_QUOTES, 'UTF-8') ?> &middot; <?= htmlspecialchars($post['date_display'], ENT_QUOTES, 'UTF-8') ?></p>
     <h1><?= htmlspecialchars($post['title'], ENT_QUOTES, 'UTF-8') ?></h1>
     <?php if ($post['lead'] !== ''): ?>
       <p class="lead"><?= htmlspecialchars($post['lead'], ENT_QUOTES, 'UTF-8') ?></p>
     <?php endif; ?>
+    <?php sample_post_image($post, 'article-image'); ?>
     <div class="prose">
       <?php if (cms_is_logged_in()): ?>
         <div class="cms-editable" data-cms-key="post:<?= htmlspecialchars($post['slug'], ENT_QUOTES, 'UTF-8') ?>">

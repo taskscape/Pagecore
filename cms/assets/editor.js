@@ -132,6 +132,7 @@
             [['title', 'Tytuł', 'text', 'cms-field-wide'],
              ['date', 'Data (RRRR-MM-DD)', 'text', ''],
              ['category', 'Kategoria', 'select', ''],
+             ['image', 'Featured image URL', 'text', 'cms-field-wide'],
              ['excerpt', 'Zajawka (lead — opcjonalna)', 'text', 'cms-field-wide'],
              ['tags', 'Tagi (oddzielone przecinkami)', 'text', 'cms-field-wide']
             ].forEach(function (def) {
@@ -233,6 +234,7 @@
                 title: metaInputs.title.value,
                 date: metaInputs.date.value,
                 category: metaInputs.category.value,
+                image: metaInputs.image.value,
                 excerpt: metaInputs.excerpt.value,
                 tags: metaInputs.tags.value
             };
@@ -249,6 +251,7 @@
             metaInputs.title.value = meta.title || '';
             metaInputs.date.value = meta.date || '';
             metaInputs.category.value = meta.category || '';
+            metaInputs.image.value = meta.image || '';
             metaInputs.excerpt.value = meta.excerpt || '';
             metaInputs.tags.value = meta.tags || '';
         }

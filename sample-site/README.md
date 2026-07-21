@@ -12,6 +12,9 @@ npm run sample:start
 
 Then open `http://127.0.0.1:8765/sample-site/`.
 
+The bundled pages include `/sample-site/showcase/`, which demonstrates the
+file-based content model and featured images stored as post front matter.
+
 CMS login:
 
 - Username: `admin`

@@ -10,6 +10,11 @@
     "children": []
   },
   {
+    "label": "Showcase",
+    "url": "/sample-site/showcase/",
+    "children": []
+  },
+  {
     "label": "Search",
     "url": "/sample-site/search/",
     "children": []

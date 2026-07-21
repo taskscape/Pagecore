@@ -31,6 +31,11 @@ if ($path === '/sample-site/news' || $path === '/sample-site/news/') {
     return true;
 }
 
+if ($path === '/sample-site/showcase' || $path === '/sample-site/showcase/') {
+    require __DIR__ . '/showcase.php';
+    return true;
+}
+
 if ($path === '/sample-site/search' || $path === '/sample-site/search/') {
     require __DIR__ . '/search/index.php';
     return true;
