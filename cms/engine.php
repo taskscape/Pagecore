@@ -440,8 +440,8 @@ function cms_render_markdown($md) {
             if ($label === '') { $label = basename($m[1], '.pdf'); }
             $lab = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
             return '<p class="pdf-embed"><object data="' . $url . '" type="application/pdf" width="100%" height="820">'
-                 . '<a href="' . $url . '">Pobierz dokument PDF (' . $lab . ')</a></object></p>' . "\n"
-                 . '<p class="pdf-fallback"><a href="' . $url . '">Otwórz / pobierz PDF: ' . $lab . '</a></p>';
+                 . '<a href="' . $url . '">Download PDF (' . $lab . ')</a></object></p>' . "\n"
+                 . '<p class="pdf-fallback"><a href="' . $url . '">Open / download PDF: ' . $lab . '</a></p>';
         },
         $html
     );
@@ -470,17 +470,17 @@ function cms_editable($key, $tag = 'div') {
     $html = $md !== '' ? cms_render_markdown($md) : '';
     if (!cms_is_logged_in()) { return $html; }
     if ($html === '') {
-        $html = '<p class="cms-empty">(pusty fragment — kliknij, aby edytować)</p>';
+        $html = '<p class="cms-empty">(empty content — click to edit)</p>';
     }
     return '<' . $tag . ' class="cms-editable" data-cms-key="' . htmlspecialchars($key, ENT_QUOTES, 'UTF-8') . '">'
          . $html . '</' . $tag . '>';
 }
 
 /* ------------------------------------------------------------------ posts */
-/** Polish month names for the site's "j F Y" date format. */
+/** English month names for the site's "j F Y" date format. */
 function cms_date_display($iso) {
-    static $months = array('', 'stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca',
-        'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia');
+    static $months = array('', 'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December');
     if (!preg_match('~^(\d{4})-(\d{2})-(\d{2})~', (string) $iso, $m)) { return (string) $iso; }
     return ((int) $m[3]) . ' ' . $months[(int) $m[2]] . ' ' . $m[1];
 }
@@ -1047,8 +1047,8 @@ function cms_content_inventory($postQuery = '', $postCategory = '', $postPage = 
     );
 }
 
-/** Slugify a title (Polish transliteration), ensure uniqueness. */
-function cms_slugify($title) {
+/** Convert a title to the stable Polish-aware base used for post slugs. */
+function cms_post_slug_base($title) {
     $map = array(
         'ą'=>'a','ć'=>'c','ę'=>'e','ł'=>'l','ń'=>'n','ó'=>'o','ś'=>'s','ź'=>'z','ż'=>'z',
         'Ą'=>'a','Ć'=>'c','Ę'=>'e','Ł'=>'l','Ń'=>'n','Ó'=>'o','Ś'=>'s','Ź'=>'z','Ż'=>'z',
@@ -1057,12 +1057,51 @@ function cms_slugify($title) {
     $s = strtolower($s);
     $s = preg_replace('~[^a-z0-9]+~', '-', $s);
     $s = trim($s, '-');
-    if ($s === '') { $s = 'wpis'; }
+    return $s === '' ? 'post' : $s;
+}
+
+/** Slugify a title (Polish transliteration), ensure uniqueness. */
+function cms_slugify($title) {
+    $s = cms_post_slug_base($title);
     $slug = $s; $n = 2;
     while (is_file(cms_cfg('content_dir') . '/posts/' . $slug . '.md')) {
         $slug = $s . '-' . $n; $n++;
     }
     return $slug;
+}
+
+/**
+ * Reserve a free post slug with exclusive creation so concurrent requests
+ * cannot select the same filename before either post is written.
+ */
+function cms_reserve_post_slug($title, $maxAttempts = 1000) {
+    $base = cms_post_slug_base($title);
+    $dir = cms_cfg('content_dir') . '/posts';
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true)) { return null; }
+    for ($n = 1; $n <= $maxAttempts; $n++) {
+        $slug = $n === 1 ? $base : $base . '-' . $n;
+        $path = $dir . '/' . $slug . '.md';
+        if (is_file($path)) { continue; }
+        $lockPath = $path . '.create.lock';
+        $lock = @fopen($lockPath, 'x');
+        if ($lock === false) { continue; }
+        // Recheck after acquiring the lock to coexist safely with external writers.
+        if (is_file($path)) {
+            fclose($lock);
+            @unlink($lockPath);
+            continue;
+        }
+        fwrite($lock, (string) getmypid());
+        return array('slug' => $slug, 'path' => $path, 'lock' => $lock, 'lock_path' => $lockPath);
+    }
+    return null;
+}
+
+/** Release a completed or failed slug reservation without leaving a stale lock. */
+function cms_release_post_slug_reservation($reservation) {
+    if (!is_array($reservation)) { return; }
+    if (isset($reservation['lock']) && is_resource($reservation['lock'])) { fclose($reservation['lock']); }
+    if (isset($reservation['lock_path'])) { @unlink($reservation['lock_path']); }
 }
 
 /* ------------------------------------------------- generated index files */
@@ -1086,7 +1125,7 @@ function cms_regenerate_indexes() {
     }
     foreach ($posts as $p) {
         $index[] = array('t' => $p['title'], 'u' => $p['url'],
-                         'k' => $p['category_label'] !== '' ? $p['category_label'] : 'Wpis',
+                         'k' => $p['category_label'] !== '' ? $p['category_label'] : 'Post',
                          'e' => $p['excerpt']);
     }
     $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
@@ -1113,13 +1152,13 @@ function cms_regenerate_indexes() {
 }
 
 /* -------------------------------------------------------------- editor UI */
-/** "＋ Dodaj wpis" control for a listing page (logged-in only). */
+/** "＋ Add post" control for a listing page (logged-in only). */
 function cms_listing_controls($category) {
     if (!cms_is_logged_in()) { return ''; }
     $cats = cms_cfg('categories');
     if (!isset($cats[$category])) { return ''; }
     return '<div class="cms-listing-controls"><button type="button" class="cms-add-post" data-cms-category="'
-         . htmlspecialchars($category, ENT_QUOTES, 'UTF-8') . '">＋ Dodaj wpis — '
+         . htmlspecialchars($category, ENT_QUOTES, 'UTF-8') . '">＋ Add post — '
          . htmlspecialchars($cats[$category][0], ENT_QUOTES, 'UTF-8') . '</button></div>';
 }
 

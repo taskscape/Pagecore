@@ -466,8 +466,9 @@ Pagecore in-place editing workflow.
 
 ## Security
 
-- **Single-account login** with a bcrypt password hash; brute-force lockout
-  (5 failures → 5-minute lock) and a 1-second delay on failed attempts.
+- **Single-account login** with a bcrypt password hash; browser-session-scoped
+  progressive delays and a 5-failure, 5-minute lockout. This avoids a shared
+  lockout that an unauthenticated client could use to deny editor access.
 - **Sessions** are HttpOnly, SameSite=Lax, secure over HTTPS, with an absolute
   lifetime; the session ID is regenerated on login.
 - **CSRF protection** — every state-changing API call requires a per-session

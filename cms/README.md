@@ -43,7 +43,7 @@ Paste the output into `password_hash` in `cms/config.php`.
 
 ## Day-to-day editing
 
-- Log in → browse the site → hover an outlined fragment → **✎ Edytuj**.
+- Log in → browse the site → hover an outlined fragment → **✎ Edit**.
 - Post metadata includes a featured-image drop area. Drop or choose a JPEG/PNG
   within the configured upload limit; Pagecore uploads it and saves its URL to the post draft automatically.
 - Markdown with tables; paste or drag images/PDFs straight into the editor.
@@ -53,11 +53,11 @@ Paste the output into `password_hash` in `cms/config.php`.
 - Open **Media** in the toolbar or **Media library** in the editor to browse
   `/cms/media.php`, search existing uploads, insert an existing asset, and edit
   alt text or captions stored as `<file>.meta.json` sidecar files.
-- `Ctrl+S` saves a draft under `content/.drafts/`; **Podgląd szkicu** opens a
-  preview link; **Opublikuj** updates the live Markdown file.
-- Use the **Kopie zapasowe** list in the editor to restore an older saved
+- `Ctrl+S` saves a draft under `content/.drafts/`; **Preview draft** opens a
+  preview link; **Publish** updates the live Markdown file.
+- Use the **Revisions** list in the editor to restore an older saved
   version in one click.
-- On listing pages (**Orzeczenia / Wydarzenia / Uchwały**): **＋ Dodaj wpis**.
+- On eligible listing pages: **＋ Add post**.
 
 - The installed Pagecore version is visible in the editor toolbar and on
   `/cms/content.php`.
@@ -104,7 +104,7 @@ current editor state to the live file and removes the matching draft.
 
 Every publish or direct save first copies the previous live version to
 `content/.backups/<key>.<timestamp>.md` (last 20 kept per fragment). To restore
-from the browser, open the fragment and click **Przywróć** next to the backup
+from the browser, open the fragment and click **Restore** next to the backup
 you want. Manual restore is still just copying a backup file back over the live
 file.
 

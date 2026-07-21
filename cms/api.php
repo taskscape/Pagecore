@@ -1,6 +1,6 @@
 <?php
 /**
- * CMS JSON API.
+ * CMS JSON API. User-facing responses remain English to avoid mixed CMS locales.
  *
  * GET  ?action=get&key=…            -> {ok, markdown, meta?}
  * GET  ?action=revisions&key=…      -> {ok, revisions[]}
@@ -50,7 +50,7 @@ function cms_sniff_mime($path) {
 function cms_utf8_or_fail() {
     foreach (func_get_args() as $s) {
         if ($s !== '' && !preg_match('~~u', $s)) {
-            cms_fail('Nieprawidłowe kodowanie znaków (wymagany UTF-8).');
+            cms_fail('Invalid character encoding (UTF-8 is required).');
         }
     }
 }
@@ -113,15 +113,15 @@ function cms_post_meta_from_request(array $meta, $strict) {
     cms_utf8_or_fail($title, $exc);
     cms_utf8_or_fail($tags, $tags);
     if ($strict) {
-        if ($title === '') { cms_fail('Tytuł jest wymagany.'); }
+        if ($title === '') { cms_fail('Title is required.'); }
         if (!preg_match('~^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?$~', $date)) {
-            cms_fail('Data musi mieć format RRRR-MM-DD (opcjonalnie z godziną).');
+            cms_fail('Date must use YYYY-MM-DD format (with optional time).');
         }
         $cats = cms_cfg('categories');
-        if (!isset($cats[$cat])) { cms_fail('Nieznana kategoria.'); }
+        if (!isset($cats[$cat])) { cms_fail('Unknown category.'); }
     }
     if ($strict && $img !== '' && !preg_match('~^(/|https?://)[^\s"<>]+$~', $img)) {
-        cms_fail('Obrazek musi być ścieżką zaczynającą się od / lub adresem http(s).');
+        cms_fail('Image must be a path beginning with / or an http(s) URL.');
     }
     $meta['title'] = $title;
     $meta['date'] = $date;
@@ -149,7 +149,7 @@ function cms_current_post_meta($path) {
 function cms_write_editor_content($kind, $id, $path, $markdown, ?array $meta = null) {
     $markdown = str_replace("\r\n", "\n", $markdown);
     if ($kind === 'post') {
-        if (!is_file($path)) { cms_fail('Nie znaleziono wpisu.', 404); }
+        if (!is_file($path)) { cms_fail('Post not found.', 404); }
         $data = cms_build_front_matter($meta === null ? cms_current_post_meta($path) : $meta, $markdown);
     } else {
         $data = $markdown;
@@ -158,7 +158,7 @@ function cms_write_editor_content($kind, $id, $path, $markdown, ?array $meta = n
     cms_backup($relKey, $path);
     if (!cms_atomic_write($path, $data)) {
         error_log('CMS: atomic write failed for ' . $path);
-        cms_fail('Zapis nie powiódł się.', 500);
+        cms_fail('Save failed.', 500);
     }
     cms_clear_draft($kind, $id);
     cms_regenerate_indexes();
@@ -168,10 +168,10 @@ function cms_write_editor_content($kind, $id, $path, $markdown, ?array $meta = n
 function cms_preview_page($key, $kind, array $payload) {
     $title = $kind === 'post' && !empty($payload['meta']['title'])
         ? $payload['meta']['title']
-        : 'Podgląd szkicu: ' . $key;
+        : 'Draft preview: ' . $key;
     http_response_code(200);
     header('Content-Type: text/html; charset=utf-8');
-    echo '<!doctype html><html lang="pl"><head><meta charset="utf-8">';
+    echo '<!doctype html><html lang="en"><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</title>';
     // Keep authenticated draft previews typographically consistent with CMS administration pages.
@@ -183,7 +183,7 @@ function cms_preview_page($key, $kind, array $payload) {
        . 'img{max-width:100%;height:auto}.cms-table{border-collapse:collapse;width:100%;margin:16px 0}'
        . '.cms-table th,.cms-table td{border:1px solid #d8d2c4;padding:8px 12px;text-align:left}'
        . '</style></head><body><main>';
-    echo '<p class="cms-preview-note">Podgląd zapisanego szkicu. Ta strona jest widoczna tylko po zalogowaniu do CMS.</p>';
+    echo '<p class="cms-preview-note">Preview of a saved draft. This page is visible only while logged in to the CMS.</p>';
     if ($kind === 'post') {
         echo '<h1>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</h1>';
         $date = isset($payload['meta']['date']) ? $payload['meta']['date'] : '';
@@ -206,10 +206,10 @@ switch ($action) {
 case 'get':
     $key = isset($_GET['key']) ? $_GET['key'] : '';
     $t = cms_resolve_key($key, false);
-    if (!$t) { cms_fail('Nieprawidłowy identyfikator fragmentu.'); }
+    if (!$t) { cms_fail('Invalid content identifier.'); }
     list($kind, $path, $slug) = $t;
     if (!is_file($path)) {
-        if ($kind === 'post') { cms_fail('Nie znaleziono wpisu.', 404); }
+        if ($kind === 'post') { cms_fail('Post not found.', 404); }
         $payload = array('ok' => true, 'markdown' => '', 'html' => '');
         $draft = cms_draft_payload($kind, $key, $key);
         if ($draft) { $payload['draft'] = $draft; }
@@ -225,7 +225,7 @@ case 'get':
 case 'revisions':
     $key = isset($_GET['key']) ? $_GET['key'] : '';
     $t = cms_resolve_key($key, false);
-    if (!$t) { cms_fail('Nieprawidłowy identyfikator fragmentu.'); }
+    if (!$t) { cms_fail('Invalid content identifier.'); }
     list($kind, , $slug) = $t;
     $id = $kind === 'post' ? $slug : $key;
     cms_json(array('ok' => true, 'revisions' => cms_revisions(cms_target_rel_key($kind, $id))));
@@ -249,11 +249,11 @@ case 'version':
 case 'preview-draft':
     $key = isset($_GET['key']) ? $_GET['key'] : '';
     $t = cms_resolve_key($key, false);
-    if (!$t) { cms_fail('Nieprawidłowy identyfikator fragmentu.'); }
+    if (!$t) { cms_fail('Invalid content identifier.'); }
     list($kind, , $slug) = $t;
     $id = $kind === 'post' ? $slug : $key;
     $draftPath = cms_draft_path($kind, $id, true);
-    if (!$draftPath) { cms_fail('Nie znaleziono szkicu.', 404); }
+    if (!$draftPath) { cms_fail('Draft not found.', 404); }
     cms_preview_page($key, $kind, cms_editor_payload($kind, $draftPath));
 
 case 'preview':
@@ -265,10 +265,10 @@ case 'save':
     $md  = isset($_POST['markdown']) ? (string) $_POST['markdown'] : '';
     $md  = str_replace("\r\n", "\n", $md);
     $t = cms_resolve_key($key, false);
-    if (!$t) { cms_fail('Nieprawidłowy identyfikator fragmentu.'); }
+    if (!$t) { cms_fail('Invalid content identifier.'); }
     list($kind, $path, $slug) = $t;
     if ($kind === 'post') {
-        if (!is_file($path)) { cms_fail('Nie znaleziono wpisu.', 404); }
+        if (!is_file($path)) { cms_fail('Post not found.', 404); }
         list($meta, ) = cms_parse_front_matter(file_get_contents($path));
         $data = cms_build_front_matter($meta, $md);
         cms_backup('posts/' . $slug, $path);
@@ -278,7 +278,7 @@ case 'save':
     }
     if (!cms_atomic_write($path, $data)) {
         error_log('CMS: atomic write failed for ' . $path);
-        cms_fail('Zapis nie powiódł się.', 500);
+        cms_fail('Save failed.', 500);
     }
     cms_clear_draft($kind, $kind === 'post' ? $slug : $key);
     cms_regenerate_indexes();
@@ -289,13 +289,13 @@ case 'save-draft':
     $md  = isset($_POST['markdown']) ? (string) $_POST['markdown'] : '';
     $md  = str_replace("\r\n", "\n", $md);
     $t = cms_resolve_key($key, false);
-    if (!$t) { cms_fail('Nieprawidłowy identyfikator fragmentu.'); }
+    if (!$t) { cms_fail('Invalid content identifier.'); }
     list($kind, $path, $slug) = $t;
     $id = $kind === 'post' ? $slug : $key;
     $draftPath = cms_draft_path($kind, $id, false);
-    if (!$draftPath) { cms_fail('Nieprawidłowy identyfikator szkicu.'); }
+    if (!$draftPath) { cms_fail('Invalid draft identifier.'); }
     if ($kind === 'post') {
-        if (!is_file($path)) { cms_fail('Nie znaleziono wpisu.', 404); }
+        if (!is_file($path)) { cms_fail('Post not found.', 404); }
         $basePath = cms_draft_path($kind, $id, true);
         $meta = cms_current_post_meta($basePath ? $basePath : $path);
         $data = cms_build_front_matter(cms_post_meta_from_request($meta, false), $md);
@@ -303,7 +303,7 @@ case 'save-draft':
         $data = $md;
     }
     if (!cms_atomic_write($draftPath, $data)) {
-        cms_fail('Nie udało się zapisać szkicu.', 500);
+        cms_fail('Could not save draft.', 500);
     }
     cms_json(array('ok' => true, 'draft' => cms_draft_payload($kind, $id, $key)));
 
@@ -311,7 +311,7 @@ case 'publish':
     $key = isset($_POST['key']) ? $_POST['key'] : '';
     $md  = isset($_POST['markdown']) ? (string) $_POST['markdown'] : '';
     $t = cms_resolve_key($key, false);
-    if (!$t) { cms_fail('Nieprawidłowy identyfikator fragmentu.'); }
+    if (!$t) { cms_fail('Invalid content identifier.'); }
     list($kind, $path, $slug) = $t;
     $id = $kind === 'post' ? $slug : $key;
     $meta = null;
@@ -325,7 +325,7 @@ case 'publish':
 case 'discard-draft':
     $key = isset($_POST['key']) ? $_POST['key'] : '';
     $t = cms_resolve_key($key, false);
-    if (!$t) { cms_fail('Nieprawidłowy identyfikator fragmentu.'); }
+    if (!$t) { cms_fail('Invalid content identifier.'); }
     list($kind, $path, $slug) = $t;
     $id = $kind === 'post' ? $slug : $key;
     cms_clear_draft($kind, $id);
@@ -337,16 +337,16 @@ case 'restore':
     $key = isset($_POST['key']) ? $_POST['key'] : '';
     $revision = isset($_POST['revision']) ? (string) $_POST['revision'] : '';
     $t = cms_resolve_key($key, false);
-    if (!$t) { cms_fail('Nieprawidłowy identyfikator fragmentu.'); }
+    if (!$t) { cms_fail('Invalid content identifier.'); }
     list($kind, $path, $slug) = $t;
     $id = $kind === 'post' ? $slug : $key;
     $relKey = cms_target_rel_key($kind, $id);
-    if (!cms_revision_belongs_to($revision, $relKey)) { cms_fail('Ta kopia nie pasuje do edytowanego fragmentu.'); }
+    if (!cms_revision_belongs_to($revision, $relKey)) { cms_fail('This revision does not match the edited content.'); }
     $revisionPath = cms_revision_path($revision);
-    if (!$revisionPath) { cms_fail('Nie znaleziono wybranej kopii.', 404); }
+    if (!$revisionPath) { cms_fail('Selected revision not found.', 404); }
     cms_backup($relKey, $path);
     if (!cms_atomic_write($path, file_get_contents($revisionPath))) {
-        cms_fail('Nie udało się przywrócić kopii.', 500);
+        cms_fail('Could not restore revision.', 500);
     }
     cms_clear_draft($kind, $id);
     cms_regenerate_indexes();
@@ -357,12 +357,12 @@ case 'restore':
 case 'save-post-meta':
     $slug = isset($_POST['slug']) ? $_POST['slug'] : '';
     $path = cms_post_path($slug, true);
-    if (!$path) { cms_fail('Nie znaleziono wpisu.', 404); }
+    if (!$path) { cms_fail('Post not found.', 404); }
     list($meta, $body) = cms_parse_front_matter(file_get_contents($path));
     $meta = cms_post_meta_from_request($meta, true);
     cms_backup('posts/' . $slug, $path);
     if (!cms_atomic_write($path, cms_build_front_matter($meta, $body))) {
-        cms_fail('Zapis nie powiódł się.', 500);
+        cms_fail('Save failed.', 500);
     }
     cms_regenerate_indexes();
     cms_json(array('ok' => true, 'meta' => $meta));
@@ -371,17 +371,24 @@ case 'create-post':
     $title = trim(isset($_POST['title']) ? (string) $_POST['title'] : '');
     $cat   = trim(isset($_POST['category']) ? (string) $_POST['category'] : '');
     cms_utf8_or_fail($title);
-    if ($title === '') { cms_fail('Tytuł jest wymagany.'); }
+    if ($title === '') { cms_fail('Title is required.'); }
     $cats = cms_cfg('categories');
-    if (!isset($cats[$cat])) { cms_fail('Nieznana kategoria.'); }
-    $slug = cms_slugify($title);
-    $path = cms_cfg('content_dir') . '/posts/' . $slug . '.md';
+    if (!isset($cats[$cat])) { cms_fail('Unknown category.'); }
+    $reservation = cms_reserve_post_slug($title);
+    if (!$reservation) { cms_fail('Could not reserve a unique post URL.', 409); }
+    $slug = $reservation['slug'];
+    $path = $reservation['path'];
     $data = cms_build_front_matter(array(
         'title'    => $title,
         'date'     => date('Y-m-d H:i:s'),
         'category' => $cat,
-    ), "Treść wpisu…\n");
-    if (!cms_atomic_write($path, $data)) { cms_fail('Nie udało się utworzyć wpisu.', 500); }
+    ), "Post content…\n");
+    if (!cms_atomic_write($path, $data)) {
+        // Release the exclusive reservation when creation fails so later attempts are not blocked.
+        cms_release_post_slug_reservation($reservation);
+        cms_fail('Could not create post.', 500);
+    }
+    cms_release_post_slug_reservation($reservation);
     cms_regenerate_indexes();
     cms_json(array('ok' => true, 'slug' => $slug,
         'url' => str_replace('{slug}', $slug, cms_cfg('post_url'))));
@@ -390,10 +397,10 @@ case 'delete-post':
     $slug = trim(isset($_POST['slug']) ? (string) $_POST['slug'] : '');
     cms_utf8_or_fail($slug);
     $path = cms_post_path($slug, true);
-    if (!$path) { cms_fail('Nie znaleziono wpisu.', 404); }
+    if (!$path) { cms_fail('Post not found.', 404); }
     // Preserve a revision before removal so an administrator can recover an accidentally deleted post.
     cms_backup('posts/' . $slug, $path);
-    if (!@unlink($path)) { cms_fail('Nie udało się skasować wpisu.', 500); }
+    if (!@unlink($path)) { cms_fail('Could not delete post.', 500); }
     // A deleted post must not retain a draft that could later reintroduce stale content.
     cms_clear_draft('post', $slug);
     cms_regenerate_indexes();
@@ -404,7 +411,7 @@ case 'save-nav':
     cms_utf8_or_fail($raw);
     $error = null;
     if (!cms_write_nav_json($raw, $error)) {
-        cms_fail($error ? $error : 'Nie udało się zapisać nawigacji.');
+        cms_fail($error ? $error : 'Could not save navigation.');
     }
     cms_json(array('ok' => true, 'nav' => cms_nav_items(), 'json' => cms_nav_json()));
 
@@ -413,13 +420,13 @@ case 'create-region':
     $markdown = isset($_POST['markdown']) ? (string) $_POST['markdown'] : '';
     cms_utf8_or_fail($key, $markdown);
     $path = cms_region_path($key, false);
-    if (!$path) { cms_fail('Nieprawidłowy identyfikator fragmentu.'); }
-    if (is_file($path)) { cms_fail('Ten plik juz istnieje.', 409); }
+    if (!$path) { cms_fail('Invalid content identifier.'); }
+    if (is_file($path)) { cms_fail('This file already exists.', 409); }
     if ($markdown === '') {
         $markdown = "# " . str_replace('-', ' ', basename($key)) . "\n\nNew content.\n";
     }
     if (!cms_atomic_write($path, str_replace("\r\n", "\n", $markdown))) {
-        cms_fail('Nie udało się utworzyć pliku Markdown.', 500);
+        cms_fail('Could not create Markdown file.', 500);
     }
     cms_regenerate_indexes();
     cms_json(array('ok' => true, 'key' => $key, 'inventory' => cms_content_inventory()));
@@ -430,9 +437,9 @@ case 'save-media-meta':
     $caption = trim(isset($_POST['caption']) ? (string) $_POST['caption'] : '');
     cms_utf8_or_fail($rel, $alt, $caption);
     $path = cms_media_path($rel, true);
-    if (!$path) { cms_fail('Nie znaleziono pliku.', 404); }
+    if (!$path) { cms_fail('File not found.', 404); }
     if (!cms_media_write_meta($path, array('alt' => $alt, 'caption' => $caption))) {
-        cms_fail('Nie udało się zapisać metadanych pliku.', 500);
+        cms_fail('Could not save file metadata.', 500);
     }
     cms_json(array('ok' => true, 'asset' => cms_media_asset($rel)));
 
@@ -440,12 +447,12 @@ case 'delete-media':
     $rel = isset($_POST['rel']) ? (string) $_POST['rel'] : '';
     cms_utf8_or_fail($rel);
     $asset = cms_media_asset($rel);
-    if (!$asset) { cms_fail('Nie znaleziono pliku.', 404); }
+    if (!$asset) { cms_fail('File not found.', 404); }
     if (cms_media_is_referenced($asset['url'])) {
-        cms_fail('Plik jest nadal używany w treści. Usuń odniesienia przed skasowaniem.', 409);
+        cms_fail('This file is still referenced by content. Remove references before deleting it.', 409);
     }
     $path = cms_media_path($rel, true);
-    if (!$path || !@unlink($path)) { cms_fail('Nie udało się skasować pliku.', 500); }
+    if (!$path || !@unlink($path)) { cms_fail('Could not delete file.', 500); }
     @unlink(cms_media_meta_path($path));
     cms_json(array('ok' => true));
 
@@ -453,21 +460,21 @@ case 'upload':
     // A feature flag keeps post-image restrictions in the shared secure upload pipeline.
     $featuredImageOnly = !empty($_POST['featured_image']);
     if (empty($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
-        cms_fail('Brak pliku.');
+        cms_fail('No file uploaded.');
     }
     $f = $_FILES['file'];
-    if ($f['error'] !== UPLOAD_ERR_OK) { cms_fail('Błąd przesyłania (kod ' . $f['error'] . ').'); }
+    if ($f['error'] !== UPLOAD_ERR_OK) { cms_fail('Upload failed (code ' . $f['error'] . ').'); }
     // Read the configured cap once so regular and featured uploads enforce the same limit.
     $maxUploadMb = max(1, (int) cms_cfg('max_upload_mb', 8));
     $maxBytes = $maxUploadMb * 1024 * 1024;
-    if ($f['size'] > $maxBytes) { cms_fail('Plik przekracza limit ' . $maxUploadMb . ' MB.'); }
+    if ($f['size'] > $maxBytes) { cms_fail('File exceeds the ' . $maxUploadMb . ' MB limit.'); }
 
     $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
     // The featured-image scope prevents non-JPEG/PNG files from becoming featured images.
     if ($featuredImageOnly && !in_array($ext, array('jpg', 'jpeg', 'png'), true)) {
-        cms_fail('Featured image musi być plikiem JPEG lub PNG.');
+        cms_fail('Featured image must be a JPEG or PNG file.');
     }
-    if (!in_array($ext, cms_cfg('allowed_ext'), true)) { cms_fail('Niedozwolony typ pliku.'); }
+    if (!in_array($ext, cms_cfg('allowed_ext'), true)) { cms_fail('File type is not allowed.'); }
 
     // MIME sniff — never trust the client. finfo when available,
     // magic-byte fallback for minimal PHP builds.
@@ -485,34 +492,34 @@ case 'upload':
         'pdf' => array('application/pdf'),
     );
     if (!isset($allowedMime[$ext]) || !in_array($mime, $allowedMime[$ext], true)) {
-        cms_fail('Zawartość pliku nie odpowiada rozszerzeniu.');
+        cms_fail('File contents do not match its extension.');
     }
     $isImage = ($ext !== 'pdf');
     if ($isImage && $ext !== 'svg' && @getimagesize($f['tmp_name']) === false) {
-        cms_fail('Uszkodzony plik graficzny.');
+        cms_fail('Invalid image file.');
     }
     if ($ext === 'svg') {
         $svg = file_get_contents($f['tmp_name']);
         if (preg_match('~<script|on[a-z]+\s*=|javascript:~i', $svg)) {
-            cms_fail('Plik SVG zawiera niedozwolone elementy.');
+            cms_fail('SVG file contains prohibited elements.');
         }
     }
 
     $base = pathinfo($f['name'], PATHINFO_FILENAME);
     $base = strtolower(preg_replace('~[^A-Za-z0-9-]+~', '-', $base));
     $base = trim($base, '-');
-    if ($base === '') { $base = 'plik'; }
+    if ($base === '') { $base = 'file'; }
     $sub = date('Y/m');
     $dir = cms_cfg('uploads_dir') . '/' . $sub;
-    if (!is_dir($dir) && !@mkdir($dir, 0775, true)) { cms_fail('Nie można utworzyć katalogu.', 500); }
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true)) { cms_fail('Could not create directory.', 500); }
     $name = $base . '-' . bin2hex(random_bytes(3)) . '.' . $ext;
     if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $name)) {
-        cms_fail('Zapis pliku nie powiódł się.', 500);
+        cms_fail('Could not save uploaded file.', 500);
     }
     $rel = $sub . '/' . $name;
     cms_media_write_meta($dir . '/' . $name, array('alt' => $base, 'caption' => ''));
     $asset = cms_media_asset($rel);
-    if (!$asset) { cms_fail('Nie udało się odczytać zapisanego pliku.', 500); }
+    if (!$asset) { cms_fail('Could not read saved file.', 500); }
     cms_json(array(
         'ok' => true,
         'url' => $asset['url'],
@@ -527,5 +534,5 @@ case 'logout':
     exit;
 
 default:
-    cms_fail('Nieznana akcja.', 400);
+    cms_fail('Unknown action.', 400);
 }

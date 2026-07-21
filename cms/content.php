@@ -265,7 +265,7 @@ function cms_content_posts_url($page, $query, $category) {
             <?php endif; ?>
           </form>
           <!-- A global create action lets editors start a post from the inventory and choose its category explicitly. -->
-          <button type="button" class="button button-primary" id="add-post">＋ Dodaj wpis</button>
+          <button type="button" class="button button-primary" id="add-post">＋ Add post</button>
         </div>
       </div>
       <div class="table-wrap">
@@ -315,11 +315,11 @@ function cms_content_posts_url($page, $query, $category) {
     <!-- This dialog provides the category that a public listing page normally supplies as context. -->
     <div class="post-modal" id="post-modal" role="dialog" aria-modal="true" aria-labelledby="post-modal-title" hidden>
       <form class="post-modal-box" id="post-form">
-        <h3 id="post-modal-title">Nowy wpis</h3>
-        <label for="post-title">Tytuł wpisu
+        <h3 id="post-modal-title">New post</h3>
+        <label for="post-title">Post title
           <input id="post-title" name="title" type="text" required autofocus>
         </label>
-        <label for="post-category">Kategoria
+        <label for="post-category">Category
           <select id="post-category" name="category" required>
             <?php foreach ($inventory['categories'] as $category): ?>
               <option value="<?= cms_content_e($category['slug']) ?>"><?= cms_content_e($category['label']) ?></option>
@@ -327,8 +327,8 @@ function cms_content_posts_url($page, $query, $category) {
           </select>
         </label>
         <div class="post-modal-actions">
-          <button type="button" class="button" id="cancel-post">Anuluj</button>
-          <button type="submit" class="button button-primary" id="create-post">Utwórz</button>
+          <button type="button" class="button" id="cancel-post">Cancel</button>
+          <button type="submit" class="button button-primary" id="create-post">Create</button>
         </div>
         <div class="status" id="post-status" role="status" aria-live="polite"></div>
       </form>

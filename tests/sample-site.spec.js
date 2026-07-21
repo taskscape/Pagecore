@@ -70,6 +70,34 @@ test('visitor sees rendered sample site without editor chrome', async ({ page })
   await expect(page.locator('link[href="/cms/assets/editor.css"]')).toHaveCount(0);
 });
 
+test('failed logins in one browser session do not lock out another session', async ({ browser }) => {
+  const baseUrl = process.env.PAGECORE_BASE_URL || 'http://127.0.0.1:8765';
+  const loginUrl = `${baseUrl}/cms/login.php?next=${encodeURIComponent('/sample-site/')}`;
+  const attackerContext = await browser.newContext();
+  const editorContext = await browser.newContext();
+  try {
+    const attackerPage = await attackerContext.newPage();
+    await attackerPage.goto(loginUrl);
+    // Exhaust this session's throttle to verify it cannot create a global editor lockout.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await attackerPage.getByLabel('Username').fill('admin');
+      await attackerPage.getByLabel('Password').fill('incorrect-password');
+      await attackerPage.getByRole('button', { name: 'Sign in' }).click();
+    }
+    await expect(attackerPage.locator('.error')).toContainText('Too many failed attempts');
+
+    const editorPage = await editorContext.newPage();
+    await editorPage.goto(loginUrl);
+    await editorPage.getByLabel('Username').fill('admin');
+    await editorPage.getByLabel('Password').fill('pagecore-demo');
+    await editorPage.getByRole('button', { name: 'Sign in' }).click();
+    await expect(editorPage.locator('.cms-toolbar')).toBeVisible();
+  } finally {
+    await attackerContext.close();
+    await editorContext.close();
+  }
+});
+
 test('showcase demonstrates file-based featured images', async ({ page }) => {
   await page.goto('/sample-site/showcase/');
 
@@ -96,7 +124,7 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
     '[Unsafe link](javascript:window.__pagecoreExecutableHtml="link")'
   ].join('\n'));
   page.once('dialog', dialog => dialog.accept());
-  await panel.getByRole('button', { name: 'Opublikuj' }).click();
+  await panel.getByRole('button', { name: 'Publish' }).click();
 
   await page.goto('/sample-site/');
   expect(await page.evaluate(() => window.__pagecoreExecutableHtml)).toBeUndefined();
@@ -144,7 +172,7 @@ test('featured image upload accepts JPEG and PNG, saves drafts, and enforces typ
     buffer: png
   });
 
-  await expect(panel.locator('.cms-status')).toHaveText('Featured image zapisany automatycznie w szkicu.');
+  await expect(panel.locator('.cms-status')).toHaveText('Featured image saved automatically to draft.');
   await expect(panel.locator('.cms-featured-image-selection')).toContainText('featured-image');
   await expect(panel.locator('.cms-featured-image-preview')).toBeVisible();
   let draft = fs.readFileSync(path.join(workingContent, '.drafts', 'posts', 'launch-notes.md'), 'utf8');
@@ -155,19 +183,19 @@ test('featured image upload accepts JPEG and PNG, saves drafts, and enforces typ
     mimeType: 'image/jpeg',
     buffer: jpeg
   });
-  await expect(panel.locator('.cms-status')).toHaveText('Featured image zapisany automatycznie w szkicu.');
+  await expect(panel.locator('.cms-status')).toHaveText('Featured image saved automatically to draft.');
   draft = fs.readFileSync(path.join(workingContent, '.drafts', 'posts', 'launch-notes.md'), 'utf8');
   expect(draft).toMatch(/image: \/sample-site\/working-uploads\/\d{4}\/\d{2}\/featured-image-[a-f0-9]{6}\.jpeg/);
 
   // Browser validation gives immediate feedback for invalid types and files over the shared 8 MB cap.
   await featuredInput.setInputFiles({ name: 'not-featured.gif', mimeType: 'image/gif', buffer: Buffer.from('GIF89a') });
-  await expect(panel.locator('.cms-status')).toHaveText('Featured image musi być plikiem JPEG lub PNG.');
+  await expect(panel.locator('.cms-status')).toHaveText('Featured image must be a JPEG or PNG file.');
   await featuredInput.setInputFiles({
     name: 'oversized.png',
     mimeType: 'image/png',
     buffer: Buffer.alloc(8 * 1024 * 1024 + 1)
   });
-  await expect(panel.locator('.cms-status')).toHaveText('Featured image przekracza limit 8 MB.');
+  await expect(panel.locator('.cms-status')).toHaveText('Featured image exceeds the 8 MB limit.');
 
   // The API repeats the UI restrictions so crafted requests cannot bypass them.
   const token = await page.evaluate(() => window.CMS_CONFIG && window.CMS_CONFIG.token);
@@ -205,11 +233,11 @@ test('editor saves a draft, previews it, publishes, and restores a backup', asyn
 
   let panel = await openEditor(page, 'home/hero');
   await panel.locator('textarea').fill('# Draft-only headline\n\nThis copy is visible in preview before it is published.');
-  await panel.getByRole('button', { name: 'Zapisz szkic' }).click();
-  await expect(panel.locator('.cms-draft-state')).toContainText('Wczytano szkic zapisany');
+  await panel.getByRole('button', { name: 'Save draft' }).click();
+  await expect(panel.locator('.cms-draft-state')).toContainText('Loaded saved draft');
 
   const popupPromise = page.waitForEvent('popup');
-  await panel.getByRole('button', { name: /Podgl.d szkicu/ }).click();
+  await panel.getByRole('button', { name: 'Preview draft' }).click();
   const preview = await popupPromise;
   await preview.waitForLoadState('domcontentloaded');
   await expect(preview.getByRole('heading', { name: 'Draft-only headline' })).toBeVisible();
@@ -223,7 +251,7 @@ test('editor saves a draft, previews it, publishes, and restores a backup', asyn
   panel = await openEditor(page, 'home/hero');
   await expect(panel.locator('textarea')).toHaveValue(/Draft-only headline/);
   page.once('dialog', dialog => dialog.accept());
-  await panel.getByRole('button', { name: 'Opublikuj' }).click();
+  await panel.getByRole('button', { name: 'Publish' }).click();
   await expect(page.getByRole('heading', { name: 'Draft-only headline' })).toBeVisible();
 
   panel = await openEditor(page, 'home/hero');
@@ -238,14 +266,14 @@ test('editor creates a post, publishes body changes, uploads media, and regenera
 
   await page.locator('.cms-add-post[data-cms-category="news"]').click();
   await page.locator('.cms-modal input').fill('Playwright Announcement');
-  await page.locator('.cms-modal').getByRole('button', { name: 'Utwórz' }).click();
+  await page.locator('.cms-modal').getByRole('button', { name: 'Create' }).click();
   await expect(page).toHaveURL(/\/sample-site\/post\/playwright-announcement\/#cms-edit$/);
 
   const panel = page.locator('.cms-panel');
   await expect(panel).toBeVisible();
   await panel.locator('textarea').fill('This post was authored through the sample site test.\n\nIt should appear in search and the sitemap after publishing.');
   page.once('dialog', dialog => dialog.accept());
-  await panel.getByRole('button', { name: 'Opublikuj' }).click();
+  await panel.getByRole('button', { name: 'Publish' }).click();
 
   await page.goto('/sample-site/news/');
   await expect(page.getByRole('link', { name: 'Playwright Announcement' })).toBeVisible();
@@ -282,6 +310,26 @@ test('editor creates a post, publishes body changes, uploads media, and regenera
 
   await page.goto('/sample-site/search/?q=Playwright');
   await expect(page.getByRole('link', { name: 'Playwright Announcement' })).toBeVisible();
+});
+
+test('post creation skips a slug reserved by another in-flight request', async ({ page }) => {
+  await login(page);
+
+  const token = await page.evaluate(() => window.CMS_CONFIG && window.CMS_CONFIG.token);
+  expect(token).toBeTruthy();
+  const reservedSlug = 'concurrent-post';
+  const postsDir = path.join(workingContent, 'posts');
+  // Emulate another request holding the exclusive-create reservation before it writes its post file.
+  fs.writeFileSync(path.join(postsDir, `${reservedSlug}.md.create.lock`), 'test reservation');
+
+  const response = await page.request.post('/cms/api.php?action=create-post', {
+    headers: { 'X-CMS-Token': token },
+    form: { title: 'Concurrent Post', category: 'news' }
+  });
+  expect(response.ok()).toBeTruthy();
+  const created = await response.json();
+  expect(created.slug).toBe(`${reservedSlug}-2`);
+  expect(fs.existsSync(path.join(postsDir, `${reservedSlug}.md`))).toBe(false);
 });
 
 test('media library searches assets, edits metadata, inserts existing media, and deletes unused uploads', async ({ page }) => {
@@ -346,7 +394,7 @@ test('media library searches assets, edits metadata, inserts existing media, and
   await expect(panel.locator('textarea')).toHaveValue(/Edited library logo/);
   await expect(panel.locator('textarea')).toHaveValue(/Edited caption from Playwright/);
   page.once('dialog', dialog => dialog.accept());
-  await panel.getByRole('button', { name: 'Opublikuj' }).click();
+  await panel.getByRole('button', { name: 'Publish' }).click();
   await expect(page.locator('main img[alt="Edited library logo"]')).toBeVisible();
 
   await page.goto(`/cms/media.php?q=${encodeURIComponent(uploaded.asset.rel)}`);
@@ -373,10 +421,10 @@ test('content inventory lists pages, regions, posts, categories, creates missing
   await expect(page.locator('[data-content-region="home/hero"]')).toContainText('Markdown present');
 
   // Inventory creation requires an explicit category because it is not scoped to a public listing page.
-  await page.getByRole('button', { name: '＋ Dodaj wpis' }).click();
-  await page.getByLabel('Tytuł wpisu').fill('Inventory post');
-  await page.getByLabel('Kategoria').selectOption('news');
-  await page.getByRole('button', { name: 'Utwórz' }).click();
+  await page.getByRole('button', { name: '＋ Add post' }).click();
+  await page.getByLabel('Post title').fill('Inventory post');
+  await page.getByLabel('Category').selectOption('news');
+  await page.getByRole('button', { name: 'Create' }).click();
   await expect(page).toHaveURL(/\/sample-site\/post\/inventory-post\/#cms-edit$/);
   await expect(page.locator('.cms-panel')).toBeVisible();
 

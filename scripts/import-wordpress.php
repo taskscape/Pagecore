@@ -79,6 +79,33 @@ if (strpos($POST_URL, '{slug}') === false) {
 function say($s) { fwrite(STDOUT, $s . "\n"); }
 function ensure_dir($d) { if (!is_dir($d) && !@mkdir($d, 0775, true)) { fwrite(STDERR, "mkdir failed: $d\n"); exit(1); } }
 
+/**
+ * Keep migration-provided upload paths relative so imported content cannot
+ * escape either upload root through traversal, absolute paths, or backslashes.
+ */
+function safe_upload_rel_path($path) {
+    $path = rawurldecode((string) $path);
+    if ($path === '' || strpos($path, "\0") !== false) { return null; }
+    $path = str_replace('\\', '/', $path);
+    if ($path[0] === '/' || preg_match('~^[A-Za-z]:~', $path)) { return null; }
+    $parts = explode('/', $path);
+    foreach ($parts as $part) {
+        if ($part === '' || $part === '.' || $part === '..') { return null; }
+    }
+    return implode('/', $parts);
+}
+
+/** Confirm a resolved filesystem path remains inside its configured root. */
+function path_is_within($path, $root) {
+    $path = str_replace('\\', '/', (string) $path);
+    $root = rtrim(str_replace('\\', '/', (string) $root), '/');
+    if (DIRECTORY_SEPARATOR === '\\') {
+        $path = strtolower($path);
+        $root = strtolower($root);
+    }
+    return strpos($path, $root . '/') === 0;
+}
+
 /* --------------------------------------------------------- SQL value parser */
 /** Extract every row-tuple for a table from all its INSERT statements. */
 function sql_rows($sql, $table) {
@@ -579,7 +606,7 @@ function imported_nav_items(array $postRows, array $meta, array $rel, array $tt,
             if ($label === '') { $label = $objects[$objectId]['title']; }
         } elseif ($type === 'taxonomy' && isset($terms[$objectId])) {
             $term = $terms[$objectId];
-            $url = $object === 'post_tag' ? '/tag/' . $term[1] . '/' : '/kategoria/' . $term[1] . '/';
+            $url = $object === 'post_tag' ? '/tag/' . $term[1] . '/' : '/category/' . $term[1] . '/';
             if ($label === '') { $label = $term[0]; }
         }
         if ($url === '' && isset($m['_menu_item_url'])) { $url = menu_internal_url($m['_menu_item_url'], $siteUrls); }
@@ -622,13 +649,14 @@ ensure_dir($OUT_CONTENT . '/pages');
 $conv = new Html2Md();
 $statusSet = array_flip($STATUSES);
 $referencedUploads = array(); // uploads-relative path => true
+$unsafeUploadRefs = 0;
 $categoriesUsed = array();    // slug => name
 $pagesForSearch = array();    // url => [title, 'Page', region]
 $counts = array('post' => 0, 'page' => 0, 'skipped_status' => 0, 'skipped_empty_slug' => 0);
 $slugSeen = array();
 
 function unique_slug($slug, &$seen) {
-    if ($slug === '') { $slug = 'wpis'; }
+    if ($slug === '') { $slug = 'post'; }
     $base = $slug; $n = 2;
     while (isset($seen[$slug])) { $slug = $base . '-' . $n; $n++; }
     $seen[$slug] = true;
@@ -661,7 +689,11 @@ foreach ($postRows as $r) {
 
     // collect referenced uploads from the converted markdown
     if (preg_match_all('~' . preg_quote($UPLOADS_URL, '~') . '/([^\s"\'<>()\]]+)~', $bodyMd, $mm)) {
-        foreach ($mm[1] as $rp) { $referencedUploads[rawurldecode($rp)] = true; }
+        foreach ($mm[1] as $rp) {
+            $safePath = safe_upload_rel_path($rp);
+            if ($safePath === null) { $unsafeUploadRefs++; continue; }
+            $referencedUploads[$safePath] = true;
+        }
     }
 
     // featured image
@@ -669,8 +701,13 @@ foreach ($postRows as $r) {
     if (isset($meta[$id]['_thumbnail_id'])) {
         $tid = $meta[$id]['_thumbnail_id'];
         if (isset($attachPath[$tid])) {
-            $image = $UPLOADS_URL . '/' . $attachPath[$tid];
-            $referencedUploads[$attachPath[$tid]] = true;
+            $safePath = safe_upload_rel_path($attachPath[$tid]);
+            if ($safePath === null) {
+                $unsafeUploadRefs++;
+            } else {
+                $image = $UPLOADS_URL . '/' . str_replace('%2F', '/', rawurlencode($safePath));
+                $referencedUploads[$safePath] = true;
+            }
         }
     }
 
@@ -737,16 +774,39 @@ if ($navItems) {
 
 /* --------------------------------------------------------- copy uploads */
 if ($COPY) {
-    say('Copying ' . count($referencedUploads) . ' referenced upload files...');
-    $copied = 0; $missing = 0;
-    foreach (array_keys($referencedUploads) as $rp) {
-        $src = $UPLOADS_SRC . '/' . $rp;
-        if (!is_file($src)) { $missing++; continue; }
-        $dst = $OUT_UPLOADS . '/' . $rp;
-        ensure_dir(dirname($dst));
-        if (@copy($src, $dst)) { $copied++; }
+    $sourceRoot = realpath($UPLOADS_SRC);
+    if ($sourceRoot === false || !is_dir($sourceRoot)) {
+        fwrite(STDERR, "Uploads source directory not found: $UPLOADS_SRC\n");
+        exit(1);
     }
-    say("  copied $copied, missing $missing");
+    ensure_dir($OUT_UPLOADS);
+    $destinationRoot = realpath($OUT_UPLOADS);
+    if ($destinationRoot === false || !is_dir($destinationRoot)) {
+        fwrite(STDERR, "Uploads destination directory could not be resolved: $OUT_UPLOADS\n");
+        exit(1);
+    }
+    say('Copying ' . count($referencedUploads) . ' referenced upload files...');
+    $copied = 0; $missing = 0; $rejected = $unsafeUploadRefs;
+    foreach (array_keys($referencedUploads) as $rp) {
+        // Revalidate at the I/O boundary so every filesystem operation uses a contained relative path.
+        $safePath = safe_upload_rel_path($rp);
+        if ($safePath === null) { $rejected++; continue; }
+        $src = $sourceRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $safePath);
+        $srcReal = realpath($src);
+        if ($srcReal === false || !is_file($srcReal)) { $missing++; continue; }
+        // Resolve symlinks before copying so a link below uploads cannot expose another local file.
+        if (!path_is_within($srcReal, $sourceRoot)) { $rejected++; continue; }
+        $dst = $destinationRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $safePath);
+        ensure_dir(dirname($dst));
+        $destinationDir = realpath(dirname($dst));
+        // Reject destination symlinks and escaped parent directories before an overwrite can occur.
+        if ($destinationDir === false || !path_is_within($destinationDir, $destinationRoot) || is_link($dst)) {
+            $rejected++;
+            continue;
+        }
+        if (@copy($srcReal, $dst)) { $copied++; }
+    }
+    say("  copied $copied, missing $missing, rejected unsafe paths $rejected");
 } else {
     say('Skipping upload copy (referenced files: ' . count($referencedUploads) . ')');
 }
@@ -756,13 +816,13 @@ if ($COPY) {
 ksort($categoriesUsed);
 $catPhp = "    'categories' => array(\n";
 foreach ($categoriesUsed as $slug => $name) {
-    $catPhp .= sprintf("        %s => array(%s, '/kategoria/%s/'),\n",
+    $catPhp .= sprintf("        %s => array(%s, '/category/%s/'),\n",
         var_export($slug, true), var_export($name, true), $slug);
 }
 $catPhp .= "    ),\n";
 
 $searchPhp = "    'search_pages' => array(\n";
-$searchPhp .= "        '/' => array('Strona główna', 'Listing', null),\n";
+$searchPhp .= "        '/' => array('Home', 'Listing', null),\n";
 foreach ($pagesForSearch as $url => $def) {
     $searchPhp .= sprintf("        %s => array(%s, 'Page', %s),\n",
         var_export($url, true), var_export($def[0], true), var_export($def[2], true));

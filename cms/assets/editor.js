@@ -50,7 +50,7 @@
     /* ---------------------------------------------------------- toolbar */
     function buildToolbar() {
         var bar = h('div', 'cms-toolbar');
-        bar.appendChild(h('span', null, 'CMS • zalogowano'));
+        bar.appendChild(h('span', null, 'CMS • logged in'));
         if (VERSION) {
             bar.appendChild(h('span', 'cms-version', 'Pagecore ' + VERSION));
         }
@@ -64,7 +64,7 @@
         media.target = '_blank';
         media.rel = 'noopener';
         bar.appendChild(media);
-        var out = h('a', null, 'Wyloguj');
+        var out = h('a', null, 'Log out');
         out.addEventListener('click', function () {
             fetch(API + '?action=logout', { method: 'POST', headers: { 'X-CMS-Token': TOKEN } })
                 .then(function () { location.href = '/'; });
@@ -77,7 +77,7 @@
     function decorateRegions() {
         var regions = document.querySelectorAll('.cms-editable');
         Array.prototype.forEach.call(regions, function (el) {
-            var btn = h('button', 'cms-edit-btn', '✎ Edytuj');
+            var btn = h('button', 'cms-edit-btn', '✎ Edit');
             btn.type = 'button';
             btn.addEventListener('click', function (ev) {
                 ev.preventDefault(); ev.stopPropagation();
@@ -92,7 +92,7 @@
 
     function closeEditor(force) {
         if (!panel) return;
-        if (!force && panel._dirty && !confirm('Porzucić niezapisane zmiany?')) return;
+        if (!force && panel._dirty && !confirm('Discard unsaved changes?')) return;
         document.removeEventListener('keydown', panel._keys);
         window.cmsInsertMedia = null;
         panel._overlay.remove();
@@ -125,7 +125,7 @@
         var body = h('div', 'cms-panel-body');
         panel.appendChild(body);
 
-        var draftState = h('div', 'cms-draft-state', 'Ładuję…');
+        var draftState = h('div', 'cms-draft-state', 'Loading…');
         body.appendChild(draftState);
 
         /* post meta form */
@@ -140,11 +140,11 @@
         if (isPost) {
             var meta = h('div', 'cms-meta');
             metaInputs = {};
-            [['title', 'Tytuł', 'text', 'cms-field-wide'],
-             ['date', 'Data (RRRR-MM-DD)', 'text', ''],
-             ['category', 'Kategoria', 'select', ''],
-             ['excerpt', 'Zajawka (lead — opcjonalna)', 'text', 'cms-field-wide'],
-             ['tags', 'Tagi (oddzielone przecinkami)', 'text', 'cms-field-wide']
+            [['title', 'Title', 'text', 'cms-field-wide'],
+             ['date', 'Date (YYYY-MM-DD)', 'text', ''],
+             ['category', 'Category', 'select', ''],
+             ['excerpt', 'Excerpt (optional)', 'text', 'cms-field-wide'],
+             ['tags', 'Tags (comma-separated)', 'text', 'cms-field-wide']
             ].forEach(function (def) {
                 var field = h('div', 'cms-field' + (def[3] ? ' ' + def[3] : ''));
                 var lab = h('label', null, def[1]);
@@ -206,36 +206,36 @@
         /* markdown editor */
         var area = h('div', 'cms-editor-area');
         var ta = h('textarea', 'cms-textarea');
-        ta.placeholder = 'Ładuję…';
+        ta.placeholder = 'Loading…';
         ta.disabled = true;
         area.appendChild(ta);
         area.appendChild(h('div', 'cms-hint',
-            'Markdown (nagłówki #, listy -, tabele |, obrazy ![](url)). ' +
-            'Wklej lub przeciągnij obraz/PDF, aby go przesłać.'));
+            'Markdown (headings #, lists -, tables |, images ![](url)). ' +
+            'Paste or drag an image/PDF to upload it.'));
         body.appendChild(area);
 
-        var prevLabel = h('div', 'cms-preview-label', 'Podgląd');
+        var prevLabel = h('div', 'cms-preview-label', 'Preview');
         var preview = h('div', 'cms-preview');
         body.appendChild(prevLabel);
         body.appendChild(preview);
 
-        var revLabel = h('div', 'cms-preview-label', 'Kopie zapasowe');
-        var revisions = h('div', 'cms-revisions', 'Ładuję kopie…');
+        var revLabel = h('div', 'cms-preview-label', 'Revisions');
+        var revisions = h('div', 'cms-revisions', 'Loading revisions…');
         body.appendChild(revLabel);
         body.appendChild(revisions);
 
         var foot = h('div', 'cms-panel-foot');
-        var draftBtn = h('button', 'cms-btn cms-btn-primary', 'Zapisz szkic');
+        var draftBtn = h('button', 'cms-btn cms-btn-primary', 'Save draft');
         draftBtn.type = 'button';
         var mediaBtn = h('button', 'cms-btn cms-btn-ghost cms-media-open', 'Media library');
         mediaBtn.type = 'button';
-        var previewBtn = h('button', 'cms-btn cms-btn-ghost', 'Podgląd szkicu');
+        var previewBtn = h('button', 'cms-btn cms-btn-ghost', 'Preview draft');
         previewBtn.type = 'button';
-        var publishBtn = h('button', 'cms-btn cms-btn-publish', 'Opublikuj');
+        var publishBtn = h('button', 'cms-btn cms-btn-publish', 'Publish');
         publishBtn.type = 'button';
-        var discardBtn = h('button', 'cms-btn cms-btn-ghost cms-btn-danger', 'Usuń szkic');
+        var discardBtn = h('button', 'cms-btn cms-btn-ghost cms-btn-danger', 'Discard draft');
         discardBtn.type = 'button';
-        var cancel = h('button', 'cms-btn cms-btn-ghost', 'Anuluj');
+        var cancel = h('button', 'cms-btn cms-btn-ghost', 'Cancel');
         cancel.type = 'button';
         cancel.addEventListener('click', function () { closeEditor(false); });
         var status = h('span', 'cms-status', '');
@@ -277,7 +277,7 @@
         window.cmsInsertMedia = function (markdown) {
             if (!markdown) { return; }
             insertAtCaret(ta, markdown);
-            setStatus('Wstawiono plik z biblioteki.');
+            setStatus('Inserted file from media library.');
         };
         function currentMeta() {
             if (!isPost || !metaInputs) { return {}; }
@@ -324,13 +324,13 @@
         function updateDraftState(draft) {
             currentDraft = draft || null;
             draftState.textContent = currentDraft
-                ? 'Wczytano szkic zapisany: ' + currentDraft.updated
-                : 'Brak zapisanego szkicu. Edycja zaczyna się od wersji opublikowanej.';
+                ? 'Loaded saved draft: ' + currentDraft.updated
+                : 'No saved draft. Editing starts from the published version.';
             syncButtons();
         }
         function replaceRegionHtml(html) {
             var btn = regionEl.querySelector('.cms-edit-btn');
-            regionEl.innerHTML = html || '<p class="cms-empty">(pusty fragment — kliknij, aby edytować)</p>';
+            regionEl.innerHTML = html || '<p class="cms-empty">(empty content — click to edit)</p>';
             if (btn) regionEl.appendChild(btn);
         }
         function applyPayloadToPage(payload) {
@@ -343,13 +343,13 @@
         function renderRevisions(items) {
             revisions.innerHTML = '';
             if (!items || !items.length) {
-                revisions.appendChild(h('p', 'cms-revisions-empty', 'Brak kopii zapasowych dla tego fragmentu.'));
+                revisions.appendChild(h('p', 'cms-revisions-empty', 'No saved revisions for this content.'));
                 return;
             }
             items.slice(0, 10).forEach(function (rev) {
                 var row = h('div', 'cms-revision-row');
                 row.appendChild(h('span', null, rev.label));
-                var restore = h('button', 'cms-revision-restore', 'Przywróć');
+                var restore = h('button', 'cms-revision-restore', 'Restore');
                 restore.type = 'button';
                 restore.addEventListener('click', function () { restoreRevision(rev.id, rev.label); });
                 row.appendChild(restore);
@@ -358,7 +358,7 @@
         }
         function loadRevisions() {
             apiGetAction('revisions', key).then(function (res) {
-                if (!res.ok) { throw new Error(res.error || 'Nie można pobrać kopii.'); }
+                if (!res.ok) { throw new Error(res.error || 'Could not load revisions.'); }
                 renderRevisions(res.revisions || []);
             }).catch(function (err) {
                 revisions.innerHTML = '';
@@ -373,12 +373,12 @@
         function saveDraft(openPreview) {
             var win = openPreview ? window.open('about:blank', '_blank') : null;
             setBusy(true);
-            setStatus('Zapisywanie szkicu…');
+            setStatus('Saving draft…');
             return api('save-draft', currentPayload()).then(function (res) {
-                if (!res.ok) { throw new Error(res.error || 'Nie udało się zapisać szkicu.'); }
+                if (!res.ok) { throw new Error(res.error || 'Could not save draft.'); }
                 panel._dirty = false;
                 updateDraftState(res.draft);
-                setStatus('Szkic zapisany.');
+                setStatus('Draft saved.');
                 if (win && res.draft && res.draft.preview_url) {
                     win.location.href = res.draft.preview_url;
                 }
@@ -392,11 +392,11 @@
             });
         }
         function publishCurrent() {
-            if (!confirm('Opublikować tę wersję na stronie?')) { return; }
+            if (!confirm('Publish this version to the site?')) { return; }
             setBusy(true);
-            setStatus('Publikowanie…');
+            setStatus('Publishing…');
             api('publish', currentPayload()).then(function (res) {
-                if (!res.ok) { throw new Error(res.error || 'Nie udało się opublikować.'); }
+                if (!res.ok) { throw new Error(res.error || 'Could not publish.'); }
                 panel._dirty = false;
                 updateDraftState(null);
                 applyPayloadToPage(res);
@@ -408,16 +408,16 @@
             });
         }
         function discardDraft() {
-            if (!currentDraft || !confirm('Usunąć zapisany szkic i wrócić do wersji opublikowanej?')) { return; }
+            if (!currentDraft || !confirm('Discard the saved draft and return to the published version?')) { return; }
             setBusy(true);
-            setStatus('Usuwanie szkicu…');
+            setStatus('Discarding draft…');
             api('discard-draft', { key: key }).then(function (res) {
-                if (!res.ok) { throw new Error(res.error || 'Nie udało się usunąć szkicu.'); }
+                if (!res.ok) { throw new Error(res.error || 'Could not discard draft.'); }
                 fillEditor(res);
                 panel._dirty = false;
                 updateDraftState(null);
                 renderPreview();
-                setStatus('Szkic usunięty.');
+                setStatus('Draft discarded.');
             }).catch(function (err) {
                 setStatus(err.message, true);
             }).then(function () {
@@ -425,18 +425,18 @@
             });
         }
         function restoreRevision(id, label) {
-            if (!confirm('Przywrócić kopię z ' + label + '? Zastąpi ona opublikowaną wersję.')) { return; }
+            if (!confirm('Restore revision from ' + label + '? It will replace the published version.')) { return; }
             setBusy(true);
-            setStatus('Przywracanie kopii…');
+            setStatus('Restoring revision…');
             api('restore', { key: key, revision: id }).then(function (res) {
-                if (!res.ok) { throw new Error(res.error || 'Nie udało się przywrócić kopii.'); }
+                if (!res.ok) { throw new Error(res.error || 'Could not restore revision.'); }
                 fillEditor(res);
                 applyPayloadToPage(res);
                 panel._dirty = false;
                 updateDraftState(null);
                 renderPreview();
                 loadRevisions();
-                setStatus('Kopia przywrócona.');
+                setStatus('Revision restored.');
             }).catch(function (err) {
                 setStatus(err.message, true);
             }).then(function () {
@@ -446,7 +446,7 @@
 
         /* load current content */
         apiGet(key).then(function (res) {
-            if (!res.ok) { setStatus(res.error || 'Błąd', true); return; }
+            if (!res.ok) { setStatus(res.error || 'Error', true); return; }
             fillEditor(res.draft || res);
             ta.disabled = false;
             ta.placeholder = '';
@@ -455,7 +455,7 @@
             renderPreview();
             loadRevisions();
         }).catch(function () {
-            setStatus('Błąd sieci przy pobieraniu treści.', true);
+            setStatus('Network error while loading content.', true);
         });
 
         /* preview (debounced server render) */
@@ -469,15 +469,15 @@
         /* uploads: paste + drag/drop */
         function uploadFile(file) {
             if (!file) return;
-            setStatus('Przesyłanie: ' + file.name + '…');
+            setStatus('Uploading: ' + file.name + '…');
             var fd = new FormData();
             fd.append('file', file, file.name);
             api('upload', fd, true).then(function (res) {
-                if (!res.ok) { throw new Error(res.error || 'Błąd przesyłania'); }
-                setStatus('Przesłano: ' + res.url);
+                if (!res.ok) { throw new Error(res.error || 'Upload error'); }
+                setStatus('Uploaded: ' + res.url);
                 insertAtCaret(ta, res.markdown);
             }).catch(function (err) {
-                setStatus(err.message || 'Błąd sieci przy przesyłaniu.', true);
+                setStatus(err.message || 'Network error while uploading.', true);
             });
         }
         ta.addEventListener('paste', function (ev) {
@@ -512,33 +512,33 @@
             var validMime = file.type === 'image/jpeg' || file.type === 'image/png';
             var validExtension = /\.(jpe?g|png)$/i.test(file.name || '');
             if ((file.type && !validMime) || (!file.type && !validExtension)) {
-                setStatus('Featured image musi być plikiem JPEG lub PNG.', true);
+                setStatus('Featured image must be a JPEG or PNG file.', true);
                 return;
             }
             if (file.size > maxFeaturedImageMb * 1024 * 1024) {
-                setStatus('Featured image przekracza limit ' + maxFeaturedImageMb + ' MB.', true);
+                setStatus('Featured image exceeds the ' + maxFeaturedImageMb + ' MB limit.', true);
                 return;
             }
             setBusy(true);
-            setStatus('Przesyłanie featured image: ' + file.name + '…');
+            setStatus('Uploading featured image: ' + file.name + '…');
             var fd = new FormData();
             fd.append('file', file, file.name);
             // The shared endpoint receives the scope flag for JPEG/PNG-only server validation.
             fd.append('featured_image', '1');
             api('upload', fd, true).then(function (upload) {
-                if (!upload.ok) { throw new Error(upload.error || 'Błąd przesyłania featured image.'); }
+                if (!upload.ok) { throw new Error(upload.error || 'Featured image upload failed.'); }
                 metaInputs.image.value = upload.url;
                 updateFeaturedImageDisplay();
                 panel._dirty = true;
-                setStatus('Zapisywanie featured image w szkicu…');
+                setStatus('Saving featured image to draft…');
                 return api('save-draft', currentPayload());
             }).then(function (saved) {
-                if (!saved.ok) { throw new Error(saved.error || 'Nie udało się zapisać featured image w szkicu.'); }
+                if (!saved.ok) { throw new Error(saved.error || 'Could not save featured image to draft.'); }
                 panel._dirty = false;
                 updateDraftState(saved.draft);
-                setStatus('Featured image zapisany automatycznie w szkicu.');
+                setStatus('Featured image saved automatically to draft.');
             }).catch(function (err) {
-                setStatus(err.message || 'Błąd sieci przy przesyłaniu featured image.', true);
+                setStatus(err.message || 'Network error while uploading featured image.', true);
             }).then(function () {
                 setBusy(false);
             });
@@ -609,15 +609,15 @@
                 var cat = btn.getAttribute('data-cms-category');
                 var modal = h('div', 'cms-modal');
                 var box = h('div', 'cms-modal-box');
-                box.appendChild(h('h3', null, 'Nowy wpis'));
+                box.appendChild(h('h3', null, 'New post'));
                 var input = document.createElement('input');
                 input.type = 'text';
-                input.placeholder = 'Tytuł wpisu';
+                input.placeholder = 'Post title';
                 box.appendChild(input);
                 var actions = h('div', 'cms-modal-actions');
-                var ok = h('button', 'cms-btn cms-btn-primary', 'Utwórz');
+                var ok = h('button', 'cms-btn cms-btn-primary', 'Create');
                 ok.type = 'button';
-                var no = h('button', 'cms-btn cms-btn-ghost', 'Anuluj');
+                var no = h('button', 'cms-btn cms-btn-ghost', 'Cancel');
                 no.type = 'button';
                 no.addEventListener('click', function () { modal.remove(); });
                 ok.addEventListener('click', function () {
@@ -625,7 +625,7 @@
                     if (!title) { input.focus(); return; }
                     ok.disabled = true;
                     api('create-post', { title: title, category: cat }).then(function (res) {
-                        if (!res.ok) { alert(res.error || 'Błąd'); ok.disabled = false; return; }
+                        if (!res.ok) { alert(res.error || 'Error'); ok.disabled = false; return; }
                         location.href = res.url + '#cms-edit';
                     });
                 });
