@@ -39,7 +39,8 @@
 }
 .cms-panel {
     position: fixed; top: 0; right: 0; bottom: 0; z-index: 9997;
-    width: min(680px, 92vw); display: flex; flex-direction: column;
+    /* Increased by 33% so every editor action fits in the footer's single row. */
+    width: min(904px, 92vw); display: flex; flex-direction: column;
     background: #faf8f3; border-left: 1px solid #d8d2c4;
     box-shadow: -8px 0 32px rgba(0,0,0,.2);
     font: 14px/1.5 "Open Sans", -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #2b2620;
@@ -122,7 +123,8 @@
 .cms-revisions-empty { margin: 0; padding: 9px 10px; color: #8a8072; font-size: 12px; }
 
 .cms-panel-foot {
-    display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 18px;
+    /* Keep actions together; narrow viewports scroll horizontally instead of wrapping controls. */
+    display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 10px; align-items: center; padding: 12px 18px;
     border-top: 1px solid #e2ddd2; background: #fff;
 }
 .cms-btn {
