@@ -6,6 +6,7 @@
     var CONTENT = CFG.content || '/cms/content.php';
     var MEDIA = CFG.media || '/cms/media.php';
     var TOKEN = CFG.token || '';
+    var VERSION = CFG.version || '';
 
     /* ---------------------------------------------------------- helpers */
     function h(tag, cls, text) {
@@ -50,6 +51,9 @@
     function buildToolbar() {
         var bar = h('div', 'cms-toolbar');
         bar.appendChild(h('span', null, 'CMS • zalogowano'));
+        if (VERSION) {
+            bar.appendChild(h('span', 'cms-version', 'Pagecore ' + VERSION));
+        }
         var content = h('a', null, 'Content');
         content.href = CONTENT;
         content.target = '_blank';

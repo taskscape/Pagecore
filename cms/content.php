@@ -42,6 +42,7 @@ function cms_content_sources(array $sources) {
     h1 { margin: 0; font-size: 28px; line-height: 1.15; }
     h2 { margin: 0 0 12px; font-size: 18px; }
     .sub { margin: 4px 0 0; color: #71675d; }
+    .version { margin: 6px 0 0; color: #71675d; font-size: 13px; font-weight: 700; }
     .nav { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .nav a {
       display: inline-flex; align-items: center; justify-content: center;
@@ -108,6 +109,7 @@ function cms_content_sources(array $sources) {
       <div>
         <h1>Content inventory</h1>
         <p class="sub">Configured pages, editable regions, posts, categories, missing Markdown files, and navigation JSON.</p>
+        <p class="version">Pagecore <?= cms_content_e(cms_version()) ?></p>
       </div>
       <nav class="nav" aria-label="Content navigation">
         <a href="/">View site</a>

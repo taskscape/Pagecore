@@ -20,6 +20,7 @@ if (defined('CMS_LOADED')) { return; }
 define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
+define('PAGECORE_VERSION', '0.1.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
@@ -51,6 +52,10 @@ if (session_status() === PHP_SESSION_NONE && PHP_SAPI !== 'cli') {
 function cms_cfg($key, $default = null) {
     $c = $GLOBALS['CMS_CONFIG'];
     return array_key_exists($key, $c) ? $c[$key] : $default;
+}
+
+function cms_version() {
+    return PAGECORE_VERSION;
 }
 
 function cms_is_logged_in() {
@@ -1088,6 +1093,7 @@ function cms_assets() {
         'token' => cms_csrf_token(),
         'maxUploadMb' => cms_cfg('max_upload_mb'),
         'categories' => $cats,
+        'version' => cms_version(),
     ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     return "\n<link rel=\"stylesheet\" href=\"/cms/assets/editor.css\">\n"
          . "<script>window.CMS_CONFIG = $cfg;</script>\n"

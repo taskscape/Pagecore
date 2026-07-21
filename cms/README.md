@@ -57,6 +57,9 @@ Paste the output into `password_hash` in `cms/config.php`.
   version in one click.
 - On listing pages (**Orzeczenia / Wydarzenia / Uchwały**): **＋ Dodaj wpis**.
 
+- The installed Pagecore version is visible in the editor toolbar and on
+  `/cms/content.php`.
+
 ## Media library
 
 `/cms/media.php` lists files from the configured `uploads_dir` and searches by

@@ -136,6 +136,7 @@ file that is still referenced.
 Logged-in editors can open `/cms/content.php` directly or use **Content** in
 the editor toolbar. The screen shows:
 
+- the installed Pagecore version;
 - configured `search_pages`, including whether each linked Markdown region
   exists;
 - editable regions found from Markdown files, configured page regions, and

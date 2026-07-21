@@ -22,6 +22,7 @@
 }
 .cms-toolbar a { color: #e8b9ad; text-decoration: none; cursor: pointer; }
 .cms-toolbar a:hover { text-decoration: underline; }
+.cms-version { color: #cfc8b9; }
 
 /* --- listing controls --------------------------------------------------- */
 .cms-listing-controls { margin: 24px 0; }
