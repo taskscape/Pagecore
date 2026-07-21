@@ -428,3 +428,51 @@ test('content inventory lists pages, regions, posts, categories, creates missing
   const deletedPostIndex = await page.request.get('/sample-site/search-index.json');
   expect(await deletedPostIndex.text()).not.toContain('Inventory post');
 });
+
+test('content inventory paginates 100 posts and filters by title, slug, and category', async ({ page }) => {
+  const postsDir = path.join(workingContent, 'posts');
+  fs.mkdirSync(postsDir, { recursive: true });
+
+  // A 101-post fixture proves the screen emits one 100-row page rather than a complete oversized inventory.
+  for (let index = 1; index <= 101; index += 1) {
+    const category = index % 2 === 0 ? 'news' : 'events';
+    const padded = String(index).padStart(3, '0');
+    fs.writeFileSync(path.join(postsDir, `inventory-pagination-${padded}.md`), [
+      '---',
+      `title: Inventory pagination ${index}`,
+      `date: 2026-07-${String((index % 28) + 1).padStart(2, '0')}`,
+      `category: ${category}`,
+      '---',
+      'Pagination fixture.'
+    ].join('\n'));
+  }
+  fs.rmSync(path.join(workingContent, 'posts-index.json'), { force: true });
+
+  // Log in through a public page because the inventory deliberately does not render inline-editor chrome.
+  await login(page);
+  const firstPage = await page.request.get('/cms/api.php?action=content-inventory');
+  const firstPageInventory = (await firstPage.json()).inventory;
+  expect(firstPageInventory.posts).toHaveLength(100);
+  expect(firstPageInventory.post_pagination.per_page).toBe(100);
+  expect(firstPageInventory.post_pagination.pages).toBeGreaterThan(1);
+
+  await page.goto('/cms/content.php');
+  const postRows = page.locator('[data-content-post]');
+  await expect(postRows).toHaveCount(100);
+  await page.getByRole('link', { name: 'Next' }).click();
+  await expect(page).toHaveURL(/page=2/);
+  await expect(postRows).toHaveCount(firstPageInventory.posts_total - 100);
+
+  // The form sends server-side filters: the title search and slug search each keep the result set to one post.
+  await page.locator('#post-search').fill('Inventory pagination 100');
+  await page.locator('#post-category-filter').selectOption('news');
+  await page.getByRole('button', { name: 'Filter' }).click();
+  await expect(postRows).toHaveCount(1);
+  await expect(page.getByRole('link', { name: 'Inventory pagination 100' })).toBeVisible();
+
+  await page.locator('#post-search').fill('inventory-pagination-101');
+  await page.locator('#post-category-filter').selectOption('events');
+  await page.getByRole('button', { name: 'Filter' }).click();
+  await expect(postRows).toHaveCount(1);
+  await expect(page.getByRole('link', { name: 'Inventory pagination 101' })).toBeVisible();
+});

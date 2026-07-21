@@ -78,6 +78,9 @@ is still referenced by published pages, posts or saved drafts.
 `/cms/content.php` is the small content overview. It combines configured
 `search_pages`, Markdown files under `content/pages/`, editable region keys
 found in PHP templates, posts, categories and missing Markdown placeholders.
+The post table renders 100 posts per page and supports server-side title/slug
+search plus category filtering, so large content sets do not create oversized
+browser tables.
 Missing region files can be created from this screen; it creates Markdown only,
 not PHP templates or routes.
 

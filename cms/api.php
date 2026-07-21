@@ -236,7 +236,12 @@ case 'media-list':
     cms_json(array('ok' => true, 'assets' => cms_media_assets($query)));
 
 case 'content-inventory':
-    cms_json(array('ok' => true, 'inventory' => cms_content_inventory()));
+    $query = isset($_GET['q']) ? (string) $_GET['q'] : '';
+    $category = isset($_GET['category']) ? (string) $_GET['category'] : '';
+    $page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
+    // The API accepts the same filters as the inventory screen so callers never receive thousands of posts by default.
+    cms_utf8_or_fail($query, $category);
+    cms_json(array('ok' => true, 'inventory' => cms_content_inventory($query, $category, $page, 100)));
 
 case 'version':
     cms_json(array('ok' => true, 'version' => cms_version()));

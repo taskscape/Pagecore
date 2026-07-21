@@ -920,7 +920,17 @@ function cms_content_file_summary($path) {
     return array('exists' => true, 'size' => filesize($path), 'modified' => filemtime($path));
 }
 
-function cms_content_inventory() {
+/** Fold inventory search text without making the optional mbstring extension mandatory. */
+function cms_content_search_fold($value) {
+    $value = (string) $value;
+    return function_exists('mb_strtolower') ? mb_strtolower($value, 'UTF-8') : strtolower($value);
+}
+
+/**
+ * Build the content inventory with a small server-rendered slice of the posts index.
+ * Keeping the page size capped prevents the browser from laying out every post at once.
+ */
+function cms_content_inventory($postQuery = '', $postCategory = '', $postPage = 1, $postsPerPage = 100) {
     $searchPages = cms_cfg('search_pages', array());
     $pages = array();
     $regionSources = array();
@@ -973,10 +983,30 @@ function cms_content_inventory() {
         if (!$item['exists']) { $missing[] = $item; }
     }
 
-    $posts = cms_posts();
+    $allPosts = cms_posts();
+    $postQuery = trim((string) $postQuery);
+    $postCategory = trim((string) $postCategory);
+    $postsPerPage = max(1, min(100, (int) $postsPerPage));
+    $postPage = max(1, (int) $postPage);
+    $queryNeedle = cms_content_search_fold($postQuery);
+    $filteredPosts = array();
+    foreach ($allPosts as $post) {
+        if ($postCategory !== '' && $post['category'] !== $postCategory) { continue; }
+        // Search title and slug together so editors can find either the human or file-system identifier.
+        if ($queryNeedle !== '' && strpos(cms_content_search_fold($post['title'] . ' ' . $post['slug']), $queryNeedle) === false) {
+            continue;
+        }
+        $filteredPosts[] = $post;
+    }
+    $filteredPostCount = count($filteredPosts);
+    $postPages = max(1, (int) ceil($filteredPostCount / $postsPerPage));
+    if ($postPage > $postPages) { $postPage = $postPages; }
+    $postOffset = ($postPage - 1) * $postsPerPage;
+    $posts = array_slice($filteredPosts, $postOffset, $postsPerPage);
+
     $counts = array();
     foreach (cms_cfg('categories', array()) as $slug => $def) { $counts[$slug] = 0; }
-    foreach ($posts as $post) {
+    foreach ($allPosts as $post) {
         if (!isset($counts[$post['category']])) { $counts[$post['category']] = 0; }
         $counts[$post['category']]++;
     }
@@ -995,6 +1025,18 @@ function cms_content_inventory() {
         'regions' => $regions,
         'missing' => $missing,
         'posts' => $posts,
+        'posts_total' => count($allPosts),
+        'post_pagination' => array(
+            'query' => $postQuery,
+            'category' => $postCategory,
+            'page' => $postPage,
+            'per_page' => $postsPerPage,
+            'total' => $filteredPostCount,
+            'pages' => $postPages,
+            'offset' => $postOffset,
+            'has_prev' => $postPage > 1,
+            'has_next' => $postPage < $postPages,
+        ),
         'categories' => $categories,
         'nav' => array(
             'file' => cms_nav_file(),

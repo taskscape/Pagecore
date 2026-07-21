@@ -8,7 +8,12 @@ if (!cms_is_logged_in()) {
     exit;
 }
 
-$inventory = cms_content_inventory();
+// Query parameters select one small post page before the template emits any inventory rows.
+$contentPostQuery = isset($_GET['q']) ? trim((string) $_GET['q']) : '';
+$contentPostCategory = isset($_GET['category']) ? trim((string) $_GET['category']) : '';
+$contentPostPage = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+$inventory = cms_content_inventory($contentPostQuery, $contentPostCategory, $contentPostPage, 100);
+$postPagination = $inventory['post_pagination'];
 
 function cms_content_e($value) {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
@@ -20,6 +25,15 @@ function cms_content_date($ts) {
 
 function cms_content_sources(array $sources) {
     return implode(', ', $sources);
+}
+
+/** Preserve active inventory filters while paging through server-rendered post slices. */
+function cms_content_posts_url($page, $query, $category) {
+    $params = array();
+    if ($query !== '') { $params['q'] = $query; }
+    if ($category !== '') { $params['category'] = $category; }
+    if ((int) $page > 1) { $params['page'] = (int) $page; }
+    return '/cms/content.php' . ($params ? '?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986) : '');
 }
 ?><!doctype html>
 <html lang="en">
@@ -95,6 +109,15 @@ function cms_content_sources(array $sources) {
     /* The destructive post action is visually distinct from edit and view controls. */
     .button-danger { border-color: #b7432f; background: #fff4f1; color: #8c2f1c; }
     .button[disabled] { opacity: .55; cursor: default; }
+    /* Compact filter controls keep the inventory usable without adding client-side post processing. */
+    .post-tools { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+    .post-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+    .post-filters label { color: #71675d; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+    .post-filters input, .post-filters select { min-height: 34px; padding: 6px 8px; border: 1px solid #d8d2c4; border-radius: 4px; color: #2b2620; background: #fff; font: inherit; }
+    .post-filters input { width: min(210px, 40vw); }
+    .post-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid #ebe5da; background: #fbfaf6; }
+    .post-pagination p { margin: 0; color: #71675d; font-size: 12px; }
+    .post-pagination-nav { display: flex; align-items: center; gap: 8px; }
     /* The modal keeps post creation available from the inventory without leaving this management screen first. */
     .post-modal { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 20px; background: rgba(43, 38, 32, .45); }
     .post-modal[hidden] { display: none; }
@@ -139,7 +162,7 @@ function cms_content_sources(array $sources) {
       <div><strong><?= count($inventory['pages']) ?></strong><span>Configured pages</span></div>
       <div><strong><?= count($inventory['regions']) ?></strong><span>Editable regions</span></div>
       <div><strong><?= count($inventory['missing']) ?></strong><span>Missing files</span></div>
-      <div><strong><?= count($inventory['posts']) ?></strong><span>Posts</span></div>
+      <div><strong><?= (int) $inventory['posts_total'] ?></strong><span>Posts</span></div>
       <div><strong><?= count($inventory['categories']) ?></strong><span>Categories</span></div>
     </section>
 
@@ -222,8 +245,28 @@ function cms_content_sources(array $sources) {
           <h2 id="posts-title">Posts</h2>
           <p>Markdown posts grouped by configured categories.</p>
         </div>
-        <!-- A global create action lets editors start a post from the inventory and choose its category explicitly. -->
-        <button type="button" class="button button-primary" id="add-post">＋ Dodaj wpis</button>
+        <div class="post-tools">
+          <!-- This GET form keeps filtering server-side so Chrome receives only one page of rows. -->
+          <form class="post-filters" method="get" action="/cms/content.php" aria-label="Filter posts">
+            <label for="post-search">Search
+              <input id="post-search" name="q" type="search" value="<?= cms_content_e($postPagination['query']) ?>" placeholder="Title or slug">
+            </label>
+            <label for="post-category-filter">Category
+              <select id="post-category-filter" name="category">
+                <option value="">All categories</option>
+                <?php foreach ($inventory['categories'] as $category): ?>
+                  <option value="<?= cms_content_e($category['slug']) ?>"<?= $postPagination['category'] === $category['slug'] ? ' selected' : '' ?>><?= cms_content_e($category['label']) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </label>
+            <button type="submit" class="button">Filter</button>
+            <?php if ($postPagination['query'] !== '' || $postPagination['category'] !== ''): ?>
+              <a class="button" href="/cms/content.php">Clear</a>
+            <?php endif; ?>
+          </form>
+          <!-- A global create action lets editors start a post from the inventory and choose its category explicitly. -->
+          <button type="button" class="button button-primary" id="add-post">＋ Dodaj wpis</button>
+        </div>
       </div>
       <div class="table-wrap">
         <table>
@@ -251,6 +294,21 @@ function cms_content_sources(array $sources) {
             <?php endforeach; ?>
           </tbody>
         </table>
+      </div>
+      <?php $postStart = $postPagination['total'] ? $postPagination['offset'] + 1 : 0; ?>
+      <?php $postEnd = $postPagination['offset'] + count($inventory['posts']); ?>
+      <!-- Pager links preserve the active search/category selection and keep the DOM bounded to 100 posts. -->
+      <div class="post-pagination" aria-label="Post pagination">
+        <p>Showing <?= (int) $postStart ?>–<?= (int) $postEnd ?> of <?= (int) $postPagination['total'] ?> matching posts (<?= (int) $inventory['posts_total'] ?> total).</p>
+        <nav class="post-pagination-nav" aria-label="Post pages">
+          <?php if ($postPagination['has_prev']): ?>
+            <a class="button" href="<?= cms_content_e(cms_content_posts_url($postPagination['page'] - 1, $postPagination['query'], $postPagination['category'])) ?>">Previous</a>
+          <?php endif; ?>
+          <span class="muted">Page <?= (int) $postPagination['page'] ?> of <?= (int) $postPagination['pages'] ?></span>
+          <?php if ($postPagination['has_next']): ?>
+            <a class="button" href="<?= cms_content_e(cms_content_posts_url($postPagination['page'] + 1, $postPagination['query'], $postPagination['category'])) ?>">Next</a>
+          <?php endif; ?>
+        </nav>
       </div>
     </section>
 
