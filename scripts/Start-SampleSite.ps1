@@ -19,4 +19,5 @@ if (-not (Test-Path -LiteralPath $PhpExe)) {
 $env:PAGECORE_CONFIG = $Config
 $env:PAGECORE_SITE_URL = "http://127.0.0.1:$Port"
 
-& $PhpExe -S "127.0.0.1:$Port" -t $RepoRoot $Router
+# Keep PHP's transport limits above the CMS 8 MB rule so the application owns validation in local tests.
+& $PhpExe -d upload_max_filesize=16M -d post_max_size=16M -S "127.0.0.1:$Port" -t $RepoRoot $Router

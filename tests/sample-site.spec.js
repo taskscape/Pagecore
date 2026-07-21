@@ -122,18 +122,23 @@ test('editor can see the installed Pagecore version', async ({ page }) => {
   await expect(page.getByText('Pagecore 0.1.0')).toBeVisible();
 });
 
-test('post editor uploads a JPEG or PNG featured image and saves it to the draft automatically', async ({ page }) => {
+test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {
   await login(page, '/sample-site/post/launch-notes/');
   const panel = await openEditor(page, 'post:launch-notes');
   const png = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
     'base64'
   );
+  const jpeg = Buffer.from(
+    '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/Aaf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/Aaf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Aqf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IX//2gAMAwEAAgADAAAAEP/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8QH//Z',
+    'base64'
+  );
+  const featuredInput = panel.getByLabel('Choose featured image');
 
-  // Selecting the file exercises the same automatic-save path used by drag and drop.
-  await expect(panel.getByLabel('Choose featured image')).toHaveAttribute('accept', /image\/jpeg,image\/png/);
+  // Selecting files exercises the same automatic-save path used by drag and drop.
+  await expect(featuredInput).toHaveAttribute('accept', /image\/jpeg,image\/png/);
   await expect(panel.locator('.cms-featured-image-drop')).toContainText('maximum 8 MB');
-  await panel.getByLabel('Choose featured image').setInputFiles({
+  await featuredInput.setInputFiles({
     name: 'featured-image.png',
     mimeType: 'image/png',
     buffer: png
@@ -142,8 +147,48 @@ test('post editor uploads a JPEG or PNG featured image and saves it to the draft
   await expect(panel.locator('.cms-status')).toHaveText('Featured image zapisany automatycznie w szkicu.');
   await expect(panel.locator('.cms-featured-image-selection')).toContainText('featured-image');
   await expect(panel.locator('.cms-featured-image-preview')).toBeVisible();
-  const draft = fs.readFileSync(path.join(workingContent, '.drafts', 'posts', 'launch-notes.md'), 'utf8');
+  let draft = fs.readFileSync(path.join(workingContent, '.drafts', 'posts', 'launch-notes.md'), 'utf8');
   expect(draft).toMatch(/image: \/sample-site\/working-uploads\/\d{4}\/\d{2}\/featured-image-[a-f0-9]{6}\.png/);
+
+  await featuredInput.setInputFiles({
+    name: 'featured-image.jpeg',
+    mimeType: 'image/jpeg',
+    buffer: jpeg
+  });
+  await expect(panel.locator('.cms-status')).toHaveText('Featured image zapisany automatycznie w szkicu.');
+  draft = fs.readFileSync(path.join(workingContent, '.drafts', 'posts', 'launch-notes.md'), 'utf8');
+  expect(draft).toMatch(/image: \/sample-site\/working-uploads\/\d{4}\/\d{2}\/featured-image-[a-f0-9]{6}\.jpeg/);
+
+  // Browser validation gives immediate feedback for invalid types and files over the shared 8 MB cap.
+  await featuredInput.setInputFiles({ name: 'not-featured.gif', mimeType: 'image/gif', buffer: Buffer.from('GIF89a') });
+  await expect(panel.locator('.cms-status')).toHaveText('Featured image musi być plikiem JPEG lub PNG.');
+  await featuredInput.setInputFiles({
+    name: 'oversized.png',
+    mimeType: 'image/png',
+    buffer: Buffer.alloc(8 * 1024 * 1024 + 1)
+  });
+  await expect(panel.locator('.cms-status')).toHaveText('Featured image przekracza limit 8 MB.');
+
+  // The API repeats the UI restrictions so crafted requests cannot bypass them.
+  const token = await page.evaluate(() => window.CMS_CONFIG && window.CMS_CONFIG.token);
+  const invalidType = await page.request.post('/cms/api.php?action=upload', {
+    headers: { 'X-CMS-Token': token },
+    multipart: {
+      featured_image: '1',
+      file: { name: 'bypass.gif', mimeType: 'image/gif', buffer: Buffer.from('GIF89a') }
+    }
+  });
+  expect(invalidType.status()).toBe(400);
+  expect((await invalidType.json()).error).toContain('JPEG lub PNG');
+  const oversizedUpload = await page.request.post('/cms/api.php?action=upload', {
+    headers: { 'X-CMS-Token': token },
+    multipart: {
+      featured_image: '1',
+      file: { name: 'bypass.png', mimeType: 'image/png', buffer: Buffer.alloc(8 * 1024 * 1024 + 1) }
+    }
+  });
+  expect(oversizedUpload.status()).toBe(400);
+  expect((await oversizedUpload.json()).error).toContain('8 MB');
 });
 
 test('reusable content and uploads directories ship Apache hardening', () => {
