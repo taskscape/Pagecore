@@ -27,11 +27,15 @@ function cms_content_sources(array $sources) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Content - Pagecore CMS</title>
+  <!-- Open Sans keeps the inventory aligned with the CMS administration typography. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
     body {
       margin: 0; background: #f7f5ef; color: #2b2620;
-      font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      font: 14px/1.5 "Open Sans", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
     }
     a { color: #8c3727; }
     .shell { max-width: 1240px; margin: 0 auto; padding: 28px 20px 56px; }
@@ -83,7 +87,7 @@ function cms_content_sources(array $sources) {
     /* Action links share the button treatment so edit and view controls remain visually distinct from ordinary links. */
     .button {
       border: 1px solid #d8d2c4; border-radius: 4px; background: #faf8f3; color: #2b2620;
-      display: inline-block; padding: 7px 10px; font: 700 12px/1.3 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      display: inline-block; padding: 7px 10px; font: 700 12px/1.3 "Open Sans", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
       text-decoration: none;
       cursor: pointer;
     }
@@ -97,6 +101,8 @@ function cms_content_sources(array $sources) {
     .post-modal-box label { display: grid; gap: 6px; margin-top: 12px; color: #71675d; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
     .post-modal-box input, .post-modal-box select { width: 100%; padding: 9px 10px; border: 1px solid #cfc8b9; border-radius: 4px; color: #2b2620; background: #fff; font: inherit; }
     .post-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+    /* Keep each post's edit and public-view controls together when the inventory table narrows. */
+    .post-actions { display: flex; flex-wrap: nowrap; gap: 6px; white-space: nowrap; }
     .nav-editor { display: grid; gap: 10px; padding: 14px 16px; }
     .nav-editor label { display: grid; gap: 6px; font-weight: 800; color: #71675d; text-transform: uppercase; letter-spacing: .05em; font-size: 11px; }
     textarea {
@@ -231,8 +237,10 @@ function cms_content_sources(array $sources) {
                 <td><a href="<?= cms_content_e($post['url']) ?>"><?= cms_content_e($post['url']) ?></a></td>
                 <td>
                   <!-- Keep both actions visible so editors can choose editing or public-page review deliberately. -->
-                  <a class="button button-primary" href="<?= cms_content_e($post['url']) ?>#cms-edit">Edit</a>
-                  <a class="button" href="<?= cms_content_e($post['url']) ?>">View</a>
+                  <div class="post-actions">
+                    <a class="button button-primary" href="<?= cms_content_e($post['url']) ?>#cms-edit">Edit</a>
+                    <a class="button" href="<?= cms_content_e($post['url']) ?>">View</a>
+                  </div>
                 </td>
               </tr>
             <?php endforeach; ?>

@@ -28,11 +28,15 @@ function cms_media_bytes($bytes) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Media library - Pagecore CMS</title>
+  <!-- Open Sans gives the media library the same default typography as the other CMS administration pages. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
     body {
       margin: 0; background: #f7f5ef; color: #2b2620;
-      font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      font: 14px/1.5 "Open Sans", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
     }
     a { color: #8c3727; }
     .shell { max-width: 1200px; margin: 0 auto; padding: 28px 20px 56px; }
@@ -86,14 +90,14 @@ function cms_media_bytes($bytes) {
     label { display: grid; gap: 4px; font-size: 11px; font-weight: 700; color: #71675d; text-transform: uppercase; letter-spacing: .04em; }
     label input, label textarea {
       width: 100%; padding: 8px 9px; border: 1px solid #cfc8b9; border-radius: 4px;
-      background: #fff; color: #2b2620; font: 13px/1.4 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      background: #fff; color: #2b2620; font: 13px/1.4 "Open Sans", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
       text-transform: none; letter-spacing: 0;
     }
     label textarea { min-height: 64px; resize: vertical; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
     .actions button {
       border: 1px solid #d8d2c4; border-radius: 4px; background: #faf8f3; color: #2b2620;
-      padding: 7px 10px; font: 700 12px/1.3 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 7px 10px; font: 700 12px/1.3 "Open Sans", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
       cursor: pointer;
     }
     .actions .insert { background: #2f6b52; border-color: #2f6b52; color: #fff; }

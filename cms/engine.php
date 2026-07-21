@@ -1095,7 +1095,11 @@ function cms_assets() {
         'categories' => $cats,
         'version' => cms_version(),
     ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-    return "\n<link rel=\"stylesheet\" href=\"/cms/assets/editor.css\">\n"
+    // Load Open Sans with editor assets so in-page authenticated controls match dedicated CMS pages.
+    return "\n<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n"
+         . "<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n"
+         . "<link href=\"https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap\" rel=\"stylesheet\">\n"
+         . "<link rel=\"stylesheet\" href=\"/cms/assets/editor.css\">\n"
          . "<script>window.CMS_CONFIG = $cfg;</script>\n"
          . "<script src=\"/cms/assets/editor.js\" defer></script>\n";
 }
