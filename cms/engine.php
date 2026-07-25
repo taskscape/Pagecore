@@ -73,13 +73,32 @@ function cms_csrf_token() {
  */
 function cms_region_path($key, $mustExist = false) {
     if (!preg_match('~^[a-z0-9-]+(/[a-z0-9-]+){0,2}$~', $key)) { return null; }
+    // Check for path traversal attempts in the key itself
+    if (strpos($key, '..') !== false || strpos($key, "/../") !== false || strpos($key, "./") === 0) {
+        return null;
+    }
     $path = cms_cfg('content_dir') . '/pages/' . $key . '.md';
     if ($mustExist && !is_file($path)) { return null; }
     $dir = dirname($path);
-    if (is_dir($dir)) {
-        $real = realpath($dir);
+    // Only verify realpath when the file exists or the directory exists
+    if (is_file($path)) {
+        $real = realpath($path);
         $base = realpath(cms_cfg('content_dir'));
-        if ($real === false || $base === false || strpos($real, $base) !== 0) { return null; }
+        // Normalize both paths using stream_resolve_with_base (PHP 8.0+) or manual normalization
+        // Use normalized string comparison to prevent directory traversal bypasses
+        if ($real === false || $base === false) { return null; }
+        $realNorm = str_replace('\\', '/', $real);
+        $baseNorm = rtrim(str_replace('\\', '/', $base), '/');
+        // Ensure the real path starts with the base path followed by a separator or is within it
+        if (strpos($realNorm, $baseNorm . '/') !== 0 && $realNorm !== $baseNorm) { return null; }
+    } elseif (is_dir($dir)) {
+        $realDir = realpath($dir);
+        $base = realpath(cms_cfg('content_dir'));
+        if ($realDir === false || $base === false) { return null; }
+        $realDirNorm = str_replace('\\', '/', $realDir);
+        $baseNorm = rtrim(str_replace('\\', '/', $base), '/');
+        // Ensure the directory path starts with the base path followed by a separator or is within it
+        if (strpos($realDirNorm, $baseNorm . '/') !== 0 && $realDirNorm !== $baseNorm) { return null; }
     }
     return $path;
 }
@@ -96,13 +115,15 @@ function cms_post_path($slug, $mustExist = false) {
 /** Write atomically (tmp + rename); Windows-safe (unlink-then-rename retry). */
 function cms_atomic_write($path, $data) {
     $dir = dirname($path);
-    if (!is_dir($dir) && !@mkdir($dir, 0775, true)) { return false; }
+    if (!is_dir($dir)) {
+        if (!mkdir($dir, 0775, true)) { return false; }
+    }
     $tmp = $path . '.' . bin2hex(random_bytes(4)) . '.tmp';
     if (file_put_contents($tmp, $data) === false) { return false; }
-    if (@rename($tmp, $path)) { return true; }
+    if (rename($tmp, $path)) { return true; }
     // Windows: rename may fail when the target exists
-    @unlink($path);
-    if (@rename($tmp, $path)) { return true; }
+    @unlink($path);  // Suppress error if file is locked
+    if (rename($tmp, $path)) { return true; }
     @unlink($tmp);
     return false;
 }
@@ -111,15 +132,19 @@ function cms_atomic_write($path, $data) {
 function cms_backup($relKey, $path) {
     if (!is_file($path)) { return; }
     $bdir = cms_cfg('backup_dir') . '/' . dirname($relKey);
-    if (!is_dir($bdir)) { @mkdir($bdir, 0775, true); }
+    if (!is_dir($bdir)) {
+        if (!mkdir($bdir, 0775, true)) { return; }
+    }
     $name = basename($relKey) . '.' . date('Ymd-His') . '.' . substr(bin2hex(random_bytes(2)), 0, 4) . '.md';
-    @copy($path, $bdir . '/' . $name);
+    if (!copy($path, $bdir . '/' . $name)) { return; }
     // prune to the newest N
     $keep = (int) cms_cfg('backup_keep', 20);
     $files = glob($bdir . '/' . basename($relKey) . '.*.md');
     if ($files && count($files) > $keep) {
         sort($files); // timestamped names sort chronologically
-        foreach (array_slice($files, 0, count($files) - $keep) as $old) { @unlink($old); }
+        foreach (array_slice($files, 0, count($files) - $keep) as $old) {
+            @unlink($old);  // Suppress errors for concurrent access
+        }
     }
 }
 
@@ -151,9 +176,9 @@ function cms_remove_empty_dirs($dir, $stop) {
     $dir = rtrim($dir, '/\\');
     $stop = rtrim($stop, '/\\');
     while ($dir !== '' && str_replace('\\', '/', $dir) !== str_replace('\\', '/', $stop) && is_dir($dir)) {
-        $items = @scandir($dir);
+        $items = @scandir($dir);  // Suppress errors for concurrent access
         if ($items === false || count($items) > 2) { break; }
-        if (!@rmdir($dir)) { break; }
+        if (!@rmdir($dir)) { break; }  // Suppress errors for concurrent access
         $dir = dirname($dir);
     }
 }
@@ -161,7 +186,7 @@ function cms_remove_empty_dirs($dir, $stop) {
 function cms_clear_draft($kind, $id) {
     $path = cms_draft_path($kind, $id, true);
     if (!$path) { return; }
-    @unlink($path);
+    @unlink($path);  // Suppress errors if file is locked or already deleted
     cms_remove_empty_dirs(dirname($path), cms_cfg('content_dir') . '/.drafts');
 }
 

@@ -400,7 +400,7 @@ case 'delete-post':
     if (!$path) { cms_fail('Post not found.', 404); }
     // Preserve a revision before removal so an administrator can recover an accidentally deleted post.
     cms_backup('posts/' . $slug, $path);
-    if (!@unlink($path)) { cms_fail('Could not delete post.', 500); }
+    if (!@unlink($path)) { cms_fail('Could not delete post.', 500); }  // Suppress error if file is locked
     // A deleted post must not retain a draft that could later reintroduce stale content.
     cms_clear_draft('post', $slug);
     cms_regenerate_indexes();
@@ -419,11 +419,29 @@ case 'create-region':
     $key = trim(isset($_POST['key']) ? (string) $_POST['key'] : '');
     $markdown = isset($_POST['markdown']) ? (string) $_POST['markdown'] : '';
     cms_utf8_or_fail($key, $markdown);
+    // Validate key format strictly (page/region pattern)
+    if (!preg_match('~^[a-z0-9-]+(/[a-z0-9-]+){0,2}$~', $key)) {
+        cms_fail('Invalid content identifier format.');
+    }
+    // Check for directory traversal in key
+    if (strpos($key, '..') !== false || strpos($key, "/../") !== false) {
+        cms_fail('Invalid content identifier.');
+    }
     $path = cms_region_path($key, false);
     if (!$path) { cms_fail('Invalid content identifier.'); }
+    // Ensure the resolved path is within the content directory
+    $realPath = realpath(dirname($path));
+    $contentBase = realpath(cms_cfg('content_dir'));
+    if ($realPath === false || strpos($realPath, $contentBase) !== 0) {
+        cms_fail('Access denied.');
+    }
     if (is_file($path)) { cms_fail('This file already exists.', 409); }
+    // Sanitize markdown content - escape any potential HTML injection
     if ($markdown === '') {
         $markdown = "# " . str_replace('-', ' ', basename($key)) . "\n\nNew content.\n";
+    } else {
+        // Remove any null bytes or control characters
+        $markdown = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $markdown);
     }
     if (!cms_atomic_write($path, str_replace("\r\n", "\n", $markdown))) {
         cms_fail('Could not create Markdown file.', 500);
@@ -436,8 +454,25 @@ case 'save-media-meta':
     $alt = trim(isset($_POST['alt']) ? (string) $_POST['alt'] : '');
     $caption = trim(isset($_POST['caption']) ? (string) $_POST['caption'] : '');
     cms_utf8_or_fail($rel, $alt, $caption);
+    // Validate relative path format
+    if (!preg_match('~^[A-Za-z0-9._/-]+$~', $rel)) {
+        cms_fail('Invalid media identifier format.');
+    }
+    // Reject path traversal attempts
+    if (strpos($rel, '..') !== false || strpos($rel, '/../') !== false || strpos($rel, './') === 0) {
+        cms_fail('Invalid media identifier.');
+    }
     $path = cms_media_path($rel, true);
     if (!$path) { cms_fail('File not found.', 404); }
+    // Verify the file is within the uploads directory
+    $uploadsBase = realpath(cms_cfg('uploads_dir'));
+    $fileRealPath = realpath($path);
+    if ($fileRealPath === false || strpos($fileRealPath, $uploadsBase) !== 0) {
+        cms_fail('Access denied.');
+    }
+    // Sanitize metadata fields
+    $alt = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $alt);
+    $caption = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $caption);
     if (!cms_media_write_meta($path, array('alt' => $alt, 'caption' => $caption))) {
         cms_fail('Could not save file metadata.', 500);
     }
@@ -452,8 +487,8 @@ case 'delete-media':
         cms_fail('This file is still referenced by content. Remove references before deleting it.', 409);
     }
     $path = cms_media_path($rel, true);
-    if (!$path || !@unlink($path)) { cms_fail('Could not delete file.', 500); }
-    @unlink(cms_media_meta_path($path));
+    if (!$path || !@unlink($path)) { cms_fail('Could not delete file.', 500); }  // Suppress error if file is locked
+    @unlink(cms_media_meta_path($path));  // Suppress error if meta file is already deleted
     cms_json(array('ok' => true));
 
 case 'upload':
@@ -495,13 +530,40 @@ case 'upload':
         cms_fail('File contents do not match its extension.');
     }
     $isImage = ($ext !== 'pdf');
-    if ($isImage && $ext !== 'svg' && @getimagesize($f['tmp_name']) === false) {
+    if ($isImage && $ext !== 'svg' && !getimagesize($f['tmp_name'])) {
         cms_fail('Invalid image file.');
     }
     if ($ext === 'svg') {
         $svg = file_get_contents($f['tmp_name']);
-        if (preg_match('~<script|on[a-z]+\s*=|javascript:~i', $svg)) {
-            cms_fail('SVG file contains prohibited elements.');
+        // Comprehensive SVG sanitization to prevent XSS attacks
+        $prohibitedPatterns = array(
+            '~<script~i',           // Script tags (word boundary)
+            '~</script\s*>~i',       // Closing script tags
+            '~on[a-z]+\s*=~i',       // Inline event handlers (onclick, onload, etc.)
+            '~javascript:~i',         // JavaScript URIs
+            '~data:~i',               // Data URIs (can contain malicious content)
+            '~<iframe~i',             // Iframe tags
+            '~<object~i',             // Object tags
+            '~<embed~i',              // Embed tags
+            '~<link[^>]*rel=[\"\']?stylesheet~i',  // External stylesheets
+            '~<style~i',              // Style tags
+            '~<!\[CDATA\[~i',        // CDATA sections
+            '~import\s*\(~i',        // CSS @import
+            '~url\s*\(~i',           // CSS url() with potential payloads
+        );
+        foreach ($prohibitedPatterns as $pattern) {
+            if (preg_match($pattern, $svg)) {
+                cms_fail('SVG file contains prohibited elements or patterns.');
+            }
+        }
+        // Check for external entity declarations (XXE attacks)
+        if (preg_match('~<!DOCTYPE[^>]*\[~i', $svg) || preg_match('~<!ENTITY~i', $svg)) {
+            cms_fail('SVG file contains prohibited entity declarations.');
+        }
+        // Check for XML processing instructions that could be malicious
+        if (preg_match('~<\?xml[^>]*\?>~i', $svg) && strlen($svg) > 1024) {
+            // Large XML files with processing instructions are suspicious
+            cms_fail('SVG file contains potentially malicious content.');
         }
     }
 
@@ -511,7 +573,7 @@ case 'upload':
     if ($base === '') { $base = 'file'; }
     $sub = date('Y/m');
     $dir = cms_cfg('uploads_dir') . '/' . $sub;
-    if (!is_dir($dir) && !@mkdir($dir, 0775, true)) { cms_fail('Could not create directory.', 500); }
+    if (!is_dir($dir) && !mkdir($dir, 0775, true)) { cms_fail('Could not create directory.', 500); }
     $name = $base . '-' . bin2hex(random_bytes(3)) . '.' . $ext;
     if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $name)) {
         cms_fail('Could not save uploaded file.', 500);

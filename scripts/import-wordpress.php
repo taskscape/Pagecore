@@ -77,7 +77,7 @@ if (strpos($POST_URL, '{slug}') === false) {
 }
 
 function say($s) { fwrite(STDOUT, $s . "\n"); }
-function ensure_dir($d) { if (!is_dir($d) && !@mkdir($d, 0775, true)) { fwrite(STDERR, "mkdir failed: $d\n"); exit(1); } }
+function ensure_dir($d) { if (!is_dir($d) && !mkdir($d, 0775, true)) { fwrite(STDERR, "mkdir failed: $d\n"); exit(1); } }
 
 /**
  * Keep migration-provided upload paths relative so imported content cannot
@@ -804,7 +804,7 @@ if ($COPY) {
             $rejected++;
             continue;
         }
-        if (@copy($srcReal, $dst)) { $copied++; }
+        if (copy($srcReal, $dst)) { $copied++; }
     }
     say("  copied $copied, missing $missing, rejected unsafe paths $rejected");
 } else {

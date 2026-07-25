@@ -207,7 +207,7 @@ test('featured image upload accepts JPEG and PNG, saves drafts, and enforces typ
     }
   });
   expect(invalidType.status()).toBe(400);
-  expect((await invalidType.json()).error).toContain('JPEG lub PNG');
+  expect((await invalidType.json()).error).toContain('JPEG or PNG');
   const oversizedUpload = await page.request.post('/cms/api.php?action=upload', {
     headers: { 'X-CMS-Token': token },
     multipart: {
@@ -423,8 +423,8 @@ test('content inventory lists pages, regions, posts, categories, creates missing
   // Inventory creation requires an explicit category because it is not scoped to a public listing page.
   await page.getByRole('button', { name: '＋ Add post' }).click();
   await page.getByLabel('Post title').fill('Inventory post');
-  await page.getByLabel('Category').selectOption('news');
-  await page.getByRole('button', { name: 'Create' }).click();
+  await page.locator('#post-category').selectOption('news');
+  await page.locator('#create-post').click();
   await expect(page).toHaveURL(/\/sample-site\/post\/inventory-post\/#cms-edit$/);
   await expect(page.locator('.cms-panel')).toBeVisible();
 
