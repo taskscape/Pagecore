@@ -34,8 +34,8 @@ files, and a folder of uploads.
    - Content is written in **Markdown**, including tables.
    - A server-side **preview** shows exactly how the fragment will render.
    - **Save draft** stores work under `content/.drafts/` without changing what
-     visitors see. **Podgląd szkicu** opens a standalone draft preview link.
-     **Opublikuj** copies the current editor state to the live Markdown file.
+     visitors see. **Preview draft** opens a standalone draft preview link.
+     **Publish** copies the current editor state to the live Markdown file.
    - **Images and PDFs** can be pasted or dragged straight into the editor —
      they are uploaded automatically and the correct Markdown snippet is
      inserted. PDFs render on the page as an embedded viewer with a download
@@ -49,9 +49,8 @@ files, and a folder of uploads.
      the editable navigation JSON.
    - `Ctrl+S` saves a draft, `Esc` cancels (with a confirmation if there are
      unsaved changes).
-4. **Manage posts** on listing pages (e.g. *Orzeczenia / Wydarzenia /
-   Uchwały*): a **＋ Dodaj wpis** (Add post) button creates a new post in that
-   category. Each post has a title, date, category and optional excerpt
+4. **Manage posts** on eligible listing pages: an **＋ Add post** button creates
+   a new post in that category. Each post has a title, date, category and optional excerpt
    (editable as post metadata), a featured-image drop area (JPEG/PNG only,
    using the configured upload limit, uploaded and saved to the draft automatically), plus a
    Markdown body edited the same way as any other fragment. Post URLs are generated automatically from the title
