@@ -84,7 +84,15 @@ function cms_content_posts_url($page, $query, $category) {
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
       padding: 14px 16px; border-bottom: 1px solid #ebe5da; background: #fbfaf6;
     }
+    .section[data-collapsed="true"] .section-head { border-bottom: 0; }
     .section-head p { margin: 2px 0 0; color: #71675d; }
+    .section-toggle { display: inline-flex; align-items: center; gap: 6px; }
+    .section-toggle .material-symbols-rounded { font-size: 18px; transition: transform .15s ease; }
+    .section-toggle[aria-expanded="true"] .material-symbols-rounded { transform: rotate(180deg); }
+    .section-subsection { border-top: 1px solid #ebe5da; }
+    .section-subsection-head { padding: 14px 16px; background: #fbfaf6; }
+    .section-subsection-head h3 { margin: 0; font-size: 15px; }
+    .section-subsection-head p { margin: 2px 0 0; color: #71675d; }
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 10px 12px; border-bottom: 1px solid #ebe5da; text-align: left; vertical-align: top; }
@@ -111,6 +119,7 @@ function cms_content_posts_url($page, $query, $category) {
     .button[disabled] { opacity: .55; cursor: default; }
     /* Compact filter controls keep the inventory usable without adding client-side post processing. */
     .post-tools { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+    .post-section-tools { padding: 12px 16px; border-bottom: 1px solid #ebe5da; }
     .post-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
     .post-filters label { color: #71675d; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
     .post-filters input, .post-filters select { min-height: 34px; padding: 6px 8px; border: 1px solid #d8d2c4; border-radius: 4px; color: #2b2620; background: #fff; font: inherit; }
@@ -141,6 +150,7 @@ function cms_content_posts_url($page, $query, $category) {
     @media (max-width: 720px) {
       .top { display: block; }
       .nav { margin-top: 14px; }
+      .section-head { align-items: flex-start; }
     }
   </style>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&display=swap" rel="stylesheet">
@@ -165,7 +175,7 @@ function cms_content_posts_url($page, $query, $category) {
       <div class="pc-nav-group">
         <p class="pc-nav-label">Structure</p>
         <nav class="pc-nav" aria-label="Structure navigation">
-          <a href="#categories-title"><span class="material-symbols-rounded" aria-hidden="true">sell</span>Categories</a>
+          <a href="#regions-title"><span class="material-symbols-rounded" aria-hidden="true">dashboard_customize</span>Regions</a>
           <a href="#nav-title"><span class="material-symbols-rounded" aria-hidden="true">account_tree</span>Navigation</a>
         </nav>
       </div>
@@ -189,93 +199,25 @@ function cms_content_posts_url($page, $query, $category) {
     <div class="pc-content">
 
     <section class="summary" aria-label="Inventory summary">
-      <div><strong><?= count($inventory['pages']) ?></strong><span>Configured pages</span></div>
-      <div><strong><?= count($inventory['regions']) ?></strong><span>Editable regions</span></div>
+      <div><strong><?= count($inventory['pages']) ?></strong><span>Pages</span></div>
+      <div><strong><?= count($inventory['regions']) ?></strong><span>Regions</span></div>
       <div><strong><?= count($inventory['missing']) ?></strong><span>Missing files</span></div>
       <div><strong><?= (int) $inventory['posts_total'] ?></strong><span>Posts</span></div>
       <div><strong><?= count($inventory['categories']) ?></strong><span>Categories</span></div>
     </section>
 
-    <section class="section" aria-labelledby="pages-title">
-      <div class="section-head">
-        <div>
-          <h2 id="pages-title">Configured pages</h2>
-          <p>From <code>search_pages</code>; region status shows whether the linked Markdown file exists.</p>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Title</th><th>URL</th><th>Type</th><th>Region</th><th>Status</th></tr></thead>
-          <tbody>
-            <?php foreach ($inventory['pages'] as $page): ?>
-              <tr>
-                <td><?= cms_content_e($page['title']) ?></td>
-                <td><a href="<?= cms_content_e($page['url']) ?>"><?= cms_content_e($page['url']) ?></a></td>
-                <td><?= cms_content_e($page['type']) ?></td>
-                <td><?= $page['region'] !== '' ? '<code>' . cms_content_e($page['region']) . '</code>' : '<span class="muted">none</span>' ?></td>
-                <td>
-                  <?php if ($page['exists'] === null): ?>
-                    <span class="tag">Listing</span>
-                  <?php elseif ($page['exists']): ?>
-                    <span class="tag tag-ok">Markdown present</span>
-                  <?php else: ?>
-                    <span class="tag tag-missing">Missing Markdown</span>
-                  <?php endif; ?>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="section" aria-labelledby="regions-title">
-      <div class="section-head">
-        <div>
-          <h2 id="regions-title">Editable regions</h2>
-          <p>Union of Markdown files, configured page regions, and <code>cms_editable()</code> calls found in PHP templates.</p>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Key</th><th>Source</th><th>Status</th><th>URL</th><th>Updated</th><th>Action</th></tr></thead>
-          <tbody>
-            <?php foreach ($inventory['regions'] as $region): ?>
-              <tr data-content-region="<?= cms_content_e($region['key']) ?>"<?= !$region['exists'] ? ' data-content-missing="1"' : '' ?>>
-                <td><code><?= cms_content_e($region['key']) ?></code></td>
-                <td><?= cms_content_e(cms_content_sources($region['sources'])) ?></td>
-                <td>
-                  <?php if ($region['exists']): ?>
-                    <span class="tag tag-ok">Markdown present</span>
-                  <?php else: ?>
-                    <span class="tag tag-missing">Missing Markdown</span>
-                  <?php endif; ?>
-                  <?php if ($region['draft']): ?> <span class="tag">Draft</span><?php endif; ?>
-                </td>
-                <td><?= $region['url'] !== '' ? '<a href="' . cms_content_e($region['url']) . '">' . cms_content_e($region['url']) . '</a>' : '<span class="muted">not mapped</span>' ?></td>
-                <td><?= cms_content_e(cms_content_date($region['modified'])) ?></td>
-                <td>
-                  <?php if (!$region['exists']): ?>
-                    <button type="button" class="button button-primary" data-action="create-region" data-key="<?= cms_content_e($region['key']) ?>">Create file</button>
-                  <?php else: ?>
-                    <span class="muted"><?= (int) $region['size'] ?> bytes</span>
-                  <?php endif; ?>
-                  <div class="status" role="status" aria-live="polite"></div>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="section" aria-labelledby="posts-title">
-      <div class="section-head">
+    <section class="section" aria-labelledby="posts-title" data-section data-collapsed="false">
+      <div class="section-head" data-section-header>
         <div>
           <h2 id="posts-title">Posts</h2>
           <p>Markdown posts grouped by configured categories.</p>
         </div>
-        <div class="post-tools">
+        <button type="button" class="button section-toggle" data-section-toggle aria-expanded="true" aria-controls="posts-body">
+          <span data-section-toggle-label>Collapse</span><span class="material-symbols-rounded" aria-hidden="true">expand_more</span>
+        </button>
+      </div>
+      <div id="posts-body" data-section-body>
+        <div class="post-tools post-section-tools">
           <!-- This GET form keeps filtering server-side so Chrome receives only one page of rows. -->
           <form class="post-filters" method="get" action="/cms/content.php" aria-label="Filter posts">
             <label for="post-search">Search
@@ -340,6 +282,28 @@ function cms_content_posts_url($page, $query, $category) {
           <?php endif; ?>
         </nav>
       </div>
+      <div class="section-subsection" aria-labelledby="categories-title">
+        <div class="section-subsection-head">
+          <h3 id="categories-title">Categories</h3>
+          <p>Configured post category labels and listing URLs.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Slug</th><th>Label</th><th>URL</th><th>Posts</th></tr></thead>
+            <tbody>
+              <?php foreach ($inventory['categories'] as $category): ?>
+                <tr>
+                  <td><code><?= cms_content_e($category['slug']) ?></code></td>
+                  <td><?= cms_content_e($category['label']) ?></td>
+                  <td><a href="<?= cms_content_e($category['url']) ?>"><?= cms_content_e($category['url']) ?></a></td>
+                  <td><?= (int) $category['posts'] ?></td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      </div>
     </section>
 
     <!-- This dialog provides the category that a public listing page normally supplies as context. -->
@@ -364,37 +328,100 @@ function cms_content_posts_url($page, $query, $category) {
       </form>
     </div>
 
-    <section class="section" aria-labelledby="categories-title">
-      <div class="section-head">
+    <section class="section" aria-labelledby="pages-title" data-section data-collapsed="true">
+      <div class="section-head" data-section-header>
         <div>
-          <h2 id="categories-title">Categories</h2>
-          <p>Configured post category labels and listing URLs.</p>
+          <h2 id="pages-title">Pages</h2>
+          <p>From <code>search_pages</code>; region status shows whether the linked Markdown file exists.</p>
         </div>
+        <button type="button" class="button section-toggle" data-section-toggle aria-expanded="false" aria-controls="pages-body">
+          <span data-section-toggle-label>Expand</span><span class="material-symbols-rounded" aria-hidden="true">expand_more</span>
+        </button>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Slug</th><th>Label</th><th>URL</th><th>Posts</th></tr></thead>
-          <tbody>
-            <?php foreach ($inventory['categories'] as $category): ?>
-              <tr>
-                <td><code><?= cms_content_e($category['slug']) ?></code></td>
-                <td><?= cms_content_e($category['label']) ?></td>
-                <td><a href="<?= cms_content_e($category['url']) ?>"><?= cms_content_e($category['url']) ?></a></td>
-                <td><?= (int) $category['posts'] ?></td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
+      <div id="pages-body" data-section-body hidden>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Title</th><th>URL</th><th>Type</th><th>Region</th><th>Status</th></tr></thead>
+            <tbody>
+              <?php foreach ($inventory['pages'] as $page): ?>
+                <tr>
+                  <td><?= cms_content_e($page['title']) ?></td>
+                  <td><a href="<?= cms_content_e($page['url']) ?>"><?= cms_content_e($page['url']) ?></a></td>
+                  <td><?= cms_content_e($page['type']) ?></td>
+                  <td><?= $page['region'] !== '' ? '<code>' . cms_content_e($page['region']) . '</code>' : '<span class="muted">none</span>' ?></td>
+                  <td>
+                    <?php if ($page['exists'] === null): ?>
+                      <span class="tag">Listing</span>
+                    <?php elseif ($page['exists']): ?>
+                      <span class="tag tag-ok">Markdown present</span>
+                    <?php else: ?>
+                      <span class="tag tag-missing">Missing Markdown</span>
+                    <?php endif; ?>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
 
-    <section class="section" aria-labelledby="nav-title">
-      <div class="section-head">
+    <section class="section" aria-labelledby="regions-title" data-section data-collapsed="true">
+      <div class="section-head" data-section-header>
         <div>
-          <h2 id="nav-title">Navigation JSON</h2>
-          <p>Saved at <code><?= cms_content_e($inventory['nav']['file']) ?></code>.</p>
+          <h2 id="regions-title">Regions</h2>
+          <p>Union of Markdown files, configured page regions, and <code>cms_editable()</code> calls found in PHP templates.</p>
+        </div>
+        <button type="button" class="button section-toggle" data-section-toggle aria-expanded="false" aria-controls="regions-body">
+          <span data-section-toggle-label>Expand</span><span class="material-symbols-rounded" aria-hidden="true">expand_more</span>
+        </button>
+      </div>
+      <div id="regions-body" data-section-body hidden>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Key</th><th>Source</th><th>Status</th><th>URL</th><th>Updated</th><th>Action</th></tr></thead>
+            <tbody>
+              <?php foreach ($inventory['regions'] as $region): ?>
+                <tr data-content-region="<?= cms_content_e($region['key']) ?>"<?= !$region['exists'] ? ' data-content-missing="1"' : '' ?>>
+                  <td><code><?= cms_content_e($region['key']) ?></code></td>
+                  <td><?= cms_content_e(cms_content_sources($region['sources'])) ?></td>
+                  <td>
+                    <?php if ($region['exists']): ?>
+                      <span class="tag tag-ok">Markdown present</span>
+                    <?php else: ?>
+                      <span class="tag tag-missing">Missing Markdown</span>
+                    <?php endif; ?>
+                    <?php if ($region['draft']): ?> <span class="tag">Draft</span><?php endif; ?>
+                  </td>
+                  <td><?= $region['url'] !== '' ? '<a href="' . cms_content_e($region['url']) . '">' . cms_content_e($region['url']) . '</a>' : '<span class="muted">not mapped</span>' ?></td>
+                  <td><?= cms_content_e(cms_content_date($region['modified'])) ?></td>
+                  <td>
+                    <?php if (!$region['exists']): ?>
+                      <button type="button" class="button button-primary" data-action="create-region" data-key="<?= cms_content_e($region['key']) ?>">Create file</button>
+                    <?php else: ?>
+                      <span class="muted"><?= (int) $region['size'] ?> bytes</span>
+                    <?php endif; ?>
+                    <div class="status" role="status" aria-live="polite"></div>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
         </div>
       </div>
+    </section>
+
+    <section class="section" aria-labelledby="nav-title" data-section data-collapsed="true">
+      <div class="section-head" data-section-header>
+        <div>
+          <h2 id="nav-title">Navigation</h2>
+          <p>Saved at <code><?= cms_content_e($inventory['nav']['file']) ?></code>.</p>
+        </div>
+        <button type="button" class="button section-toggle" data-section-toggle aria-expanded="false" aria-controls="nav-body">
+          <span data-section-toggle-label>Expand</span><span class="material-symbols-rounded" aria-hidden="true">expand_more</span>
+        </button>
+      </div>
+      <div id="nav-body" data-section-body hidden>
       <div class="nav-editor">
         <label>Navigation JSON
           <textarea id="nav-json" spellcheck="false"><?= cms_content_e($inventory['nav']['json']) ?></textarea>
@@ -403,6 +430,7 @@ function cms_content_posts_url($page, $query, $category) {
           <button type="button" class="button button-primary" id="save-nav">Save navigation</button>
         </div>
         <div class="status" id="nav-status" role="status" aria-live="polite"></div>
+      </div>
       </div>
     </section>
     </div>
@@ -440,6 +468,31 @@ function cms_content_posts_url($page, $query, $category) {
       el.className = error ? 'status error' : 'status';
       el.textContent = text || '';
     }
+
+    function setSectionExpanded(section, expanded) {
+      var toggle = section.querySelector('[data-section-toggle]');
+      var body = section.querySelector('[data-section-body]');
+      var label = toggle.querySelector('[data-section-toggle-label]');
+      section.setAttribute('data-collapsed', expanded ? 'false' : 'true');
+      toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      label.textContent = expanded ? 'Collapse' : 'Expand';
+      body.hidden = !expanded;
+    }
+
+    document.querySelectorAll('[data-section]').forEach(function (section) {
+      section.querySelector('[data-section-toggle]').addEventListener('click', function () {
+        setSectionExpanded(section, this.getAttribute('aria-expanded') !== 'true');
+      });
+    });
+
+    function expandHashSection() {
+      if (!location.hash) { return; }
+      var target = document.getElementById(location.hash.slice(1));
+      var section = target && target.closest('[data-section]');
+      if (section) { setSectionExpanded(section, true); }
+    }
+    window.addEventListener('hashchange', expandHashSection);
+    expandHashSection();
 
     // The inventory has no category context, so this handler collects it before calling the existing create-post API.
     var addPost = document.getElementById('add-post');

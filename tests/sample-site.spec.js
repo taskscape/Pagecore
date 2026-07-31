@@ -447,9 +447,29 @@ test('content inventory lists pages, regions, posts, categories, creates missing
 
   await page.goto('/cms/content.php');
   await expect(page.getByRole('heading', { name: 'Content inventory' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Configured pages' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Editable regions' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Posts' })).toBeVisible();
+  const sections = page.locator('main [data-section]');
+  await expect(sections).toHaveCount(4);
+  expect(await sections.locator('h2').allTextContents()).toEqual(['Posts', 'Pages', 'Regions', 'Navigation']);
+
+  const postsSection = sections.filter({ has: page.locator('#posts-title') });
+  const pagesSection = sections.filter({ has: page.locator('#pages-title') });
+  const regionsSection = sections.filter({ has: page.locator('#regions-title') });
+  const navigationSection = sections.filter({ has: page.locator('#nav-title') });
+  await expect(postsSection.locator('[data-section-body]')).toBeVisible();
+  await expect(pagesSection.locator('[data-section-body]')).toBeHidden();
+  await expect(regionsSection.locator('[data-section-body]')).toBeHidden();
+  await expect(navigationSection.locator('[data-section-body]')).toBeHidden();
+
+  // Every section can be toggled independently; only Posts starts expanded.
+  await postsSection.getByRole('button', { name: 'Collapse' }).click();
+  await expect(postsSection.locator('[data-section-body]')).toBeHidden();
+  await postsSection.getByRole('button', { name: 'Expand' }).click();
+  await pagesSection.getByRole('button', { name: 'Expand' }).click();
+  await expect(pagesSection.locator('[data-section-body]')).toBeVisible();
+  await pagesSection.getByRole('button', { name: 'Collapse' }).click();
+  await pagesSection.getByRole('button', { name: 'Expand' }).click();
+  await regionsSection.getByRole('button', { name: 'Expand' }).click();
+  await navigationSection.getByRole('button', { name: 'Expand' }).click();
   await expect(page.getByRole('heading', { name: 'Categories' })).toBeVisible();
 
   await expect(page.getByRole('cell', { name: 'Home', exact: true })).toBeVisible();
@@ -469,6 +489,7 @@ test('content inventory lists pages, regions, posts, categories, creates missing
   // The post title doubles as the inventory's edit shortcut, matching the explicit edit action.
   await expect(page.getByRole('link', { name: 'Inventory post' })).toHaveAttribute('href', '/sample-site/post/inventory-post/#cms-edit');
 
+  await page.locator('[data-section]').filter({ has: page.locator('#regions-title') }).getByRole('button', { name: 'Expand' }).click();
   const missing = page.locator('[data-content-region="home/missing-callout"]');
   await expect(missing).toBeVisible();
   await expect(missing).toHaveAttribute('data-content-missing', '1');
@@ -483,6 +504,7 @@ test('content inventory lists pages, regions, posts, categories, creates missing
   expect(inventoryJson.ok).toBe(true);
   expect(inventoryJson.inventory.regions.some(region => region.key === 'home/missing-callout' && region.exists)).toBe(true);
 
+  await page.locator('[data-section]').filter({ has: page.locator('#nav-title') }).getByRole('button', { name: 'Expand' }).click();
   const navTextarea = page.locator('#nav-json');
   const nav = JSON.parse(await navTextarea.inputValue());
   nav[1].label = 'Articles';
