@@ -143,20 +143,50 @@ function cms_content_posts_url($page, $query, $category) {
       .nav { margin-top: 14px; }
     }
   </style>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/cms/assets/admin.css">
 </head>
-<body>
+<body class="pc-admin">
+  <div class="pc-app">
+    <aside class="pc-sidebar">
+      <a class="pc-brand" href="/" aria-label="Pagecore site home">
+        <span class="pc-brand-mark"><span class="material-symbols-rounded" aria-hidden="true">check</span></span>
+        <span class="pc-brand-copy"><strong>Pagecore</strong><span>Content workspace</span></span>
+      </a>
+      <div class="pc-nav-group">
+        <p class="pc-nav-label">Workspace</p>
+        <nav class="pc-nav" aria-label="CMS navigation">
+          <a href="/cms/content.php" aria-current="page"><span class="material-symbols-rounded" aria-hidden="true">dashboard</span>Overview</a>
+          <a href="#posts-title"><span class="material-symbols-rounded" aria-hidden="true">edit_note</span>Posts</a>
+          <a href="#pages-title"><span class="material-symbols-rounded" aria-hidden="true">article</span>Pages</a>
+          <a href="/cms/media.php"><span class="material-symbols-rounded" aria-hidden="true">photo_library</span>Media</a>
+        </nav>
+      </div>
+      <div class="pc-nav-group">
+        <p class="pc-nav-label">Structure</p>
+        <nav class="pc-nav" aria-label="Structure navigation">
+          <a href="#categories-title"><span class="material-symbols-rounded" aria-hidden="true">sell</span>Categories</a>
+          <a href="#nav-title"><span class="material-symbols-rounded" aria-hidden="true">account_tree</span>Navigation</a>
+        </nav>
+      </div>
+      <div class="pc-sidebar-foot">Version <?= cms_content_e(cms_version()) ?></div>
+    </aside>
+    <div class="pc-main">
   <main class="shell">
-    <div class="top">
+    <div class="top pc-page-head">
       <div>
+        <p class="pc-eyebrow">Good morning · Content workspace</p>
         <h1>Content inventory</h1>
-        <p class="sub">Configured pages, editable regions, posts, categories, missing Markdown files, and navigation JSON.</p>
+        <p class="sub">Manage pages, posts, site structure, and everything your visitors see.</p>
         <p class="version">Pagecore <?= cms_content_e(cms_version()) ?></p>
       </div>
-      <nav class="nav" aria-label="Content navigation">
-        <a href="/">View site</a>
-        <a href="/cms/media.php">Media</a>
+      <nav class="nav pc-page-actions" aria-label="Content navigation">
+        <a href="/"><span class="material-symbols-rounded" aria-hidden="true">open_in_new</span>View site</a>
+        <button type="button" class="button button-primary" id="add-post-top"><span class="material-symbols-rounded" aria-hidden="true">add</span>New post</button>
       </nav>
     </div>
+
+    <div class="pc-content">
 
     <section class="summary" aria-label="Inventory summary">
       <div><strong><?= count($inventory['pages']) ?></strong><span>Configured pages</span></div>
@@ -375,7 +405,10 @@ function cms_content_posts_url($page, $query, $category) {
         <div class="status" id="nav-status" role="status" aria-live="polite"></div>
       </div>
     </section>
+    </div>
   </main>
+    </div>
+  </div>
 
   <script>
     window.PAGECORE_CONTENT = {
@@ -410,6 +443,7 @@ function cms_content_posts_url($page, $query, $category) {
 
     // The inventory has no category context, so this handler collects it before calling the existing create-post API.
     var addPost = document.getElementById('add-post');
+    var addPostTop = document.getElementById('add-post-top');
     var postModal = document.getElementById('post-modal');
     var postForm = document.getElementById('post-form');
     var postTitle = document.getElementById('post-title');
@@ -424,10 +458,12 @@ function cms_content_posts_url($page, $query, $category) {
       setStatus(postStatus, '');
     }
 
-    addPost.addEventListener('click', function () {
+    function openPostModal() {
       postModal.hidden = false;
       postTitle.focus();
-    });
+    }
+    addPost.addEventListener('click', openPostModal);
+    if (addPostTop) { addPostTop.addEventListener('click', openPostModal); }
     cancelPost.addEventListener('click', closePostModal);
     postModal.addEventListener('click', function (ev) {
       if (ev.target === postModal) { closePostModal(); }

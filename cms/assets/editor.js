@@ -15,6 +15,11 @@
         if (text != null) el.textContent = text;
         return el;
     }
+    function icon(name) {
+        var el = h('span', 'material-symbols-rounded', name);
+        el.setAttribute('aria-hidden', 'true');
+        return el;
+    }
     function api(action, data, isForm) {
         var opts = { method: 'POST', headers: { 'X-CMS-Token': TOKEN } };
         if (isForm) {
@@ -50,21 +55,27 @@
     /* ---------------------------------------------------------- toolbar */
     function buildToolbar() {
         var bar = h('div', 'cms-toolbar');
-        bar.appendChild(h('span', null, 'CMS • logged in'));
+        var brand = h('span', 'cms-toolbar-brand');
+        brand.appendChild(icon('check'));
+        brand.appendChild(h('span', null, 'Pagecore'));
+        bar.appendChild(brand);
         if (VERSION) {
             bar.appendChild(h('span', 'cms-version', 'Pagecore ' + VERSION));
         }
         var content = h('a', null, 'Content');
+        content.prepend(icon('dashboard'));
         content.href = CONTENT;
         content.target = '_blank';
         content.rel = 'noopener';
         bar.appendChild(content);
         var media = h('a', null, 'Media');
+        media.prepend(icon('photo_library'));
         media.href = MEDIA;
         media.target = '_blank';
         media.rel = 'noopener';
         bar.appendChild(media);
         var out = h('a', null, 'Log out');
+        out.prepend(icon('logout'));
         out.addEventListener('click', function () {
             fetch(API + '?action=logout', { method: 'POST', headers: { 'X-CMS-Token': TOKEN } })
                 .then(function () { location.href = '/'; });
@@ -77,7 +88,8 @@
     function decorateRegions() {
         var regions = document.querySelectorAll('.cms-editable');
         Array.prototype.forEach.call(regions, function (el) {
-            var btn = h('button', 'cms-edit-btn', '✎ Edit');
+            var btn = h('button', 'cms-edit-btn', 'Edit');
+            btn.prepend(icon('edit'));
             btn.type = 'button';
             btn.addEventListener('click', function (ev) {
                 ev.preventDefault(); ev.stopPropagation();
@@ -110,13 +122,19 @@
         var overlay = h('div', 'cms-overlay');
         overlay.addEventListener('click', function () { closeEditor(false); });
 
-        panel = h('div', 'cms-panel');
+        panel = h('div', 'cms-panel ' + (isPost ? 'cms-panel-post' : 'cms-panel-region'));
         panel._overlay = overlay;
         panel._dirty = false;
 
         var head = h('div', 'cms-panel-head');
-        head.appendChild(h('strong', null, 'Edycja: ' + key));
-        var close = h('button', 'cms-panel-close', '×');
+        var titleWrap = h('div', 'cms-panel-title');
+        titleWrap.appendChild(h('span', 'cms-panel-kicker', isPost ? 'Post editor' : 'Page content'));
+        titleWrap.appendChild(h('strong', null, isPost ? 'Edit post' : 'Edit content'));
+        titleWrap.appendChild(h('code', null, key));
+        head.appendChild(titleWrap);
+        var close = h('button', 'cms-panel-close');
+        close.setAttribute('aria-label', 'Close editor');
+        close.appendChild(icon('close'));
         close.type = 'button';
         close.addEventListener('click', function () { closeEditor(false); });
         head.appendChild(close);
@@ -205,6 +223,31 @@
 
         /* markdown editor */
         var area = h('div', 'cms-editor-area');
+        var formatBar = h('div', 'cms-formatbar');
+        [
+            ['format_bold', 'Bold', '**', '**'],
+            ['format_italic', 'Italic', '*', '*'],
+            ['title', 'Heading', '## ', ''],
+            ['format_list_bulleted', 'Bulleted list', '- ', ''],
+            ['link', 'Link', '[', '](url)']
+        ].forEach(function (def) {
+            var format = h('button', 'cms-format-btn');
+            format.type = 'button';
+            format.title = def[1];
+            format.setAttribute('aria-label', def[1]);
+            format.appendChild(icon(def[0]));
+            format.addEventListener('click', function () {
+                var start = ta.selectionStart;
+                var end = ta.selectionEnd;
+                var selected = ta.value.slice(start, end);
+                var replacement = def[2] + selected + def[3];
+                ta.setRangeText(replacement, start, end, 'end');
+                ta.dispatchEvent(new Event('input'));
+                ta.focus();
+            });
+            formatBar.appendChild(format);
+        });
+        area.appendChild(formatBar);
         var ta = h('textarea', 'cms-textarea');
         ta.placeholder = 'Loading…';
         ta.disabled = true;
@@ -214,12 +257,12 @@
             'Paste or drag an image/PDF to upload it.'));
         body.appendChild(area);
 
-        var prevLabel = h('div', 'cms-preview-label', 'Preview');
+        var prevLabel = h('div', 'cms-preview-label cms-content-preview-label', 'Preview');
         var preview = h('div', 'cms-preview');
         body.appendChild(prevLabel);
         body.appendChild(preview);
 
-        var revLabel = h('div', 'cms-preview-label', 'Revisions');
+        var revLabel = h('div', 'cms-preview-label cms-revisions-label', 'Revisions');
         var revisions = h('div', 'cms-revisions', 'Loading revisions…');
         body.appendChild(revLabel);
         body.appendChild(revisions);

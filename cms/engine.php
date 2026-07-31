@@ -20,7 +20,7 @@ if (defined('CMS_LOADED')) { return; }
 define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
-define('PAGECORE_VERSION', '0.1.0');
+define('PAGECORE_VERSION', '2.5');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
@@ -1204,7 +1204,7 @@ function cms_assets() {
     // Load Open Sans with editor assets so in-page authenticated controls match dedicated CMS pages.
     return "\n<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n"
          . "<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n"
-         . "<link href=\"https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap\" rel=\"stylesheet\">\n"
+         . "<link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&display=swap\" rel=\"stylesheet\">\n"
          . "<link rel=\"stylesheet\" href=\"/cms/assets/editor.css\">\n"
          . "<script>window.CMS_CONFIG = $cfg;</script>\n"
          . "<script src=\"/cms/assets/editor.js\" defer></script>\n";
