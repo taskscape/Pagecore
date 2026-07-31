@@ -14,6 +14,7 @@ return array(
     'backup_keep' => 20,
     'site_root' => $root,
     'site_url' => $siteUrl,
+    'site_name' => 'Pagecore Sample',
     'uploads_dir' => $uploads,
     'uploads_url' => '/sample-site/working-uploads',
     'max_upload_mb' => 8,

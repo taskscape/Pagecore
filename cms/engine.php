@@ -575,6 +575,31 @@ function cms_post_url($slug) {
     return str_replace('{slug}', (string) $slug, $pattern);
 }
 
+/** Convert a site-relative public URL to the absolute URL social crawlers need. */
+function cms_absolute_url($url) {
+    $url = trim((string) $url);
+    if ($url === '' || preg_match('~^https?://~i', $url)) { return $url; }
+
+    $site = rtrim((string) cms_cfg('site_url', ''), '/');
+    if ($site === '') { return $url; }
+
+    if (strpos($url, '//') === 0) {
+        $scheme = parse_url($site, PHP_URL_SCHEME);
+        return ($scheme ? $scheme : 'https') . ':' . $url;
+    }
+
+    if (isset($url[0]) && $url[0] === '/') {
+        $scheme = parse_url($site, PHP_URL_SCHEME);
+        $host = parse_url($site, PHP_URL_HOST);
+        $port = parse_url($site, PHP_URL_PORT);
+        if ($scheme && $host) {
+            return $scheme . '://' . $host . ($port ? ':' . $port : '') . $url;
+        }
+    }
+
+    return $site . '/' . ltrim($url, '/');
+}
+
 /**
  * Build the full post list by scanning every Markdown file on disk.
  * This is the source of truth; it is expensive (one read per post) and is
@@ -763,6 +788,8 @@ function cms_post($slug) {
     list($meta, $body) = cms_parse_front_matter(file_get_contents($path));
     $cats = cms_cfg('categories');
     $cat = isset($meta['category']) ? $meta['category'] : '';
+    $excerpt = isset($meta['excerpt']) && trim($meta['excerpt']) !== ''
+             ? trim($meta['excerpt']) : cms_excerpt_from($body);
     return array(
         'slug'           => $slug,
         'title'          => isset($meta['title']) ? $meta['title'] : $slug,
@@ -771,6 +798,7 @@ function cms_post($slug) {
         'category'       => $cat,
         'category_label' => isset($cats[$cat]) ? $cats[$cat][0] : $cat,
         'lead'           => isset($meta['excerpt']) ? $meta['excerpt'] : '',
+        'excerpt'        => $excerpt,
         'image'          => isset($meta['image']) ? $meta['image'] : '',
         'mins'           => cms_reading_minutes($body),
         'tags'           => cms_parse_tags(isset($meta['tags']) ? $meta['tags'] : ''),
@@ -778,6 +806,54 @@ function cms_post($slug) {
         'body_html'      => cms_render_markdown($body),
         'url'            => cms_post_url($slug),
     );
+}
+
+/**
+ * Metadata for rich post previews on Facebook and other Open Graph consumers.
+ * Call this inside <head> after loading a post with cms_post().
+ */
+function cms_post_social_meta(array $post) {
+    $escape = function ($value) {
+        return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+    };
+    $title = isset($post['title']) ? trim($post['title']) : '';
+    $description = isset($post['excerpt']) ? $post['excerpt']
+                 : (isset($post['lead']) ? $post['lead'] : '');
+    $description = html_entity_decode(strip_tags((string) $description), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $description = trim(preg_replace('~\s+~u', ' ', $description));
+    $url = cms_absolute_url(isset($post['url']) ? $post['url'] : '');
+    $image = cms_absolute_url(isset($post['image']) ? $post['image'] : '');
+    $siteName = trim((string) cms_cfg('site_name', ''));
+
+    $tags = array(
+        '<meta name="description" content="' . $escape($description) . '">',
+        '<meta property="og:type" content="article">',
+        '<meta property="og:title" content="' . $escape($title) . '">',
+        '<meta property="og:description" content="' . $escape($description) . '">',
+        '<meta property="og:url" content="' . $escape($url) . '">',
+        '<link rel="canonical" href="' . $escape($url) . '">',
+    );
+    if ($siteName !== '') {
+        $tags[] = '<meta property="og:site_name" content="' . $escape($siteName) . '">';
+    }
+    if ($image !== '') {
+        $tags[] = '<meta property="og:image" content="' . $escape($image) . '">';
+        $tags[] = '<meta property="og:image:alt" content="' . $escape($title) . '">';
+    }
+    if (!empty($post['date'])) {
+        $tags[] = '<meta property="article:published_time" content="' . $escape($post['date']) . '">';
+    }
+    if (!empty($post['category_label'])) {
+        $tags[] = '<meta property="article:section" content="' . $escape($post['category_label']) . '">';
+    }
+    if (!empty($post['tags']) && is_array($post['tags'])) {
+        foreach ($post['tags'] as $tag) {
+            if (!empty($tag['label'])) {
+                $tags[] = '<meta property="article:tag" content="' . $escape($tag['label']) . '">';
+            }
+        }
+    }
+    return implode("\n", $tags) . "\n";
 }
 
 /* -------------------------------------------------------- content / nav */

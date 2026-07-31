@@ -110,6 +110,42 @@ test('showcase demonstrates file-based featured images', async ({ page }) => {
   await expect(page.locator('.article-image[alt="Launch notes for the sample site"]')).toBeVisible();
 });
 
+test('post links expose Facebook-friendly title, summary, canonical URL, and featured image', async ({ page }) => {
+  const baseUrl = process.env.PAGECORE_BASE_URL || 'http://127.0.0.1:8765';
+  await page.goto('/sample-site/post/launch-notes/');
+
+  await expect(page.locator('meta[property="og:type"]')).toHaveAttribute('content', 'article');
+  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', 'Launch notes for the sample site');
+  await expect(page.locator('meta[property="og:description"]')).toHaveAttribute(
+    'content',
+    'The first sample post demonstrates Markdown body editing, excerpts, categories, generated URLs, and listing pages.'
+  );
+  await expect(page.locator('meta[property="og:url"]')).toHaveAttribute('content', `${baseUrl}/sample-site/post/launch-notes/`);
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
+    'content',
+    `${baseUrl}/sample-site/working-uploads/2026/07/featured-pagecore.svg`
+  );
+  await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute('content', 'Launch notes for the sample site');
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+    'content',
+    'The first sample post demonstrates Markdown body editing, excerpts, categories, generated URLs, and listing pages.'
+  );
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${baseUrl}/sample-site/post/launch-notes/`);
+});
+
+test('social summary falls back to post body when no excerpt is authored', async ({ page }) => {
+  const postPath = path.join(workingContent, 'posts', 'summer-maintenance.md');
+  const withoutExcerpt = fs.readFileSync(postPath, 'utf8').replace(/^excerpt:.*\r?\n/m, '');
+  fs.writeFileSync(postPath, withoutExcerpt);
+  await page.goto('/sample-site/post/summer-maintenance/');
+
+  await expect(page.locator('meta[property="og:description"]')).toHaveAttribute(
+    'content',
+    /This event entry demonstrates category filtering and sitemap generation/
+  );
+  await expect(page.locator('meta[property="og:image"]')).toHaveCount(0);
+});
+
 test('published Markdown escapes executable HTML and unsafe links by default', async ({ page }) => {
   await login(page);
 

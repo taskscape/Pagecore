@@ -8,13 +8,14 @@ function sample_url($path = '') {
     return '/sample-site' . $path;
 }
 
-function sample_header($title) {
+function sample_header($title, $head = '') {
 ?><!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?> | Pagecore sample</title>
+  <?= $head ?>
   <link rel="stylesheet" href="/sample-site/assets/site.css">
 </head>
 <body>

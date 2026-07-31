@@ -30,6 +30,9 @@ Paste the output into `password_hash` in `cms/config.php`.
 6. (Optional posts) Put posts in `content/posts/<slug>.md` (front matter:
    `title`, `date`, `category`, optional `excerpt`), render listings with
    `cms_posts('category')`, single posts with `cms_post($slug)` and add
+   `<?= cms_post_social_meta($post) ?>` inside the post template's `<head>` for
+   Facebook/Open Graph previews. The helper uses the featured image and the
+   authored excerpt, falling back to a summary derived from the post body.
    `<?= cms_listing_controls('category') ?>` to listing pages.
    Configure `post_url` with a literal `{slug}` placeholder. `cms_post_url()`
    derives every public URL from the stored slug and repairs malformed legacy
@@ -46,6 +49,7 @@ Paste the output into `password_hash` in `cms/config.php`.
 - Log in → browse the site → hover an outlined fragment → **✎ Edit**.
 - Post metadata includes a featured-image drop area. Drop or choose a JPEG/PNG
   within the configured upload limit; Pagecore uploads it and saves its URL to the post draft automatically.
+  For a crisp Facebook preview, use a landscape image around 1200 x 630 pixels.
 - Markdown with tables; paste or drag images/PDFs straight into the editor.
 - Open **Content** in the toolbar to browse `/cms/content.php`, which lists
   configured pages, editable regions, posts, categories, missing Markdown

@@ -170,6 +170,7 @@ Add `require 'cms/engine.php';` to the site bootstrap, then:
 | `cms_posts('category')` | List posts (newest first) for a listing page — title, date, excerpt, URL. |
 | `cms_post($slug)` | Fetch one post with rendered body for a post template. |
 | `cms_post_url($slug)` | Build a post URL from `post_url`; defensively restores a missing `{slug}` segment. |
+| `cms_post_social_meta($post)` | Emit escaped description, canonical, and Open Graph tags using the post excerpt/body summary and featured image. |
 | `cms_listing_controls('category')` | "Add post" button on listing pages (editors only). |
 | `cms_nav_items()` / `cms_nav_html()` | Read or render the editable navigation tree from `content/nav.json`. |
 | `cms_assets()` | Emit editor CSS/JS before `</body>` (empty for visitors). |

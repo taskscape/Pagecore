@@ -11,7 +11,7 @@ if (!$post) {
     exit;
 }
 
-sample_header($post['title']);
+sample_header($post['title'], cms_post_social_meta($post));
 ?>
 <main>
   <article class="article">
