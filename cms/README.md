@@ -136,9 +136,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Update-Parsedown.ps1
 npm run test:parsedown
 ```
 
-Pass `-DeploymentRoot <site-root>` to synchronize an existing deployment copy
-whose parser is at `<site-root>/cms/lib/Parsedown.php`. Review upstream release
-notes and update the pinned version, tag commit, URL, and checksum together.
+Review upstream release notes and update the pinned version, tag commit, URL,
+and checksum together. Deploy the resulting CMS only through the versioned
+release artifact; individual dependency files are never copied to sites.
+
+## Release and deployment
+
+`npm run release:build` creates `artifacts/pagecore-X.Y.Z.zip` from the tracked
+`cms/`, `content/`, and `uploads/` sources. The archive contains `VERSION` and a
+SHA-256 manifest. Install it with `scripts/Install-PagecoreRelease.ps1`; the
+installer validates every entry, replaces the managed CMS as a unit, preserves
+only site-specific `cms/config.php`, and writes `.pagecore-release.json`.
+Run `scripts/Test-PagecoreDeployment.ps1` after deployment to fail on drift or
+a version mismatch. `npm run release:test` exercises build, install,
+configuration preservation, checksum verification, and drift detection.
 
 ## Requirements
 
@@ -146,8 +157,7 @@ PHP 8.3+ on a supported PHP branch, with `fileinfo` (standard). Production confi
 backups, and uploads must be outside `DOCUMENT_ROOT`; Pagecore fails closed if
 they are not. The bundled PHP router is a loopback-only development facility,
 started through the repository script so its explicit development opt-in and
-denial policy are applied. Its `-HostAddress` option is an explicit override
-for controlled network testing, not a production deployment mode.
+denial policy are applied.
 Production rejects HTTP by default and uses Secure, HttpOnly, SameSite=Lax
 session cookies. Configure only known proxy addresses in `trusted_proxies` when
 TLS is terminated upstream; client-supplied forwarding headers are otherwise

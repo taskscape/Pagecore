@@ -15,6 +15,7 @@ $RECYCLE.BIN/
 node_modules/
 playwright-report/
 test-results/
+artifacts/
 
 ### Pagecore sample site runtime
 sample-site/working-content/

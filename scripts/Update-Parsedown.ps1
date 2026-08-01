@@ -1,7 +1,3 @@
-param(
-    [string[]] $DeploymentRoot = @()
-)
-
 $ErrorActionPreference = 'Stop'
 
 $Version = '1.8.0'
@@ -26,15 +22,6 @@ try {
     Copy-Item -LiteralPath $TemporaryFile -Destination $BaseTarget -Force
     Write-Host "Updated $BaseTarget to Parsedown $Version ($ExpectedSha256)"
 
-    foreach ($root in $DeploymentRoot) {
-        $resolvedRoot = (Resolve-Path -LiteralPath $root).Path
-        $deploymentTarget = Join-Path $resolvedRoot 'cms\lib\Parsedown.php'
-        if (-not (Test-Path -LiteralPath (Split-Path -Parent $deploymentTarget) -PathType Container)) {
-            throw "Deployment CMS library directory not found under $resolvedRoot"
-        }
-        Copy-Item -LiteralPath $TemporaryFile -Destination $deploymentTarget -Force
-        Write-Host "Updated $deploymentTarget to Parsedown $Version ($ExpectedSha256)"
-    }
 } finally {
     if (Test-Path -LiteralPath $TemporaryFile) {
         Remove-Item -LiteralPath $TemporaryFile -Force

@@ -562,6 +562,13 @@ configuration discovers only `tests/migration.spec.js`. Site-specific deployment
 data such as a local `zagozda/` checkout remains ignored and cannot change either
 lane's test discovery.
 
+Build one checksummed deployment archive with `npm run release:build`; verify
+the complete build/install/drift contract with `npm run release:test`. Private
+sites consume that archive through `scripts/Install-PagecoreRelease.ps1` and
+retain only their own `cms/config.php`, templates, and content. The Zagozda
+launcher performs this verified install before it starts, so its ignored
+fixture cannot become a second CMS implementation.
+
 The Playwright config starts the PHP built-in server with `php/php.exe`. Test
 content is reset from `sample-site/fixtures/` into ignored runtime folders
 before each run. The suite covers visitor rendering, drafts, preview, publish,

@@ -6,6 +6,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+if ($HostAddress -notin @('127.0.0.1', '::1')) {
+    throw 'The private migration fixture may bind only to a loopback address.'
+}
+
 $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $SiteRoot = Join-Path $RepoRoot 'zagozda'
 $Router = Join-Path $SiteRoot 'router.php'
@@ -27,6 +31,15 @@ if (-not (Test-Path -LiteralPath $Router -PathType Leaf)) {
 }
 if (-not (Test-Path -LiteralPath $PhpCandidate -PathType Leaf)) {
     throw "PHP executable not found at $PhpCandidate. Set PAGECORE_ZAGOZDA_PHP_EXE to a valid PHP executable."
+}
+
+$releaseDir = Join-Path ([System.IO.Path]::GetTempPath()) ('pagecore-zagozda-release-' + [guid]::NewGuid().ToString('N'))
+try {
+    $release = & (Join-Path $PSScriptRoot 'Build-PagecoreRelease.ps1') -OutputDirectory $releaseDir
+    & (Join-Path $PSScriptRoot 'Install-PagecoreRelease.ps1') -Archive $release.Archive -SiteRoot $SiteRoot
+    & (Join-Path $PSScriptRoot 'Test-PagecoreDeployment.ps1') -SiteRoot $SiteRoot
+} finally {
+    if (Test-Path -LiteralPath $releaseDir) { Remove-Item -LiteralPath $releaseDir -Recurse -Force }
 }
 
 $PhpExe = (Resolve-Path -LiteralPath $PhpCandidate).Path
