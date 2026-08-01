@@ -13,7 +13,7 @@ try {
     }
 } catch (RuntimeException $error) {
     if ($mode === 'development') { throw $error; }
-    if (strpos($error->getMessage(), 'development-only') === false) { throw $error; }
+    if (strpos($error->getMessage(), 'configuration is invalid') === false) { throw $error; }
 }
 
 echo "Demo configuration $mode policy passed.\n";

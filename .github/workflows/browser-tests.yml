@@ -24,6 +24,7 @@ jobs:
           $env:PAGECORE_PHP_EXE = (Get-Command php).Source
           npm run test:concurrency
           npm run test:mutation-operation
+          npm run test:config-schema
           npm run test:e2e
 
   migration-browser-suite:

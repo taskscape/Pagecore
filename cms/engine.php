@@ -21,10 +21,17 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.20.0');
+define('PAGECORE_VERSION', '2.21.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
-$GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
+$cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
+require_once __DIR__ . '/config-schema.php';
+list($cmsConfig, $cmsConfigErrors) = cms_validate_config(require $cmsConfigFile, !$cmsDevelopment);
+if ($cmsConfigErrors) {
+    error_log('Pagecore configuration invalid: ' . implode('; ', $cmsConfigErrors));
+    throw new RuntimeException('Pagecore configuration is invalid. Check the server error log.');
+}
+$GLOBALS['CMS_CONFIG'] = $cmsConfig;
 require_once __DIR__ . '/audit.php';
 require_once __DIR__ . '/transport.php';
 
@@ -59,7 +66,6 @@ function cms_private_storage_violations($documentRoot, $configFile) {
 
 // Demo/local servers opt in explicitly. Production fails closed until secrets,
 // source Markdown, drafts, backups, and uploads are outside the public root.
-$cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
 if (cms_cfg('demo_credentials', false) === true && cms_cfg('development_only', false) !== true) {
     cms_audit_event('config.demo_credentials', 'failure', array('reason' => 'production_profile'));
     throw new RuntimeException('Demo credentials are allowed only in an explicitly development-only Pagecore configuration.');

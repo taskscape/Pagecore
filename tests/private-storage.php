@@ -1,5 +1,7 @@
 <?php
 
+putenv('PAGECORE_DEVELOPMENT=1');
+
 define('CMS_CONFIG_FILE', dirname(__DIR__) . '/sample-site/config.php');
 require dirname(__DIR__) . '/cms/engine.php';
 
