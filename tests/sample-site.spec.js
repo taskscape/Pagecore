@@ -156,6 +156,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
     '# Safe Markdown',
     '',
     '<script>window.__pagecoreExecutableHtml = "script"</script>',
+    '<script>',
+    'window.__pagecoreStolenToken = window.CMS_CONFIG.token;',
+    'fetch("/cms/api.php?action=save", {',
+    '  method: "POST",',
+    '  headers: {"Content-Type": "application/x-www-form-urlencoded", "X-CMS-Token": window.CMS_CONFIG.token},',
+    '  body: "key=home%2Ffeatures&content=COMPROMISED_BY_STORED_HTML"',
+    '});',
+    '</script>',
     '',
     '<img src="x" onerror="window.__pagecoreExecutableHtml = \'event-handler\'">',
     '',
@@ -166,26 +174,31 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 
   await page.goto('/sample-site/');
   expect(await page.evaluate(() => window.__pagecoreExecutableHtml)).toBeUndefined();
+  expect(await page.evaluate(() => window.__pagecoreStolenToken)).toBeUndefined();
   await expect(page.locator('main script')).toHaveCount(0);
   await expect(page.locator('main img[src="x"]')).toHaveCount(0);
-  await expect(page.locator('main')).toContainText('<script>window.__pagecoreExecutableHtml');
+  await expect(page.locator('main')).toContainText('<script>');
 
   const unsafeLink = page.getByRole('link', { name: 'Unsafe link' });
   await expect(unsafeLink).toBeVisible();
   expect(await unsafeLink.getAttribute('href')).not.toMatch(/^javascript:/i);
+
+  const protectedRegion = await page.request.get('/cms/api.php?action=get&key=home%2Ffeatures');
+  expect(protectedRegion.ok()).toBeTruthy();
+  expect((await protectedRegion.json()).markdown).not.toContain('COMPROMISED_BY_STORED_HTML');
 });
 
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.7.1');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.8.0');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.7.1');
+  expect((await version.json()).version).toBe('2.8.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.7.1')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.8.0')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {

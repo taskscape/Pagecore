@@ -20,8 +20,8 @@ Paste the output into `password_hash` in `cms/config.php`.
 
 1. Copy `cms/` next to the site's document-root files.
 2. Edit `cms/config.php` (credentials, categories, `search_pages`, `site_url`).
-   Raw HTML is disabled by default. Set `allow_html => true` only when all
-   Markdown is trusted or has passed through a separate HTML sanitizer.
+   Raw HTML is always escaped; configuration cannot disable safe mode. Convert
+   trusted embeds into template components outside editor-authored Markdown.
 3. Add `require __DIR__ . '/cms/engine.php';` to the site's bootstrap
    (any file included by every page).
 4. Emit `<?= cms_assets() ?>` once before `</body>`.

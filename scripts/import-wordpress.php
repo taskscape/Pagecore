@@ -9,9 +9,8 @@
  * and search pages it discovered.
  *
  * HTML/Gutenberg is converted to Markdown with PHP's built-in DOM extension.
- * Anything it does not recognise (iframes, Twitter/Instagram embeds, <script>,
- * <video>…) is preserved verbatim as raw HTML — Pagecore renders post bodies
- * with allow_html=true, so embeds keep working without a lossy conversion.
+ * The converter emits only its maintained Markdown allowlist. Active elements
+ * are dropped or converted to ordinary links, so imports never require raw HTML.
  *
  * Usage (see --help):
  *   php scripts/import-wordpress.php \
@@ -38,13 +37,15 @@ $opt = array(
     'post-url' => '/post/{slug}/',
     'uploads-url' => '/uploads',
     'copy-uploads' => '1',
+    'self-test-html' => '0',
     'help' => '0',
 );
 foreach (array_slice($argv, 1) as $arg) {
     if ($arg === '--help' || $arg === '-h') { $opt['help'] = '1'; continue; }
+    if ($arg === '--self-test-html') { $opt['self-test-html'] = '1'; continue; }
     if (preg_match('~^--([a-z-]+)=(.*)$~s', $arg, $m)) { $opt[$m[1]] = $m[2]; }
 }
-if ($opt['help'] === '1' || $opt['sql'] === '') {
+if ($opt['help'] === '1' || ($opt['sql'] === '' && $opt['self-test-html'] !== '1')) {
     fwrite(STDOUT, "WordPress -> Pagecore importer\n\n"
         . "Required:\n"
         . "  --sql=PATH             mysqldump .sql file\n"
@@ -56,8 +57,9 @@ if ($opt['help'] === '1' || $opt['sql'] === '') {
         . "  --status=LIST          post statuses to import (default publish)\n"
         . "  --post-url=PATTERN     post URL pattern with {slug} (default /post/{slug}/)\n"
         . "  --uploads-url=PATH     public uploads base (default /uploads)\n"
-        . "  --copy-uploads=0|1     copy referenced media files (default 1)\n");
-    exit($opt['sql'] === '' ? 1 : 0);
+        . "  --copy-uploads=0|1     copy referenced media files (default 1)\n"
+        . "  --self-test-html       run the HTML allowlist regression and exit\n");
+    exit($opt['help'] === '1' ? 0 : 1);
 }
 
 $PREFIX = $opt['table-prefix'];
@@ -69,9 +71,9 @@ $UPLOADS_URL = rtrim($opt['uploads-url'], '/');
 $POST_URL = $opt['post-url'];
 $COPY = $opt['copy-uploads'] === '1' && $UPLOADS_SRC !== '' && $OUT_UPLOADS !== '';
 
-if ($OUT_CONTENT === '') { fwrite(STDERR, "--out-content is required\n"); exit(1); }
-if (!is_file($opt['sql'])) { fwrite(STDERR, "SQL file not found: {$opt['sql']}\n"); exit(1); }
-if (strpos($POST_URL, '{slug}') === false) {
+if ($opt['self-test-html'] !== '1' && $OUT_CONTENT === '') { fwrite(STDERR, "--out-content is required\n"); exit(1); }
+if ($opt['self-test-html'] !== '1' && !is_file($opt['sql'])) { fwrite(STDERR, "SQL file not found: {$opt['sql']}\n"); exit(1); }
+if ($opt['self-test-html'] !== '1' && strpos($POST_URL, '{slug}') === false) {
     fwrite(STDERR, "--post-url must contain the literal {slug} placeholder; quote this argument in PowerShell.\n");
     exit(1);
 }
@@ -206,11 +208,8 @@ class Html2Md {
         return trim($s) . "\n";
     }
 
-    private function raw($node) {
-        return $this->doc->saveHTML($node);
-    }
-
-    private static $RAWTAGS = array('iframe','script','object','embed','video','audio','source','svg','form','noscript');
+    private static $ACTIVE_TAGS = array('iframe','script','object','embed','video','audio','source','svg','form',
+        'input','button','textarea','select','option','style','template','math','noscript');
     private static $BLOCK = array('p','h1','h2','h3','h4','h5','h6','ul','ol','blockquote','figure',
         'table','pre','hr','div','section','article','header','footer','aside','main','figcaption');
 
@@ -235,7 +234,12 @@ class Html2Md {
             }
             if ($child->nodeType !== XML_ELEMENT_NODE) { continue; }
             $tag = strtolower($child->nodeName);
-            if (in_array($tag, self::$RAWTAGS, true)) { $flush(); $out[] = trim($this->raw($child)); continue; }
+            if (in_array($tag, self::$ACTIVE_TAGS, true)) {
+                $flush();
+                $replacement = $this->activeElement($child, $tag);
+                if ($replacement !== '') { $out[] = $replacement; }
+                continue;
+            }
             if (in_array($tag, self::$BLOCK, true)) { $flush(); $b = $this->blockElement($child, $tag); if (trim($b) !== '') { $out[] = trim($b); } continue; }
             // inline element -> accumulate
             $inline .= $this->inline($child);
@@ -258,10 +262,6 @@ class Html2Md {
             case 'ul': case 'ol':
                 return $this->list($node, $tag);
             case 'blockquote':
-                $cls = strtolower($node->getAttribute('class'));
-                if (strpos($cls, 'twitter') !== false || strpos($cls, 'instagram') !== false || strpos($cls, 'tiktok') !== false) {
-                    return trim($this->raw($node));
-                }
                 $inner = $this->block($node);
                 $lines = explode("\n", $inner);
                 foreach ($lines as &$l) { $l = ($l === '') ? '>' : '> ' . $l; }
@@ -282,7 +282,7 @@ class Html2Md {
     }
 
     private function figure($node) {
-        // image (or raw embed) + optional caption
+        // image (or safe embed link) + optional caption
         $parts = array();
         foreach ($node->childNodes as $c) {
             if ($c->nodeType === XML_ELEMENT_NODE) {
@@ -292,7 +292,11 @@ class Html2Md {
                     if ($cap !== '') { $parts[] = '*' . $cap . '*'; }
                     continue;
                 }
-                if (in_array($t, self::$RAWTAGS, true)) { $parts[] = trim($this->raw($c)); continue; }
+                if (in_array($t, self::$ACTIVE_TAGS, true)) {
+                    $replacement = $this->activeElement($c, $t);
+                    if ($replacement !== '') { $parts[] = $replacement; }
+                    continue;
+                }
             }
             $b = trim($this->collapse($this->inline($c)));
             if ($b !== '') { $parts[] = $b; }
@@ -339,7 +343,7 @@ class Html2Md {
         if ($node->nodeType === XML_TEXT_NODE) { return $node->nodeValue; }
         if ($node->nodeType !== XML_ELEMENT_NODE) { return ''; }
         $tag = strtolower($node->nodeName);
-        if (in_array($tag, self::$RAWTAGS, true)) { return $this->raw($node); }
+        if (in_array($tag, self::$ACTIVE_TAGS, true)) { return $this->activeElement($node, $tag); }
         $inner = '';
         foreach ($node->childNodes as $c) { $inner .= $this->inline($c); }
         switch ($tag) {
@@ -352,10 +356,10 @@ class Html2Md {
             case 'br':
                 return "\n";
             case 'a':
-                $href = rewrite_uploads($node->getAttribute('href'));
+                $href = $this->safeUrl(rewrite_uploads($node->getAttribute('href')), true);
                 $t = trim($inner);
                 if ($t === '') { $t = $href; }
-                return '[' . $t . '](' . $href . ')';
+                return $href === '' ? $t : '[' . $t . '](' . $this->markdownUrl($href) . ')';
             case 'img':
                 return $this->image($node);
             case 'figure': case 'p': case 'div': case 'span': case 'section':
@@ -366,17 +370,80 @@ class Html2Md {
     }
 
     private function image($node) {
-        $src = rewrite_uploads($node->getAttribute('src'));
+        $src = $this->safeUrl(rewrite_uploads($node->getAttribute('src')), false);
         $alt = $node->getAttribute('alt');
         if ($alt === '') { $alt = $node->getAttribute('title'); }
         $alt = trim(preg_replace('~\s+~', ' ', $alt));
-        return '![' . $alt . '](' . $src . ')';
+        return $src === '' ? $alt : '![' . $alt . '](' . $this->markdownUrl($src) . ')';
+    }
+
+    private function activeElement($node, $tag) {
+        $url = '';
+        $label = 'Open embedded content';
+        if ($tag === 'script') {
+            $url = $this->safeUrl($node->getAttribute('data-publication'), false);
+            $label = 'Open embedded publication';
+            if ($url === '' && preg_match('~calLink\s*:\s*["\']([A-Za-z0-9/_-]+)["\']~', $node->textContent, $match)) {
+                $url = 'https://cal.com/' . ltrim($match[1], '/');
+                $label = 'Book a meeting';
+            }
+        } elseif ($tag === 'object') {
+            $url = $this->safeUrl(rewrite_uploads($node->getAttribute('data')), false);
+            $label = 'Open document';
+        } elseif (in_array($tag, array('iframe','video','audio','source'), true)) {
+            $url = $this->safeUrl(rewrite_uploads($node->getAttribute('src')), false);
+            $label = $tag === 'iframe' ? 'Open embedded content' : 'Open media';
+        }
+        return $url === '' ? '' : '[' . $label . '](' . $this->markdownUrl($url) . ')';
+    }
+
+    private function safeUrl($url, $allowMailto) {
+        $url = html_entity_decode(trim((string) $url), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if ($url === '' || strpos($url, "\\") !== false || preg_match('~[\x00-\x1F\x7F]~', $url)) { return ''; }
+        if ($url[0] === '/') { return strncmp($url, '//', 2) === 0 ? '' : $url; }
+        if ($url[0] === '#') { return $url; }
+        $parts = parse_url($url);
+        if ($parts === false) { return ''; }
+        if (!isset($parts['scheme'])) {
+            return strpos($url, ':') === false ? $url : '';
+        }
+        $scheme = strtolower($parts['scheme']);
+        if (($scheme === 'http' || $scheme === 'https') && isset($parts['host'])) { return $url; }
+        if ($allowMailto && $scheme === 'mailto' && filter_var(substr($url, 7), FILTER_VALIDATE_EMAIL)) { return $url; }
+        return '';
+    }
+
+    private function markdownUrl($url) {
+        return str_replace(array(' ', '(', ')'), array('%20', '%28', '%29'), $url);
     }
 
     private function collapse($s) {
         // collapse runs of spaces/tabs but keep newlines
         return preg_replace("~[ \t]+~", ' ', $s);
     }
+}
+
+if ($opt['self-test-html'] === '1') {
+    $fixture = '<p>Hello <strong>world</strong>.</p>'
+        . '<script>window.CMS_CONFIG.token</script>'
+        . '<script data-publication="https://view.example.test/publication/" src="https://evil.example/embed.js"></script>'
+        . '<iframe src="https://video.example.test/watch/1" onload="alert(1)"></iframe>'
+        . '<object data="/uploads/document.pdf" type="application/pdf"></object>'
+        . '<a href="javascript:alert(2)" onclick="alert(3)">unsafe link</a>'
+        . '<img src="data:image/svg+xml,evil" onerror="alert(4)" alt="unsafe image">';
+    $rendered = (new Html2Md())->convert($fixture);
+    if (preg_match('~<(?:script|iframe|object|embed|svg|form)\b|javascript:|\son(?:load|error|click)\s*=~i', $rendered)) {
+        fwrite(STDERR, "FAIL: active HTML survived the importer allowlist\n{$rendered}\n");
+        exit(1);
+    }
+    foreach (array('https://view.example.test/publication/', 'https://video.example.test/watch/1', '/uploads/document.pdf') as $safeUrl) {
+        if (strpos($rendered, $safeUrl) === false) {
+            fwrite(STDERR, "FAIL: safe replacement link missing for {$safeUrl}\n{$rendered}\n");
+            exit(1);
+        }
+    }
+    say("PASS: importer HTML allowlist strips active markup and preserves safe replacement links");
+    exit(0);
 }
 
 /* ------------------------------------------------------------------- load */

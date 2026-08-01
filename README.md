@@ -110,9 +110,9 @@ is simply deleting its `.md` file.
 Markdown is rendered server-side with Parsedown, with a few site-friendly
 extras:
 
-- Raw HTML and unsafe Markdown URL schemes are escaped or neutralized by
-  default. `allow_html => true` is an explicit opt-in for content that is
-  trusted or processed by a separate HTML sanitizer.
+- Raw HTML is always escaped and unsafe Markdown URL schemes are neutralized.
+  The WordPress importer converts its maintained safe-tag allowlist to Markdown,
+  turns supported embeds into ordinary links, and discards active markup.
 - `pdf:/uploads/path/file.pdf "Label"` on its own line becomes an embedded PDF
   viewer with a labelled download link.
 - Standalone images are wrapped in `<figure>` for styling.
@@ -476,9 +476,9 @@ Pagecore in-place editing workflow.
   token header.
 - **Path safety** — fragment keys and post slugs are strictly validated and
   resolved inside `content/` only.
-- **Safe Markdown by default** — raw HTML is escaped and unsafe Markdown URL
-  schemes are neutralized. Raw HTML requires an explicit `allow_html => true`
-  opt-in and should only be used with trusted or separately sanitized content.
+- **Safe Markdown boundary** — raw HTML is always escaped and unsafe Markdown
+  URL schemes are neutralized; site configuration cannot disable safe mode.
+  Imported active elements are removed or converted to non-executable links.
 - **Upload validation** — extension allowlist, size limit, server-side MIME
   sniffing (never trusts the client), image integrity check, and rejection of
   SVGs containing scripts or event handlers. Uploaded files get randomized

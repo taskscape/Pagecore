@@ -20,7 +20,7 @@ if (defined('CMS_LOADED')) { return; }
 define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
-define('PAGECORE_VERSION', '2.7.1');
+define('PAGECORE_VERSION', '2.8.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
@@ -435,11 +435,10 @@ function cms_parsedown() {
         require_once CMS_DIR . '/lib/Parsedown.php';
         $pd = new Parsedown();
         $pd->setBreaksEnabled(false);
-        // Editor-authored Markdown is untrusted by default. Parsedown safe
-        // mode escapes raw HTML and also neutralizes unsafe Markdown URLs.
-        // Integrations that have a separate HTML sanitizer can deliberately
-        // restore legacy raw-HTML rendering with allow_html => true.
-        $pd->setSafeMode(!cms_cfg('allow_html', false));
+        // Editor-authored and imported Markdown is always untrusted. Raw HTML
+        // cannot bypass Parsedown's URL and attribute sanitization through a
+        // site-level configuration switch.
+        $pd->setSafeMode(true);
         $pd->setUrlsLinked(false);
     }
     return $pd;
