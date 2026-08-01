@@ -142,7 +142,7 @@ notes and update the pinned version, tag commit, URL, and checksum together.
 
 ## Requirements
 
-PHP 7.4+ with `fileinfo` (standard). Production configuration, content,
+PHP 8.3+ on a supported PHP branch, with `fileinfo` (standard). Production configuration, content,
 backups, and uploads must be outside `DOCUMENT_ROOT`; Pagecore fails closed if
 they are not. The bundled PHP router is a loopback-only development facility,
 started through the repository script so its explicit development opt-in and

@@ -513,7 +513,7 @@ Pagecore in-place editing workflow.
 
 ## Requirements
 
-- PHP **7.4+** (no PHP 8-only syntax); the `fileinfo` extension is used when
+- PHP **8.3+** on a branch still receiving security fixes; the `fileinfo` extension is used when
   present, with a magic-byte fallback otherwise.
 - A PHP-capable web server whose document root contains only public templates
   and `cms/`; private storage must be a sibling or otherwise external path.

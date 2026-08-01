@@ -13,14 +13,15 @@
  * Content lives in content/pages/<page>/<region>.md and
  * content/posts/<slug>.md — the engine never modifies PHP templates.
  *
- * PHP 7.4+ compatible (no PHP 8-only syntax).
+ * PHP 8.3+; the supported-version policy is enforced before bootstrapping.
  */
 
 if (defined('CMS_LOADED')) { return; }
 define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
-define('PAGECORE_VERSION', '2.16.0');
+require_once __DIR__ . '/runtime.php';
+define('PAGECORE_VERSION', '2.16.1');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;

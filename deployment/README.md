@@ -40,3 +40,9 @@ bundled Apache `.htaccess` uses `LimitRequestBody 8912896`; an equivalent Nginx
 deployment should set `client_max_body_size 8704k`. Pagecore repeats the limit
 in the API and independently caps content, navigation, metadata, image
 dimensions, aggregate storage, upload frequency, and inventory/page sizes.
+
+Pagecore supports PHP 8.3, 8.4, and 8.5. The minimum is reviewed at least
+twice yearly against PHP's official support calendar and must be raised before
+that branch reaches end of security support. The runtime guard fails startup
+on older branches, while CI runs lint, policy, and browser lanes on every
+declared supported branch.
