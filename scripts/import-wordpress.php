@@ -513,11 +513,7 @@ say(sprintf('Wrote %d posts (%d tagged), %d public pages, staged %d non-public p
 $menuLabel = '';
 $navItems = \PagecoreWordPressMenu\imported_nav_items($postRows, $meta, $rel, $tt, $terms, $options, $POST_URL, $menuLabel);
 if ($navItems) {
-    $navJson = json_encode($navItems, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if ($navJson === false) {
-        fwrite(STDERR, "Could not encode imported navigation as JSON\n");
-        exit(1);
-    }
+    $navJson = PagecoreJsonPolicy::encodeStrict($navItems, true);
     write_import_file($OUT_CONTENT . '/nav.json', $navJson . "\n");
     say(sprintf('Wrote navigation: %s (%d top-level items)', $menuLabel, count($navItems)));
 } else {
@@ -601,8 +597,7 @@ $manifest = array(
     'counts' => $counts,
     'referenced_uploads' => count($referencedUploads),
 );
-$manifestJson = json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-if ($manifestJson === false) { throw new RuntimeException('could not encode import manifest'); }
+$manifestJson = PagecoreJsonPolicy::encodeStrict($manifest, true);
 write_import_file($OUT_CONTENT . '/import-manifest.json', $manifestJson . "\n");
 say('Wrote config fragment and import manifest in staging.');
 say('Categories used: ' . count($categoriesUsed) . ' | Pages: ' . count($pagesForSearch));

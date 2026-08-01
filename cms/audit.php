@@ -33,8 +33,8 @@ function cms_audit_event($event, $outcome, array $context = array()) {
         if (!preg_match('/^[a-z][a-z0-9_]{0,31}$/', $key) || (!is_scalar($value) && $value !== null)) { continue; }
         $record[$key] = is_string($value) ? substr($value, 0, 128) : $value;
     }
-    $json = json_encode($record, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-    if ($json === false) { return false; }
+    try { $json = PagecoreJsonPolicy::encodeStrict($record); }
+    catch (Throwable $error) { return false; }
 
     $path = cms_cfg('audit_log_path', cms_cfg('content_dir') . '/.state/audit.jsonl');
     $dir = dirname($path);

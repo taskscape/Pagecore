@@ -86,12 +86,13 @@ function cms_login_throttle_transaction($callback) {
         return false;
     }
     rewind($handle);
-    $decoded = json_decode((string) stream_get_contents($handle), true);
-    $state = is_array($decoded) ? $decoded : array();
+    $decoded = PagecoreJsonPolicy::decodeObject((string) stream_get_contents($handle));
+    $state = $decoded->ok ? $decoded->value : array();
     if (!isset($state['sources']) || !is_array($state['sources'])) { $state['sources'] = array(); }
     if (!isset($state['accounts']) || !is_array($state['accounts'])) { $state['accounts'] = array(); }
     $result = call_user_func_array($callback, array(&$state));
-    $json = json_encode($state, JSON_UNESCAPED_SLASHES);
+    try { $json = PagecoreJsonPolicy::encodeStrict($state); }
+    catch (Throwable $error) { $json = false; }
     $written = $json !== false && ftruncate($handle, 0) && rewind($handle)
         && fwrite($handle, $json . "\n") !== false && fflush($handle);
     flock($handle, LOCK_UN);
@@ -205,7 +206,7 @@ function cms_require_auth() {
         cms_audit_event('auth.api', 'failure', array('reason' => 'unauthenticated', 'status' => 401));
         http_response_code(401);
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(array('ok' => false, 'error' => 'Authentication is required.'));
+        echo PagecoreJsonPolicy::encodeStrict(array('ok' => false, 'error' => 'Authentication is required.'));
         exit;
     }
     $sent = isset($_SERVER['HTTP_X_CMS_TOKEN']) ? $_SERVER['HTTP_X_CMS_TOKEN'] : '';
@@ -214,7 +215,7 @@ function cms_require_auth() {
         cms_audit_event('auth.csrf', 'failure', array('reason' => 'invalid_token', 'status' => 403));
         http_response_code(403);
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(array('ok' => false, 'error' => 'Invalid security token.'));
+        echo PagecoreJsonPolicy::encodeStrict(array('ok' => false, 'error' => 'Invalid security token.'));
         exit;
     }
 }

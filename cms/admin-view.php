@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/modules/JsonPolicy.php';
 
 function cms_admin_e($value) {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
@@ -43,8 +44,8 @@ function cms_admin_sidebar($active, $picker = false) {
 }
 
 function cms_admin_client_assets($configName, $config) {
-    $json = json_encode($config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-    if ($json === false) { throw new RuntimeException('Could not encode admin client configuration.'); }
+    try { $json = PagecoreJsonPolicy::encodeStrict($config); }
+    catch (Throwable $error) { throw new RuntimeException('Could not encode admin client configuration.', 0, $error); }
     return '<script nonce="' . cms_admin_e(cms_csp_nonce()) . '">window.' . $configName . ' = ' . $json . ';</script>' . "\n"
         . '<script src="' . cms_admin_e(cms_asset_url('dialog.js')) . '"></script>' . "\n"
         . '<script src="' . cms_admin_e(cms_asset_url('admin-client.js')) . '"></script>';

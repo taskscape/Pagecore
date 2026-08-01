@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.43.0');
+define('PAGECORE_VERSION', '2.44.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
@@ -34,6 +34,7 @@ require_once __DIR__ . '/modules/Routes.php';
 require_once __DIR__ . '/modules/MediaReferences.php';
 require_once __DIR__ . '/modules/TemplateDiscovery.php';
 require_once __DIR__ . '/modules/ContentCache.php';
+require_once __DIR__ . '/modules/JsonPolicy.php';
 require_once __DIR__ . '/modules/OperationalBoundary.php';
 require_once __DIR__ . '/modules/TimePolicy.php';
 require_once __DIR__ . '/modules/SlugPolicy.php';
@@ -455,11 +456,12 @@ function cms_media_meta_path($path) {
 function cms_media_read_meta($path) {
     $metaPath = cms_media_meta_path($path);
     if (!is_file($metaPath)) { return array('alt' => '', 'caption' => ''); }
-    $data = json_decode((string) file_get_contents($metaPath), true);
-    if (!is_array($data)) { return array('alt' => '', 'caption' => ''); }
+    $decoded = PagecoreJsonPolicy::decodeObject((string) file_get_contents($metaPath));
+    if (!$decoded->ok) { return array('alt' => '', 'caption' => ''); }
+    $data = $decoded->value;
     return array(
-        'alt' => isset($data['alt']) ? (string) $data['alt'] : '',
-        'caption' => isset($data['caption']) ? (string) $data['caption'] : '',
+        'alt' => isset($data['alt']) && is_scalar($data['alt']) ? (string) $data['alt'] : '',
+        'caption' => isset($data['caption']) && is_scalar($data['caption']) ? (string) $data['caption'] : '',
     );
 }
 
@@ -468,8 +470,9 @@ function cms_media_write_meta($path, array $meta) {
         'alt' => str_replace(array("\r", "\n"), ' ', isset($meta['alt']) ? (string) $meta['alt'] : ''),
         'caption' => str_replace(array("\r", "\n"), ' ', isset($meta['caption']) ? (string) $meta['caption'] : ''),
     );
-    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
-    return $json !== false && cms_atomic_write(cms_media_meta_path($path), $json . "\n");
+    try { $json = PagecoreJsonPolicy::encodeStrict($data, true); }
+    catch (Throwable $error) { return false; }
+    return cms_atomic_write(cms_media_meta_path($path), $json . "\n");
 }
 
 function cms_media_markdown(array $asset) {
@@ -814,9 +817,8 @@ function cms_posts_from_disk() {
 /** Write the cached posts index; returns the list, or false on a write/encoding failure. */
 function cms_write_posts_index($list = null) {
     if ($list === null) { $list = cms_posts_from_disk(); }
-    $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
-    if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) { $flags |= JSON_INVALID_UTF8_SUBSTITUTE; }
-    $json = json_encode($list, $flags);
+    try { $json = PagecoreJsonPolicy::encodeSubstituting($list); }
+    catch (Throwable $error) { $json = false; }
     if ($json !== false && cms_atomic_write(cms_posts_index_path(), $json)) {
         $manifest = PagecoreContentCache::manifestJson(cms_cfg('content_dir') . '/posts');
         if ($manifest !== false && cms_atomic_write(cms_posts_manifest_path(), $manifest . "\n")) { return $list; }
@@ -867,8 +869,9 @@ function cms_posts($category = null) {
         $cache = false;
         if (cms_posts_index_fresh()) {
             $raw = file_get_contents(cms_posts_index_path());
-            $decoded = json_decode($raw, true);
-            if (is_array($decoded)) {
+            $decodedResult = PagecoreJsonPolicy::decodeList($raw);
+            if ($decodedResult->ok) {
+                $decoded = $decodedResult->value;
                 $valid = true;
                 foreach ($decoded as $cachedPost) {
                     if (!is_array($cachedPost) || !isset($cachedPost['status']) || $cachedPost['status'] !== 'publish') {
@@ -1113,30 +1116,30 @@ function cms_normalize_nav_items($items) {
 function cms_nav_items() {
     $file = cms_nav_file();
     if (is_file($file)) {
-        $data = json_decode((string) file_get_contents($file), true);
-        $items = cms_normalize_nav_items($data);
+        $decoded = PagecoreJsonPolicy::decodeList((string) file_get_contents($file));
+        $items = $decoded->ok ? cms_normalize_nav_items($decoded->value) : null;
         if ($items !== null) { return $items; }
     }
     return cms_default_nav_items();
 }
 
 function cms_nav_json() {
-    return json_encode(cms_nav_items(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    return PagecoreJsonPolicy::encodeStrict(cms_nav_items(), true);
 }
 
 function cms_write_nav_json($raw, &$error = null) {
-    $data = json_decode((string) $raw, true);
-    if (!is_array($data)) {
-        $error = 'Navigation must be a JSON array.';
+    $decoded = PagecoreJsonPolicy::decodeList((string) $raw);
+    if (!$decoded->ok) {
+        $error = 'Navigation must be a valid JSON array.';
         return false;
     }
-    $items = cms_normalize_nav_items($data);
+    $items = cms_normalize_nav_items($decoded->value);
     if ($items === null) {
         $error = 'Navigation JSON is not valid.';
         return false;
     }
-    $json = json_encode($items, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
-    if ($json === false) {
+    try { $json = PagecoreJsonPolicy::encodeStrict($items, true); }
+    catch (Throwable $exception) {
         $error = 'Navigation JSON could not be encoded.';
         return false;
     }
@@ -1193,9 +1196,11 @@ function cms_template_region_keys() {
     if (!is_dir($root)) { return array(); }
     $cachePath = cms_cfg('content_dir') . '/.state/template-regions.json';
     $cacheText = is_file($cachePath) ? file_get_contents($cachePath) : false;
-    $cache = $cacheText !== false ? json_decode((string) $cacheText, true) : array();
-    $result = PagecoreTemplateDiscovery::discover($root, cms_cfg('template_roots', array('')), cms_limit('max_template_files', 1000), is_array($cache) ? $cache : array());
-    $encoded = json_encode($result['cache'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $decodedCache = $cacheText !== false ? PagecoreJsonPolicy::decodeObject((string) $cacheText) : null;
+    $cache = $decodedCache && $decodedCache->ok ? $decodedCache->value : array();
+    $result = PagecoreTemplateDiscovery::discover($root, cms_cfg('template_roots', array('')), cms_limit('max_template_files', 1000), $cache);
+    try { $encoded = PagecoreJsonPolicy::encodeStrict($result['cache']); }
+    catch (Throwable $error) { $encoded = false; }
     if ($encoded !== false && trim((string) $cacheText) !== $encoded) { cms_atomic_write($cachePath, $encoded . "\n"); }
     foreach ($result['diagnostics'] as $diagnostic) { error_log('Pagecore template discovery: ' . $diagnostic); }
     return $result['keys'];
@@ -1422,9 +1427,8 @@ function cms_regenerate_indexes() {
                          'k' => $p['category_label'] !== '' ? $p['category_label'] : 'Post',
                          'e' => $p['excerpt']);
     }
-    $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
-    if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) { $flags |= JSON_INVALID_UTF8_SUBSTITUTE; }
-    $json = json_encode($index, $flags);
+    try { $json = PagecoreJsonPolicy::encodeSubstituting($index); }
+    catch (Throwable $error) { $json = false; }
     if ($json === false) {
         cms_audit_event('index.search', 'failure', array('reason' => 'json_encode'));
         return array('ok' => false, 'error' => 'index_generation_failed', 'artifact' => 'search-index.json');
@@ -1477,7 +1481,7 @@ function cms_assets() {
     if (!cms_is_logged_in()) { return ''; }
     $cats = array();
     foreach (cms_cfg('categories') as $slug => $def) { $cats[] = array($slug, $def[0]); }
-    $cfg = json_encode(array(
+    $cfg = PagecoreJsonPolicy::encodeStrict(array(
         'api'   => cms_admin_url('api.php'),
         'content' => cms_admin_url('content.php'),
         'media' => cms_admin_url('media.php'),
@@ -1487,7 +1491,7 @@ function cms_assets() {
         'maxUploadMb' => cms_cfg('max_upload_mb'),
         'categories' => $cats,
         'version' => cms_version(),
-    ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    ));
     // Load Open Sans with editor assets so in-page authenticated controls match dedicated CMS pages.
     return "\n<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n"
          . "<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n"

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/JsonPolicy.php';
 
 final class PagecoreContentCache {
     /** Return a stable relative-path => mtime:size manifest without reading post bodies. */
@@ -16,7 +17,8 @@ final class PagecoreContentCache {
     }
 
     public static function manifestMatches($json, $postsDirectory) {
-        $stored = json_decode((string) $json, true);
+        $decoded = PagecoreJsonPolicy::decodeObject((string) $json);
+        $stored = $decoded->ok ? $decoded->value : null;
         if (!is_array($stored) || !isset($stored['version'], $stored['files']) || $stored['version'] !== 1 || !is_array($stored['files'])) { return false; }
         $current = self::manifest($postsDirectory);
         return is_array($current) && $stored['files'] === $current;
@@ -25,7 +27,8 @@ final class PagecoreContentCache {
     public static function manifestJson($postsDirectory) {
         $files = self::manifest($postsDirectory);
         if (!is_array($files)) { return false; }
-        return json_encode(array('version' => 1, 'files' => $files), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        try { return PagecoreJsonPolicy::encodeStrict(array('version' => 1, 'files' => $files)); }
+        catch (Throwable $error) { return false; }
     }
 
     public static function renderKey($markdown, $rendererIdentity, $safetyPolicy) {

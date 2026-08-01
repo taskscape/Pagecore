@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/JsonPolicy.php';
 
 final class PagecoreOperationResult {
     public $ok;
@@ -9,13 +10,15 @@ final class PagecoreOperationResult {
 
 final class PagecoreOperationalBoundary {
     private static function diagnostic($operation, $path, $message) {
-        error_log(json_encode(array(
+        $record = array(
             'component' => 'pagecore.filesystem',
             'operation' => preg_replace('/[^a-z0-9._-]/i', '_', (string) $operation),
             'target' => basename((string) $path),
             'target_hash' => hash('sha256', (string) $path),
             'error' => substr((string) $message, 0, 240),
-        ), JSON_UNESCAPED_SLASHES));
+        );
+        try { error_log(PagecoreJsonPolicy::encodeSubstituting($record)); }
+        catch (Throwable $error) { error_log('{"component":"pagecore.filesystem","error":"diagnostic encoding failed"}'); }
     }
 
     private static function capture(callable $callback) {
@@ -62,11 +65,7 @@ final class PagecoreOperationalBoundary {
 final class PagecoreApiBoundary {
     public static function encode($data, &$error = null) {
         try {
-            $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
-            if (defined('JSON_THROW_ON_ERROR')) { $flags |= JSON_THROW_ON_ERROR; }
-            $json = json_encode($data, $flags, 32);
-            if ($json === false) { throw new RuntimeException(json_last_error_msg()); }
-            return $json;
+            return PagecoreJsonPolicy::encodeStrict($data);
         } catch (Throwable $exception) {
             $error = $exception->getMessage();
             return '{"ok":false,"error":"Response encoding failed."}';
@@ -74,12 +73,14 @@ final class PagecoreApiBoundary {
     }
 
     public static function logThrowable($action, Throwable $error) {
-        error_log(json_encode(array(
+        $record = array(
             'component' => 'pagecore.api',
             'action' => preg_replace('/[^a-z0-9-]/i', '_', (string) $action),
             'exception' => get_class($error),
             'message' => substr($error->getMessage(), 0, 240),
             'correlation_id' => function_exists('cms_correlation_id') ? cms_correlation_id() : '',
-        ), JSON_UNESCAPED_SLASHES));
+        );
+        try { error_log(PagecoreJsonPolicy::encodeSubstituting($record)); }
+        catch (Throwable $encodingError) { error_log('{"component":"pagecore.api","error":"diagnostic encoding failed"}'); }
     }
 }

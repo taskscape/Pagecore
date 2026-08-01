@@ -11,6 +11,7 @@ $tests = @(
     'demo-config-policy.php',
     'front-matter.php',
     'input-validation.php',
+    'json-policy.php',
     'login-redirect.php',
     'login-throttle.php',
     'media-references.php',

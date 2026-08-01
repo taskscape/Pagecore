@@ -425,11 +425,13 @@ This was a source review with targeted local checks, not a production penetratio
   - Resolution: One shared policy now defines Latin/Polish transliteration, separate content/tag/filename fallbacks and limits, Windows-reserved names, and length-safe collision suffixes. Runtime post creation, tag parsing, media uploads, and WordPress import all delegate to it; existing safe ASCII slugs remain valid for lookup.
   - Evidence: `npm run test:slug-policy`, importer component contracts, and existing concurrent post-reservation/browser flows cover cross-path parity, Unicode, empty fallbacks, reserved names, maximum lengths, collisions, and legacy addressability.
 
-- [ ] **REF-30 — Make JSON encoding/decoding contracts explicit.**
+- [x] **REF-30 — Make JSON encoding/decoding contracts explicit.**
   - Explanation: JSON is used for API responses, navigation, media metadata, and generated indexes with different flags and inconsistent failure behavior. Invalid UTF-8 may be rejected in some request fields, substituted in indexes, or produce an empty response elsewhere.
   - Justification: [`cms/api.php`](cms/api.php) lines 58-64 echoes `json_encode()` without checking false; [`cms/engine.php`](cms/engine.php) lines 304-321, 637-648, 902-936, and 1232-1239 use different policies.
   - Recommendation: Add JSON helpers with named strict/substitution policies, depth limits, exception or checked-error handling, stable formatting where files are reviewed, and atomic writes. Validate decoded shapes rather than only `is_array()`.
   - Done when: invalid/deep/malformed fixtures have consistent diagnostics, API output is never an empty successful body, and stored JSON formats remain backward-compatible or have an explicit migration.
+  - Resolution: A shared JSON policy now names strict API/stored-file encoding and substitution-tolerant generated-index encoding, caps depth, returns checked decode results, and distinguishes list from object roots. API, navigation, media metadata, caches, indexes, throttles, audit records, admin bootstrap, and imports use these contracts while retaining atomic or locked writes.
+  - Evidence: `npm run test:json-policy`, the 26-process PHP suite, operational-boundary API fallback tests, navigation/browser flows, and importer contracts cover invalid UTF-8, malformed input, excessive depth, root shapes, stable pretty formatting, and non-empty client-safe failures.
 
 ## Existing controls to preserve
 
