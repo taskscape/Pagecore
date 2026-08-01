@@ -148,6 +148,45 @@ test('social summary falls back to post body when no excerpt is authored', async
   await expect(page.locator('meta[property="og:image"]')).toHaveCount(0);
 });
 
+test('non-public posts stay out of every anonymous surface but remain editor-reviewable', async ({ browser }) => {
+  const anonymous = await browser.newContext();
+  const anonymousPage = await anonymous.newPage();
+  try {
+    for (const post of [
+      { slug: 'private-editor-note', title: 'Private editor note' },
+      { slug: 'draft-editor-note', title: 'Draft editor note' }
+    ]) {
+      const direct = await anonymousPage.request.get(`/sample-site/post/${post.slug}/`);
+      expect(direct.status()).toBe(404);
+
+      await anonymousPage.goto('/sample-site/news/');
+      await expect(anonymousPage.getByRole('link', { name: post.title })).toHaveCount(0);
+
+      await anonymousPage.goto(`/sample-site/search/?q=${encodeURIComponent(post.title)}`);
+      await expect(anonymousPage.getByRole('link', { name: post.title })).toHaveCount(0);
+
+      const searchIndex = await anonymousPage.request.get('/sample-site/search-index.json');
+      expect(await searchIndex.text()).not.toContain(post.slug);
+      const sitemap = await anonymousPage.request.get('/sample-site/sitemap.xml');
+      expect(await sitemap.text()).not.toContain(post.slug);
+    }
+  } finally {
+    await anonymous.close();
+  }
+
+  const editor = await browser.newContext();
+  const editorPage = await editor.newPage();
+  try {
+    await login(editorPage, '/sample-site/post/private-editor-note/');
+    await expect(editorPage.getByRole('heading', { level: 1, name: 'Private editor note' })).toBeVisible();
+    const draft = await editorPage.goto('/sample-site/post/draft-editor-note/');
+    expect(draft.ok()).toBeTruthy();
+    await expect(editorPage.getByRole('heading', { level: 1, name: 'Draft editor note' })).toBeVisible();
+  } finally {
+    await editor.close();
+  }
+});
+
 test('published Markdown escapes executable HTML and unsafe links by default', async ({ page }) => {
   await login(page);
 
@@ -191,14 +230,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.9.0');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.10.0');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.9.0');
+  expect((await version.json()).version).toBe('2.10.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.9.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.10.0')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {

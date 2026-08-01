@@ -357,7 +357,7 @@ metadata plus editable body.
 require __DIR__ . '/cms/engine.php';
 
 $slug = isset($_GET['slug']) ? $_GET['slug'] : '';
-$post = cms_post($slug);
+$post = cms_post($slug, cms_is_logged_in());
 if (!$post) {
     http_response_code(404);
     echo 'Post not found';
@@ -390,7 +390,10 @@ if (!$post) {
 
 The special key `post:<slug>` edits the Markdown body inside
 `content/posts/<slug>.md`. Post detail templates render `body_html` for
-visitors, and add the `cms-editable` wrapper only for logged-in editors. The
+visitors, and add the `cms-editable` wrapper only for logged-in editors. Passing
+`cms_is_logged_in()` as the second argument also gives an authenticated editor
+an intentional review route for imported non-public posts. Anonymous requests
+receive no post for any front-matter `status` other than `publish`. The
 editor panel also exposes post metadata: title, date, category and optional
 excerpt.
 
@@ -412,6 +415,7 @@ title: Existing announcement
 date: 2026-06-15
 category: news
 excerpt: Optional summary shown on listing pages.
+status: publish
 ---
 Full post body in Markdown.
 ```
@@ -424,6 +428,15 @@ content/posts/existing-announcement.md
 
 The listing page is sorted newest first by `date`. If `excerpt` is omitted,
 Pagecore derives one from the post body.
+
+Missing `status` is treated as `publish` for existing content. `private`,
+`draft`, and other values are excluded from listings, tags, search indexes,
+sitemaps, and anonymous detail routes. The WordPress importer defaults to
+`--status=publish`; requesting additional states requires the explicit
+`--include-non-public=1` acknowledgement. Non-public imported posts remain in
+`content/posts/` for authenticated review, while non-public imported pages are
+staged under `content/.drafts/imported-pages/` and never added to public search
+configuration or navigation.
 
 ### 7. Configure search and sitemap inputs
 

@@ -20,7 +20,7 @@ if (defined('CMS_LOADED')) { return; }
 define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
-define('PAGECORE_VERSION', '2.9.0');
+define('PAGECORE_VERSION', '2.10.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
@@ -613,6 +613,7 @@ function cms_posts_from_disk() {
     foreach (glob(cms_cfg('content_dir') . '/posts/*.md') as $file) {
         $slug = basename($file, '.md');
         list($meta, $body) = cms_parse_front_matter(file_get_contents($file));
+        if (!cms_post_status_is_public(isset($meta['status']) ? $meta['status'] : 'publish')) { continue; }
         $cat = isset($meta['category']) ? $meta['category'] : '';
         $list[] = array(
             'slug'           => $slug,
@@ -627,6 +628,7 @@ function cms_posts_from_disk() {
             'mins'           => cms_reading_minutes($body),
             'tags'           => cms_parse_tags(isset($meta['tags']) ? $meta['tags'] : ''),
             'url'            => cms_post_url($slug),
+            'status'         => 'publish',
         );
     }
     usort($list, function ($a, $b) {
@@ -681,7 +683,16 @@ function cms_posts($category = null) {
         if (cms_posts_index_fresh()) {
             $raw = file_get_contents(cms_posts_index_path());
             $decoded = json_decode($raw, true);
-            if (is_array($decoded)) { $cache = $decoded; }
+            if (is_array($decoded)) {
+                $valid = true;
+                foreach ($decoded as $cachedPost) {
+                    if (!is_array($cachedPost) || !isset($cachedPost['status']) || $cachedPost['status'] !== 'publish') {
+                        $valid = false;
+                        break;
+                    }
+                }
+                if ($valid) { $cache = $decoded; }
+            }
         }
         if ($cache === false) {
             $cache = cms_write_posts_index(cms_posts_from_disk());
@@ -783,11 +794,18 @@ function cms_tag_label($slug) {
     return isset($tags[$slug]) ? $tags[$slug]['label'] : $slug;
 }
 
-/** One post with rendered body; null when unknown. */
-function cms_post($slug) {
+/** Only the canonical WordPress/Pagecore `publish` state is publicly visible. */
+function cms_post_status_is_public($status) {
+    return strtolower(trim((string) $status)) === 'publish';
+}
+
+/** One post with rendered body; null when unknown or not publicly visible. */
+function cms_post($slug, $includeNonPublic = false) {
     $path = cms_post_path($slug, true);
     if (!$path) { return null; }
     list($meta, $body) = cms_parse_front_matter(file_get_contents($path));
+    $status = isset($meta['status']) ? strtolower(trim($meta['status'])) : 'publish';
+    if (!$includeNonPublic && !cms_post_status_is_public($status)) { return null; }
     $cats = cms_cfg('categories');
     $cat = isset($meta['category']) ? $meta['category'] : '';
     $excerpt = isset($meta['excerpt']) && trim($meta['excerpt']) !== ''
@@ -807,6 +825,7 @@ function cms_post($slug) {
         'body_md'        => $body,
         'body_html'      => cms_render_markdown($body),
         'url'            => cms_post_url($slug),
+        'status'         => $status,
     );
 }
 

@@ -12,14 +12,16 @@ function readPostFixture(fileName) {
   }
   return {
     slug: path.basename(fileName, '.md'),
-    title: title[1].trim()
+    title: title[1].trim(),
+    status: (source.match(/^status:\s*(.+)$/m) || [null, 'publish'])[1].trim()
   };
 }
 
 test('migration output contract keeps post slugs unique and directly routeable', async ({ page }) => {
   const posts = fs.readdirSync(path.join(fixtureRoot, 'posts'))
     .filter(fileName => fileName.endsWith('.md'))
-    .map(readPostFixture);
+    .map(readPostFixture)
+    .filter(post => post.status === 'publish');
 
   expect(posts.length).toBeGreaterThan(0);
   expect(new Set(posts.map(post => post.slug)).size).toBe(posts.length);
@@ -28,6 +30,40 @@ test('migration output contract keeps post slugs unique and directly routeable',
     const response = await page.goto(`/sample-site/post/${post.slug}/`);
     expect(response.ok()).toBeTruthy();
     await expect(page.getByRole('heading', { level: 1, name: post.title, exact: true })).toBeVisible();
+  }
+});
+
+test('migration output keeps non-public posts anonymous-inaccessible and editor-reviewable', async ({ browser }) => {
+  const posts = fs.readdirSync(path.join(fixtureRoot, 'posts'))
+    .filter(fileName => fileName.endsWith('.md'))
+    .map(readPostFixture)
+    .filter(post => post.status !== 'publish');
+  expect(posts.length).toBeGreaterThan(0);
+
+  const anonymous = await browser.newContext();
+  try {
+    for (const post of posts) {
+      const response = await anonymous.request.get(`/sample-site/post/${post.slug}/`);
+      expect(response.status()).toBe(404);
+    }
+  } finally {
+    await anonymous.close();
+  }
+
+  const editor = await browser.newContext();
+  const page = await editor.newPage();
+  try {
+    await page.goto('/cms/login.php?next=%2Fsample-site%2F');
+    await page.getByLabel('Username').fill('admin');
+    await page.getByLabel('Password').fill('pagecore-demo');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    for (const post of posts) {
+      const response = await page.goto(`/sample-site/post/${post.slug}/`);
+      expect(response.ok()).toBeTruthy();
+      await expect(page.getByRole('heading', { level: 1, name: post.title, exact: true })).toBeVisible();
+    }
+  } finally {
+    await editor.close();
   }
 });
 

@@ -1,0 +1,3 @@
+INSERT INTO `wp_posts` VALUES (1,1,'2026-01-01 00:00:00','2026-01-01 00:00:00','Public body','Public post','','publish','closed','closed','','public-post','','','2026-01-01 00:00:00','2026-01-01 00:00:00','',0,'https://example.test/?p=1',0,'post','',0),
+(2,1,'2026-01-02 00:00:00','2026-01-02 00:00:00','Private body','Private post','','private','closed','closed','','private-post','','','2026-01-02 00:00:00','2026-01-02 00:00:00','',0,'https://example.test/?p=2',0,'post','',0),
+(3,1,'2026-01-03 00:00:00','2026-01-03 00:00:00','Draft page body','Draft page','','draft','closed','closed','','draft-page','','','2026-01-03 00:00:00','2026-01-03 00:00:00','',0,'https://example.test/?page_id=3',0,'page','',0);

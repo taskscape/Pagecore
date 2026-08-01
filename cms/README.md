@@ -113,6 +113,12 @@ from the browser, open the fragment and click **Restore** next to the backup
 you want. Manual restore is still just copying a backup file back over the live
 file.
 
+Imported post visibility is controlled by the front-matter `status` field.
+Only `publish` (or an omitted status for legacy files) is public; every other
+value is excluded from listings, tags, search, sitemap, and anonymous detail
+routes. A detail template may call `cms_post($slug, cms_is_logged_in())` to let
+an authenticated editor review those files deliberately.
+
 ## Deleting a post
 
 In **Content inventory**, click **Delete** beside the post's **Edit** and

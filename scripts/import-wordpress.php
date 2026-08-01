@@ -19,7 +19,7 @@
  *     --out-content=C:/Projects/Pagecore/zagozda/content \
  *     --out-uploads=C:/Projects/Pagecore/zagozda/uploads \
  *     --table-prefix=zagozda_ \
- *     --status=publish,private \
+ *     --status=publish,private --include-non-public=1 \
  *     --post-url=/post/{slug}/
  */
 
@@ -34,6 +34,7 @@ $opt = array(
     'out-uploads' => '',
     'table-prefix' => 'wp_',
     'status' => 'publish',
+    'include-non-public' => '0',
     'post-url' => '/post/{slug}/',
     'uploads-url' => '/uploads',
     'copy-uploads' => '1',
@@ -55,6 +56,7 @@ if ($opt['help'] === '1' || ($opt['sql'] === '' && $opt['self-test-html'] !== '1
         . "  --out-uploads=DIR      target uploads/ dir\n"
         . "  --table-prefix=STR     DB table prefix (default wp_)\n"
         . "  --status=LIST          post statuses to import (default publish)\n"
+        . "  --include-non-public=1 acknowledge importing non-public posts into editor-only storage\n"
         . "  --post-url=PATTERN     post URL pattern with {slug} (default /post/{slug}/)\n"
         . "  --uploads-url=PATH     public uploads base (default /uploads)\n"
         . "  --copy-uploads=0|1     copy referenced media files (default 1)\n"
@@ -422,6 +424,14 @@ class Html2Md {
         return preg_replace("~[ \t]+~", ' ', $s);
     }
 }
+if ($opt['self-test-html'] !== '1') {
+    foreach ($STATUSES as $requestedStatus) {
+        if ($requestedStatus !== 'publish' && $opt['include-non-public'] !== '1') {
+            fwrite(STDERR, "Non-public status '$requestedStatus' requires --include-non-public=1.\n");
+            exit(1);
+        }
+    }
+}
 
 if ($opt['self-test-html'] === '1') {
     $fixture = '<p>Hello <strong>world</strong>.</p>'
@@ -589,6 +599,7 @@ function menu_content_objects(array $postRows, $postUrl) {
         if (count($f) < 21) { continue; }
         $type = sql_val($f[20]);
         if ($type !== 'post' && $type !== 'page') { continue; }
+        if (sql_val($f[7]) !== 'publish') { continue; }
         $id = (string) sql_val($f[0]);
         $slug = trim((string) sql_val($f[11]));
         if ($slug === '') { continue; }
@@ -668,7 +679,9 @@ function imported_nav_items(array $postRows, array $meta, array $rel, array $tt,
 
         if ($type === 'custom') {
             $url = isset($m['_menu_item_url']) ? menu_internal_url($m['_menu_item_url'], $siteUrls) : '#';
-        } elseif ($type === 'post_type' && isset($objects[$objectId])) {
+        } elseif ($type === 'post_type') {
+            // Never retain menu entries for draft/private content.
+            if (!isset($objects[$objectId])) { continue; }
             $url = $objects[$objectId]['url'];
             if ($label === '') { $label = $objects[$objectId]['title']; }
         } elseif ($type === 'taxonomy' && isset($terms[$objectId])) {
@@ -719,7 +732,7 @@ $referencedUploads = array(); // uploads-relative path => true
 $unsafeUploadRefs = 0;
 $categoriesUsed = array();    // slug => name
 $pagesForSearch = array();    // url => [title, 'Page', region]
-$counts = array('post' => 0, 'page' => 0, 'skipped_status' => 0, 'skipped_empty_slug' => 0);
+$counts = array('post' => 0, 'page' => 0, 'staged_page' => 0, 'skipped_status' => 0, 'skipped_empty_slug' => 0);
 $slugSeen = array();
 
 function unique_slug($slug, &$seen) {
@@ -780,6 +793,14 @@ foreach ($postRows as $r) {
 
     if ($type === 'page') {
         $slug = unique_slug($slug, $slugSeen);
+        if ($status !== 'publish') {
+            $reviewDir = $OUT_CONTENT . '/.drafts/imported-pages/' . $slug;
+            ensure_dir($reviewDir);
+            file_put_contents($reviewDir . '/body.md', $bodyMd);
+            file_put_contents($reviewDir . '/status.txt', fm_escape($status) . "\n");
+            $counts['staged_page']++;
+            continue;
+        }
         $regionDir = $OUT_CONTENT . '/pages/' . $slug;
         ensure_dir($regionDir);
         file_put_contents($regionDir . '/body.md', $bodyMd);
@@ -822,8 +843,8 @@ foreach ($postRows as $r) {
     if ($counts['post'] % 250 === 0) { say('  ...' . $counts['post'] . ' posts'); }
 }
 
-say(sprintf('Wrote %d posts (%d tagged), %d pages (skipped %d by status).',
-    $counts['post'], isset($counts['tagged']) ? $counts['tagged'] : 0, $counts['page'], $counts['skipped_status']));
+say(sprintf('Wrote %d posts (%d tagged), %d public pages, staged %d non-public pages for review (skipped %d by status).',
+    $counts['post'], isset($counts['tagged']) ? $counts['tagged'] : 0, $counts['page'], $counts['staged_page'], $counts['skipped_status']));
 
 $menuLabel = '';
 $navItems = imported_nav_items($postRows, $meta, $rel, $tt, $terms, $options, $POST_URL, $menuLabel);

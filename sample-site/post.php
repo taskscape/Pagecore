@@ -2,7 +2,7 @@
 require __DIR__ . '/_bootstrap.php';
 
 $slug = isset($_GET['slug']) ? $_GET['slug'] : '';
-$post = cms_post($slug);
+$post = cms_post($slug, cms_is_logged_in());
 if (!$post) {
     http_response_code(404);
     sample_header('Post not found');
