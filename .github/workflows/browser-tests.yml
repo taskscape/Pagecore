@@ -25,6 +25,7 @@ jobs:
           npm run test:concurrency
           npm run test:mutation-operation
           npm run test:config-schema
+          npm run test:modules
           npm run test:e2e
 
   migration-browser-suite:

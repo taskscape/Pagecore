@@ -44,7 +44,8 @@ foreach ($cases as $name => $case) {
 }
 
 $engine = file_get_contents(dirname(__DIR__) . '/cms/engine.php');
-check_schema(strpos($engine, "require_once __DIR__ . '/config-schema.php'") < strpos($engine, 'session_start()'), 'Schema validation must run before session startup.');
+$schemaLoad = strpos($engine, "require_once __DIR__ . '/config-schema.php'");
+check_schema($schemaLoad < strpos($engine, 'PagecoreSessionContext::start'), 'Schema validation must run before session startup.');
 check_schema(strpos($engine, "require_once __DIR__ . '/config-schema.php'") < strpos($engine, "require_once __DIR__ . '/audit.php'"), 'Schema validation must run before runtime logging or writes.');
 
 if ($failures) { fwrite(STDERR, implode(PHP_EOL, $failures) . PHP_EOL); exit(1); }

@@ -1,6 +1,6 @@
 {
   "name": "pagecore",
-  "version": "2.21.0",
+  "version": "2.22.0",
   "private": true,
   "description": "Pagecore CMS sample site and end-to-end tests.",
   "scripts": {
@@ -22,6 +22,7 @@
     "test:concurrency": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-Concurrency.ps1",
     "test:mutation-operation": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-MutationOperation.ps1",
     "test:config-schema": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-ConfigSchema.ps1",
+    "test:modules": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-Modules.ps1",
     "release:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Build-PagecoreRelease.ps1",
     "release:test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-ReleaseArtifact.ps1"
   },

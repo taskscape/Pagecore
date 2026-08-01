@@ -239,11 +239,13 @@ This was a source review with targeted local checks, not a production penetratio
 
 ### Priority 2 — separate responsibilities and remove correctness traps
 
-- [ ] **REF-07 — Split `cms/engine.php` into cohesive modules while retaining a simple public facade.**
+- [x] **REF-07 — Split `cms/engine.php` into cohesive modules while retaining a simple public facade.**
   - Explanation: One file contains bootstrap/config, sessions, path resolution, filesystem writes, backup/revision logic, media, Markdown, posts/tags, navigation, inventory, index generation, and HTML asset generation. Changes in one concern require loading and reasoning about all concerns.
   - Justification: [`cms/engine.php`](cms/engine.php) is approximately 1,287 physical lines in the current snapshot and defines the entire global API. It also makes pure logic difficult to test without loading config and global state.
   - Recommendation: Extract internal modules for configuration, paths/storage, rendering, posts, media, navigation, indexing, and session context. Preserve current `cms_*` functions as a compatibility facade during migration so existing sites do not break.
   - Done when: responsibilities have explicit dependencies, pure modules can be unit-tested without a web request, the facade preserves documented behavior, and no circular bootstrap loading is introduced.
+  - Resolution: 2026-08-01 — Kept every documented `cms_*` entry point in `engine.php` while extracting configuration validation, platform path policy, session lifecycle, and pure content visibility/pagination into dependency-light modules. The module contract explicitly prohibits loading the facade or other modules, while bootstrap injects validated configuration and transport into session context.
+  - Evidence: `npm run test:modules` loads the extracted modules without configuration or a web request and verifies containment boundaries, visibility, and pagination. Existing schema/bootstrap tests and the browser facade/version checks passed with the new one-way load graph; `cms/modules/README.md` records dependency ownership and compatibility rules.
 
 - [ ] **REF-08 — Replace the 600-line API switch with a method-aware action registry and handlers.**
   - Explanation: Routing, authentication, request extraction, validation, domain logic, filesystem work, and response serialization are interleaved in one switch. This caused method ambiguity and duplicated save/publish logic.

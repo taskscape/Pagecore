@@ -21,11 +21,14 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.21.0');
+define('PAGECORE_VERSION', '2.22.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
 require_once __DIR__ . '/config-schema.php';
+require_once __DIR__ . '/modules/PathPolicy.php';
+require_once __DIR__ . '/modules/SessionContext.php';
+require_once __DIR__ . '/modules/ContentPolicy.php';
 list($cmsConfig, $cmsConfigErrors) = cms_validate_config(require $cmsConfigFile, !$cmsDevelopment);
 if ($cmsConfigErrors) {
     error_log('Pagecore configuration invalid: ' . implode('; ', $cmsConfigErrors));
@@ -37,15 +40,7 @@ require_once __DIR__ . '/transport.php';
 
 /** True when a path is the root itself or is nested below it. */
 function cms_path_within_root($path, $root) {
-    $path = realpath($path) ?: $path;
-    $root = realpath($root) ?: $root;
-    $path = rtrim(str_replace('\\', '/', (string) $path), '/');
-    $root = rtrim(str_replace('\\', '/', (string) $root), '/');
-    if (DIRECTORY_SEPARATOR === '\\') {
-        $path = strtolower($path);
-        $root = strtolower($root);
-    }
-    return $path === $root || strpos($path, $root . '/') === 0;
+    return PagecorePathPolicy::isWithin($path, $root);
 }
 
 /** List security-sensitive storage paths that remain inside the document root. */
@@ -138,28 +133,7 @@ function cms_send_security_headers() {
 cms_send_security_headers();
 
 /* ---------------------------------------------------------------- session */
-if (session_status() === PHP_SESSION_NONE && PHP_SAPI !== 'cli') {
-    session_name(cms_cfg('session_name'));
-    session_set_cookie_params(array(
-        'lifetime' => 0,
-        'path'     => '/',
-        'secure'   => $cmsTransport['cookie_secure'],
-        'httponly' => true,
-        'samesite' => 'Lax',
-    ));
-    ini_set('session.use_strict_mode', '1');
-    ini_set('session.use_only_cookies', '1');
-    ini_set('session.use_trans_sid', '0');
-    session_start();
-
-    // absolute session lifetime
-    if (!empty($_SESSION['cms_auth'])) {
-        $maxAge = cms_cfg('session_hours') * 3600;
-        if (empty($_SESSION['cms_auth_at']) || time() - $_SESSION['cms_auth_at'] > $maxAge) {
-            unset($_SESSION['cms_auth'], $_SESSION['cms_auth_at'], $_SESSION['cms_csrf']);
-        }
-    }
-}
+PagecoreSessionContext::start($GLOBALS['CMS_CONFIG'], $cmsTransport);
 
 /* ----------------------------------------------------------------- config */
 function cms_cfg($key, $default = null) {
@@ -971,22 +945,7 @@ function cms_posts($category = null) {
  * Page numbers are 1-based and clamped into range.
  */
 function cms_paginate(array $all, $page = 1, $per_page = 10) {
-    $total = count($all);
-    $per_page = max(1, (int) $per_page);
-    $pages = (int) max(1, ceil($total / $per_page));
-    $page = (int) $page;
-    if ($page < 1) { $page = 1; }
-    if ($page > $pages) { $page = $pages; }
-    $offset = ($page - 1) * $per_page;
-    return array(
-        'items'    => array_slice($all, $offset, $per_page),
-        'total'    => $total,
-        'page'     => $page,
-        'per_page' => $per_page,
-        'pages'    => $pages,
-        'has_prev' => $page > 1,
-        'has_next' => $page < $pages,
-    );
+    return PagecoreContentPolicy::page($all, $page, $per_page);
 }
 
 function cms_posts_page($category = null, $page = 1, $per_page = 10) {
@@ -1051,7 +1010,7 @@ function cms_tag_label($slug) {
 
 /** Only the canonical WordPress/Pagecore `publish` state is publicly visible. */
 function cms_post_status_is_public($status) {
-    return strtolower(trim((string) $status)) === 'publish';
+    return PagecoreContentPolicy::isPublicStatus($status);
 }
 
 /** One post with rendered body; null when unknown or not publicly visible. */
