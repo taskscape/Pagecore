@@ -327,11 +327,13 @@ This was a source review with targeted local checks, not a production penetratio
   - Resolution: 2026-08-01 — Retained the bounded server-side media pagination and replaced substring scans with exact Markdown/image/PDF destination parsing plus configurable static references. Added a read-only impact endpoint used before UI deletion. Upload names now use 128-bit randomness with exclusive reservation, and file/metadata creation and deletion retain cleanup or snapshot rollback on every partial failure.
   - Evidence: `npm run test:media-references` covers exact Markdown and PDF references, substring false positives, and undeclared plain text. API registry and browser media tests cover pagination, impact preflight, metadata updates, uploads, referenced-file rejection, and deletion cleanup under the existing quota limits.
 
-- [ ] **REF-18 — Bound and cache content inventory/template discovery.**
+- [x] **REF-18 — Bound and cache content inventory/template discovery.**
   - Explanation: Opening inventory recursively scans the site root for every PHP file and parses source with regular expressions. Unreadable directories can throw iterator exceptions, and a large document root makes an admin page unexpectedly expensive.
   - Justification: [`cms/engine.php`](cms/engine.php) lines 982-1017 scans the entire configured `site_root`; lines 1034-1148 combines that work with all-post filtering/counting. Similar recursive iterators are used for media and references without a shared error boundary.
   - Recommendation: Cache discovered region keys by template path+mtime or use an explicit template manifest, cap scan roots, handle unreadable paths deterministically, and separate summary counts from paged data.
   - Done when: inventory work is bounded on a large fixture, cached results invalidate correctly, unreadable directories produce a diagnostic instead of a fatal page, and missing-region discovery remains accurate.
+  - Resolution: Template discovery now accepts explicit relative file/directory roots, enforces a configured PHP-file cap, skips links, catches traversal failures, and caches each file's discovered keys by relative path, mtime, and size. Inventory continues to calculate category/filter summaries from the bounded full set before slicing the requested page.
+  - Evidence: `npm run test:template-discovery`, `npm run test:config-schema`, and the content-inventory browser scenario cover cache stability/invalidation, bounded large fixtures, diagnostics, missing-region discovery, and paged summaries.
 
 - [ ] **REF-19 — Make index freshness correct for external edits and add an optional rendered-content cache.**
   - Explanation: Posts-index freshness checks only the posts directory mtime; editing an existing file over FTP/SSH may not update that directory, so stale metadata/search persists until manual reindex. Every public request also re-renders Markdown, increasing cost and exposure to parser worst cases.

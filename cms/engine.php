@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.31.0');
+define('PAGECORE_VERSION', '2.32.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
@@ -32,6 +32,7 @@ require_once __DIR__ . '/modules/ContentPolicy.php';
 require_once __DIR__ . '/modules/FrontMatter.php';
 require_once __DIR__ . '/modules/Routes.php';
 require_once __DIR__ . '/modules/MediaReferences.php';
+require_once __DIR__ . '/modules/TemplateDiscovery.php';
 list($cmsConfig, $cmsConfigErrors) = cms_validate_config(require $cmsConfigFile, !$cmsDevelopment);
 if ($cmsConfigErrors) {
     error_log('Pagecore configuration invalid: ' . implode('; ', $cmsConfigErrors));
@@ -1163,40 +1164,14 @@ function cms_region_files() {
 function cms_template_region_keys() {
     $root = cms_cfg('site_root');
     if (!is_dir($root)) { return array(); }
-    $skip = array(
-        '.git' => true,
-        'cms' => true,
-        'content' => true,
-        'uploads' => true,
-        'working-content' => true,
-        'working-uploads' => true,
-        'fixtures' => true,
-        'node_modules' => true,
-        'vendor' => true,
-        'playwright-report' => true,
-        'test-results' => true,
-    );
-    $keys = array();
-    $limit = cms_limit('max_inventory_items', 5000);
-    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
-    foreach ($it as $file) {
-        if (!$file->isFile() || strtolower($file->getExtension()) !== 'php') { continue; }
-        $rel = cms_content_rel_path($file->getPathname(), $root);
-        if ($rel === null) { continue; }
-        $parts = explode('/', str_replace('\\', '/', $rel));
-        if (isset($skip[$parts[0]])) { continue; }
-        $src = (string) file_get_contents($file->getPathname());
-        if (preg_match_all('~cms_editable\(\s*[\'"]([a-z0-9-]+(?:/[a-z0-9-]+){0,2})[\'"]~', $src, $m)) {
-            foreach ($m[1] as $key) { $keys[$key] = true; }
-        }
-        if (preg_match_all('~data-cms-key\s*=\s*[\'"]([a-z0-9-]+(?:/[a-z0-9-]+){0,2})[\'"]~', $src, $m)) {
-            foreach ($m[1] as $key) { $keys[$key] = true; }
-        }
-        if (count($keys) >= $limit) { break; }
-    }
-    $out = array_keys($keys);
-    sort($out, SORT_STRING);
-    return $out;
+    $cachePath = cms_cfg('content_dir') . '/.state/template-regions.json';
+    $cacheText = is_file($cachePath) ? file_get_contents($cachePath) : false;
+    $cache = $cacheText !== false ? json_decode((string) $cacheText, true) : array();
+    $result = PagecoreTemplateDiscovery::discover($root, cms_cfg('template_roots', array('')), cms_limit('max_template_files', 1000), is_array($cache) ? $cache : array());
+    $encoded = json_encode($result['cache'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    if ($encoded !== false && trim((string) $cacheText) !== $encoded) { cms_atomic_write($cachePath, $encoded . "\n"); }
+    foreach ($result['diagnostics'] as $diagnostic) { error_log('Pagecore template discovery: ' . $diagnostic); }
+    return $result['keys'];
 }
 
 function cms_content_file_summary($path) {

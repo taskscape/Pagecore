@@ -50,6 +50,8 @@ return array(
     'max_media_page_size' => 50,
     'max_inventory_page_size' => 100,
     'max_inventory_items' => 150,
+    'max_template_files' => 100,
+    'template_roots' => array('index.php', 'showcase.php', 'contact.php', 'post.php', 'news', 'search'),
     'max_search_query_bytes' => 100,
     'max_search_index_bytes' => 5242880,
     'max_search_index_items' => 5000,

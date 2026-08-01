@@ -53,8 +53,17 @@ function cms_validate_config($config, $production) {
         if (!array_key_exists($key, $config) || !is_bool($config[$key])) { $errors[] = $key . ' must be boolean'; }
     }
     if (!isset($config['static_media_references'])) { $config['static_media_references'] = array(); }
-    foreach (array('categories', 'search_pages', 'allowed_ext', 'trusted_proxies', 'sitemap_extra_routes', 'static_media_references') as $key) {
+    if (!isset($config['template_roots'])) { $config['template_roots'] = array(''); }
+    foreach (array('categories', 'search_pages', 'allowed_ext', 'trusted_proxies', 'sitemap_extra_routes', 'static_media_references', 'template_roots') as $key) {
         if (!isset($config[$key]) || !is_array($config[$key])) { $errors[] = $key . ' must be an array'; }
+    }
+    if (isset($config['template_roots']) && is_array($config['template_roots'])) {
+        foreach ($config['template_roots'] as $root) {
+            if (!is_string($root) || preg_match('~(?:^|[\\/])\.\.?(?:[\\/]|$)~', $root) || cms_config_is_absolute_path($root)) {
+                $errors[] = 'template_roots contains an invalid relative path'; break;
+            }
+        }
+        $config['template_roots'] = array_values(array_unique($config['template_roots']));
     }
     if (isset($config['static_media_references']) && is_array($config['static_media_references'])) {
         foreach ($config['static_media_references'] as $route) {
@@ -81,7 +90,7 @@ function cms_validate_config($config, $production) {
         if (!$extensions || array_diff($extensions, array('jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'))) { $errors[] = 'allowed_ext contains an unsafe or unsupported extension'; }
         $config['allowed_ext'] = $extensions;
     }
-    $positiveIntegers = array('session_hours', 'backup_keep', 'login_rate_window_seconds', 'login_rate_source_limit', 'login_rate_account_limit', 'audit_max_bytes', 'max_upload_mb', 'max_request_bytes', 'max_content_bytes', 'max_nav_bytes', 'max_metadata_bytes', 'max_title_bytes', 'max_identifier_bytes', 'max_query_bytes', 'max_image_width', 'max_image_height', 'max_image_pixels', 'max_upload_storage_bytes', 'max_upload_files', 'max_uploads_per_month', 'media_page_size', 'max_media_page_size', 'max_inventory_page_size', 'max_inventory_items', 'max_search_query_bytes', 'max_search_index_bytes', 'max_search_index_items', 'max_search_results', 'search_results_per_page');
+    $positiveIntegers = array('session_hours', 'backup_keep', 'login_rate_window_seconds', 'login_rate_source_limit', 'login_rate_account_limit', 'audit_max_bytes', 'max_upload_mb', 'max_request_bytes', 'max_content_bytes', 'max_nav_bytes', 'max_metadata_bytes', 'max_title_bytes', 'max_identifier_bytes', 'max_query_bytes', 'max_image_width', 'max_image_height', 'max_image_pixels', 'max_upload_storage_bytes', 'max_upload_files', 'max_uploads_per_month', 'media_page_size', 'max_media_page_size', 'max_inventory_page_size', 'max_inventory_items', 'max_template_files', 'max_search_query_bytes', 'max_search_index_bytes', 'max_search_index_items', 'max_search_results', 'search_results_per_page');
     foreach ($positiveIntegers as $key) {
         if (!isset($config[$key]) || !is_int($config[$key]) || $config[$key] <= 0) { $errors[] = $key . ' must be a positive integer'; }
     }

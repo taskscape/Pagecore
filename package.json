@@ -1,6 +1,6 @@
 {
   "name": "pagecore",
-  "version": "2.31.0",
+  "version": "2.32.0",
   "private": true,
   "description": "Pagecore CMS sample site and end-to-end tests.",
   "scripts": {
@@ -31,6 +31,7 @@
     "test:admin-view": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-AdminView.ps1",
     "test:editor-state": "node tests/editor-state.js",
     "test:media-references": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-MediaReferences.ps1",
+    "test:template-discovery": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-TemplateDiscovery.ps1",
     "release:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Build-PagecoreRelease.ps1",
     "release:test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-ReleaseArtifact.ps1"
   },
