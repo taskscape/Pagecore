@@ -176,7 +176,8 @@ Add `require 'cms/engine.php';` to the site bootstrap, then:
 | `cms_assets()` | Emit editor CSS/JS before `</body>` (empty for visitors). |
 
 Site-specific settings (credentials, categories, searchable pages, site URL,
-upload limits) live in `cms/config.php`, created per installation. See
+upload limits) live in a private configuration file outside the document root,
+selected with `PAGECORE_CONFIG` or `CMS_CONFIG_FILE`. See
 [cms/README.md](cms/README.md) for the full install and operations guide.
 
 ## Converting an existing PHP website
@@ -187,22 +188,27 @@ server-side PHP logic. Convert only the content that editors should control.
 
 ### 1. Install the engine beside the existing site
 
-Put `cms/`, `content/` and `uploads/` at the same web-root level as the
-existing PHP pages. Copy the bundled directories themselves so the hidden
-`.htaccess` protections in all three directories are preserved:
+Put only the public site and `cms/` engine under the document root. Place the
+configuration, source Markdown, drafts, backups, and uploads in a sibling
+private directory:
 
 ```
-public/
-├── index.php
-├── about.php
-├── news.php
-├── post.php
-├── cms/
-├── content/
-└── uploads/
+site/
+├── public/
+│   ├── index.php
+│   ├── post.php
+│   └── cms/
+└── pagecore-private/
+    ├── config.php
+    ├── content/
+    ├── backups/
+    └── uploads/
 ```
 
-If the site has a shared bootstrap or layout include, load the engine there:
+Copy [`deployment/pagecore-config.php.example`](deployment/pagecore-config.php.example)
+to the private directory, configure it, and set `PAGECORE_CONFIG` to its
+absolute path in the PHP process environment. If the site has a shared
+bootstrap or layout include, load the engine there:
 
 ```php
 <?php require __DIR__ . '/cms/engine.php'; ?>
@@ -457,15 +463,15 @@ from `content/posts/` and `categories`.
 
 ### 8. Deployment checklist
 
-- `cms/config.php` exists and has the production password hash, `site_url`,
+- The private configuration exists outside `DOCUMENT_ROOT` and has the production password hash, `site_url`,
   `site_root`, `content_dir`, `uploads_dir`, categories and search pages.
-- The web-server user can write to `content/`, `content/.drafts/`, `uploads/`,
+- The PHP worker can write to the private `content/`, `content/.drafts/`, backups, and uploads,
   `search-index.json` and `sitemap.xml`.
-- Direct HTTP access to `content/`, `cms/config.php`, `cms/engine.php`,
-  `cms/auth.php` and `cms/lib/` is denied.
-- PHP execution is blocked under `uploads/`.
-- The bundled `.htaccess` files remain present under `cms/`, `content/`, and
-  `uploads/`; equivalent rules are configured when Apache is not used.
+- Direct HTTP access to `cms/engine.php`, `cms/auth.php`, and `cms/lib/` is
+  denied; private storage has no HTTP route.
+- Media is delivered only by `/cms/media-file.php`; the private upload directory is not executable or HTTP-addressable.
+- `PAGECORE_DEVELOPMENT` is absent in production; the engine rejects any
+  configuration, content, backup, or upload path below `DOCUMENT_ROOT`.
 - Post URL rewrites match the configured `post_url`.
 - Every page that calls `cms_editable()`, `cms_posts()`, `cms_post()` or
   `cms_listing_controls()` has loaded `cms/engine.php`.
@@ -497,7 +503,8 @@ Pagecore in-place editing workflow.
   trusts the client), and raster decoding checks. Active SVG/XML uploads are
   rejected. PDFs are served through a download-only endpoint with `nosniff`
   and a restrictive sandbox policy. Uploaded files get randomized names, and
-  PHP execution is blocked under `uploads/`.
+  uploads live outside the document root. Both raster images and PDFs are
+  delivered through a controlled handler; PDFs cannot render inline.
 - **Engine internals** (`config.php`, `engine.php`, `auth.php`, `cms/lib/`)
   are not reachable over HTTP.
 - **Atomic writes** (temp file + rename, Windows-safe) so a failed save never
@@ -507,10 +514,9 @@ Pagecore in-place editing workflow.
 
 - PHP **7.4+** (no PHP 8-only syntax); the `fileinfo` extension is used when
   present, with a magic-byte fallback otherwise.
-- Apache with `.htaccess` support, or an equivalent server configuration
-  (post permalinks, denied access to `content/` and engine internals, no PHP
-  under `uploads/`). For local development the PHP built-in server works via
-  a router script.
+- A PHP-capable web server whose document root contains only public templates
+  and `cms/`; private storage must be a sibling or otherwise external path.
+  The bundled PHP router is for loopback development only.
 - Write access for the web-server user to `content/`, `content/.drafts/`,
   `uploads/`,
   `search-index.json` and `sitemap.xml`.

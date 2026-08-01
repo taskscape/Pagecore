@@ -480,7 +480,7 @@ case 'delete-media':
     cms_utf8_or_fail($rel);
     $asset = cms_media_asset($rel);
     if (!$asset) { cms_fail('File not found.', 404); }
-    if (cms_media_is_referenced($asset['url'])) {
+    if (cms_media_is_referenced($asset['url'], $asset['rel'])) {
         cms_fail('This file is still referenced by content. Remove references before deleting it.', 409);
     }
     $path = cms_media_path($rel, true);

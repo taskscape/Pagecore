@@ -29,6 +29,8 @@ if (-not (Test-Path -LiteralPath $PhpCandidate -PathType Leaf)) {
 }
 
 $PhpExe = (Resolve-Path -LiteralPath $PhpCandidate).Path
+$env:PAGECORE_CONFIG = Join-Path $SiteRoot 'cms\config.php'
+$env:PAGECORE_DEVELOPMENT = '1'
 
 & $PhpExe -S "127.0.0.1:$Port" -t $SiteRoot $Router
 exit $LASTEXITCODE

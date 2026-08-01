@@ -30,6 +30,7 @@ $PhpExe = (Resolve-Path -LiteralPath $PhpCandidate).Path
 
 $env:PAGECORE_CONFIG = $Config
 $env:PAGECORE_SITE_URL = "http://127.0.0.1:$Port"
+$env:PAGECORE_DEVELOPMENT = '1'
 
 # Keep transport limits above the CMS rule so application validation owns the test result.
 & $PhpExe -d upload_max_filesize=16M -d post_max_size=16M -S "127.0.0.1:$Port" -t $RepoRoot $Router

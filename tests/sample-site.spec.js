@@ -230,14 +230,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.10.0');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.11.0');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.10.0');
+  expect((await version.json()).version).toBe('2.11.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.10.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.11.0')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {
@@ -266,7 +266,7 @@ test('featured image upload accepts JPEG and PNG, saves drafts, and enforces typ
   await expect(panel.locator('.cms-featured-image-selection')).toContainText('featured-image');
   await expect(panel.locator('.cms-featured-image-preview')).toBeVisible();
   let draft = fs.readFileSync(path.join(workingContent, '.drafts', 'posts', 'launch-notes.md'), 'utf8');
-  expect(draft).toMatch(/image: \/sample-site\/working-uploads\/\d{4}\/\d{2}\/featured-image-[a-f0-9]{6}\.png/);
+  expect(draft).toMatch(/image: \/cms\/media-file\.php\?path=\d{4}%2F\d{2}%2Ffeatured-image-[a-f0-9]{6}\.png/);
 
   await featuredInput.setInputFiles({
     name: 'featured-image.jpeg',
@@ -275,7 +275,7 @@ test('featured image upload accepts JPEG and PNG, saves drafts, and enforces typ
   });
   await expect(panel.locator('.cms-status')).toHaveText('Featured image saved automatically to draft.');
   draft = fs.readFileSync(path.join(workingContent, '.drafts', 'posts', 'launch-notes.md'), 'utf8');
-  expect(draft).toMatch(/image: \/sample-site\/working-uploads\/\d{4}\/\d{2}\/featured-image-[a-f0-9]{6}\.jpeg/);
+  expect(draft).toMatch(/image: \/cms\/media-file\.php\?path=\d{4}%2F\d{2}%2Ffeatured-image-[a-f0-9]{6}\.jpeg/);
 
   // Browser validation gives immediate feedback for invalid types and files over the shared 8 MB cap.
   await featuredInput.setInputFiles({ name: 'not-featured.gif', mimeType: 'image/gif', buffer: Buffer.from('GIF89a') });
@@ -316,6 +316,34 @@ test('reusable content and uploads directories ship Apache hardening', () => {
   expect(contentRules).toContain('Require all denied');
   expect(uploadRules).toContain('php_flag engine off');
   expect(uploadRules).toMatch(/FilesMatch[\s\S]*php[\s\S]*Require all denied/);
+});
+
+test('development HTTP boundary denies configuration, content, backups, and executable uploads', async ({ page }) => {
+  const draftPath = path.join(workingContent, '.drafts', 'pages', 'http-sentinel.md');
+  const backupPath = path.join(workingContent, '.backups', 'http-sentinel.md');
+  const uploadScript = path.join(workingUploads, 'http-sentinel.php');
+  fs.mkdirSync(path.dirname(draftPath), { recursive: true });
+  fs.mkdirSync(path.dirname(backupPath), { recursive: true });
+  fs.writeFileSync(draftPath, 'PRIVATE_DRAFT_SENTINEL');
+  fs.writeFileSync(backupPath, 'PRIVATE_BACKUP_SENTINEL');
+  fs.writeFileSync(uploadScript, '<?php echo "EXECUTED_UPLOAD_SENTINEL";');
+
+  const deniedPaths = [
+    '/sample-site/config.php',
+    '/sample-site/fixtures/content/posts/launch-notes.md',
+    '/sample-site/working-content/posts/launch-notes.md',
+    '/sample-site/working-content/.drafts/pages/http-sentinel.md',
+    '/sample-site/working-content/.backups/http-sentinel.md',
+    '/sample-site/working-uploads/http-sentinel.php',
+    '/cms/engine.php',
+    '/cms/auth.php',
+    '/cms/lib/Parsedown.php'
+  ];
+  for (const url of deniedPaths) {
+    const response = await page.request.get(url);
+    expect(response.status(), `${url} must not be HTTP-readable`).toBe(404);
+    expect(await response.text()).not.toMatch(/PRIVATE_|EXECUTED_UPLOAD/);
+  }
 });
 
 test('active uploads are rejected and PDFs are delivered only as downloads', async ({ page }) => {
@@ -515,6 +543,7 @@ test('media library searches assets, edits metadata, inserts existing media, and
   const uploaded = await upload.json();
   expect(uploaded.ok).toBe(true);
   expect(uploaded.asset.rel).toContain('delete-me-pixel');
+  expect(uploaded.url).toMatch(/^\/cms\/media-file\.php\?path=/);
 
   await page.goto('/cms/media.php');
   await expect(page.getByRole('heading', { name: 'Media library' })).toBeVisible();

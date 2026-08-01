@@ -1,6 +1,6 @@
 {
   "name": "pagecore",
-  "version": "2.10.0",
+  "version": "2.11.0",
   "private": true,
   "description": "Pagecore CMS sample site and end-to-end tests.",
   "scripts": {
@@ -11,7 +11,8 @@
     "test:migration": "playwright test -c playwright.migration.config.js",
     "test:parsedown": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-Parsedown.ps1",
     "test:import-sanitizer": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-ImporterSanitizer.ps1",
-    "test:import-status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-ImporterStatus.ps1"
+    "test:import-status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-ImporterStatus.ps1",
+    "test:private-storage": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-PrivateStorage.ps1"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0"

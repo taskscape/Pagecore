@@ -1,0 +1,28 @@
+<?php
+/**
+ * Copy this entire `pagecore-private` directory beside, never inside, the
+ * public document root. Set PAGECORE_CONFIG to this file's absolute path.
+ */
+$privateRoot = __DIR__;
+$publicRoot = getenv('PAGECORE_DOCUMENT_ROOT');
+if (!$publicRoot) { throw new RuntimeException('PAGECORE_DOCUMENT_ROOT is required.'); }
+
+return array(
+    'session_name' => 'PAGECORE',
+    'session_hours' => 8,
+    'username' => 'admin',
+    'password_hash' => 'REPLACE_WITH_PASSWORD_HASH',
+    'content_dir' => $privateRoot . '/content',
+    'backup_dir' => $privateRoot . '/backups',
+    'backup_keep' => 20,
+    'uploads_dir' => $privateRoot . '/uploads',
+    'uploads_url' => '', // legacy only; new media is delivered by cms/media-file.php
+    'site_root' => $publicRoot,
+    'site_url' => 'https://example.com',
+    'site_name' => 'Example site',
+    'max_upload_mb' => 8,
+    'allowed_ext' => array('jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'),
+    'post_url' => '/post/{slug}/',
+    'categories' => array(),
+    'search_pages' => array(),
+);

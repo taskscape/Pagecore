@@ -20,10 +20,50 @@ if (defined('CMS_LOADED')) { return; }
 define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
-define('PAGECORE_VERSION', '2.10.0');
+define('PAGECORE_VERSION', '2.11.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
+
+/** True when a path is the root itself or is nested below it. */
+function cms_path_within_root($path, $root) {
+    $path = realpath($path) ?: $path;
+    $root = realpath($root) ?: $root;
+    $path = rtrim(str_replace('\\', '/', (string) $path), '/');
+    $root = rtrim(str_replace('\\', '/', (string) $root), '/');
+    if (DIRECTORY_SEPARATOR === '\\') {
+        $path = strtolower($path);
+        $root = strtolower($root);
+    }
+    return $path === $root || strpos($path, $root . '/') === 0;
+}
+
+/** List security-sensitive storage paths that remain inside the document root. */
+function cms_private_storage_violations($documentRoot, $configFile) {
+    $violations = array();
+    if (!$documentRoot) { return $violations; }
+    foreach (array(
+        'configuration' => $configFile,
+        'content_dir' => cms_cfg('content_dir'),
+        'backup_dir' => cms_cfg('backup_dir'),
+        'uploads_dir' => cms_cfg('uploads_dir'),
+    ) as $label => $path) {
+        if (!$path || cms_path_within_root($path, $documentRoot)) { $violations[] = $label; }
+    }
+    return $violations;
+}
+
+// Demo/local servers opt in explicitly. Production fails closed until secrets,
+// source Markdown, drafts, backups, and uploads are outside the public root.
+if (PHP_SAPI !== 'cli' && getenv('PAGECORE_DEVELOPMENT') !== '1') {
+    $storageViolations = cms_private_storage_violations(
+        isset($_SERVER['DOCUMENT_ROOT']) ? $_SERVER['DOCUMENT_ROOT'] : '',
+        $cmsConfigFile
+    );
+    if ($storageViolations) {
+        throw new RuntimeException('Pagecore private storage must be outside DOCUMENT_ROOT: ' . implode(', ', $storageViolations));
+    }
+}
 
 /* ---------------------------------------------------------------- session */
 if (session_status() === PHP_SESSION_NONE && PHP_SAPI !== 'cli') {
@@ -292,10 +332,7 @@ function cms_media_rel_from_path($path) {
 }
 
 function cms_media_url($rel) {
-    if (strtolower(pathinfo($rel, PATHINFO_EXTENSION)) === 'pdf') {
-        return '/cms/media-file.php?path=' . rawurlencode(str_replace('\\', '/', $rel));
-    }
-    return rtrim(cms_cfg('uploads_url'), '/') . '/' . str_replace('%2F', '/', rawurlencode(str_replace('\\', '/', $rel)));
+    return '/cms/media-file.php?path=' . rawurlencode(str_replace('\\', '/', $rel));
 }
 
 function cms_media_kind($rel) {
@@ -385,7 +422,11 @@ function cms_media_assets($query = '') {
     return $files;
 }
 
-function cms_media_is_referenced($url) {
+function cms_media_is_referenced($url, $rel = '') {
+    $needles = array($url);
+    if ($rel !== '' && cms_cfg('uploads_url', '') !== '') {
+        $needles[] = rtrim(cms_cfg('uploads_url'), '/') . '/' . str_replace('%2F', '/', rawurlencode(str_replace('\\', '/', $rel)));
+    }
     $roots = array(
         cms_cfg('content_dir') . '/pages',
         cms_cfg('content_dir') . '/posts',
@@ -396,8 +437,9 @@ function cms_media_is_referenced($url) {
         $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
         foreach ($it as $file) {
             if (!$file->isFile() || strtolower($file->getExtension()) !== 'md') { continue; }
-            if (strpos((string) file_get_contents($file->getPathname()), $url) !== false) {
-                return true;
+            $markdown = (string) file_get_contents($file->getPathname());
+            foreach ($needles as $needle) {
+                if ($needle !== '' && strpos($markdown, $needle) !== false) { return true; }
             }
         }
     }
