@@ -20,7 +20,7 @@ if (defined('CMS_LOADED')) { return; }
 define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
-define('PAGECORE_VERSION', '2.8.0');
+define('PAGECORE_VERSION', '2.9.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
@@ -254,7 +254,9 @@ function cms_revisions($relKey) {
 
 /* --------------------------------------------------------------- media */
 function cms_media_exts() {
-    return array_map('strtolower', cms_cfg('allowed_ext', array('jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf')));
+    $configured = array_map('strtolower', cms_cfg('allowed_ext', array('jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf')));
+    // SVG is active XML and is never accepted as an editor-managed upload.
+    return array_values(array_diff($configured, array('svg')));
 }
 
 function cms_media_is_valid_rel($rel) {
@@ -290,6 +292,9 @@ function cms_media_rel_from_path($path) {
 }
 
 function cms_media_url($rel) {
+    if (strtolower(pathinfo($rel, PATHINFO_EXTENSION)) === 'pdf') {
+        return '/cms/media-file.php?path=' . rawurlencode(str_replace('\\', '/', $rel));
+    }
     return rtrim(cms_cfg('uploads_url'), '/') . '/' . str_replace('%2F', '/', rawurlencode(str_replace('\\', '/', $rel)));
 }
 
@@ -446,7 +451,7 @@ function cms_parsedown() {
 
 /**
  * Markdown -> HTML: Parsedown, then post-processing:
- *  - "pdf:/uploads/x.pdf \"Label\"" paragraphs -> <object> embed + fallback
+ *  - "pdf:/uploads/x.pdf \"Label\"" paragraphs -> download links
  *  - markdown-born <img> wrapped in <figure class="wp-block-image">
  *  - tables get class="cms-table"
  */
@@ -463,9 +468,7 @@ function cms_render_markdown($md) {
             elseif (isset($m[2]) && $m[2] !== '') { $label = $m[2]; }
             if ($label === '') { $label = basename($m[1], '.pdf'); }
             $lab = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
-            return '<p class="pdf-embed"><object data="' . $url . '" type="application/pdf" width="100%" height="820">'
-                 . '<a href="' . $url . '">Download PDF (' . $lab . ')</a></object></p>' . "\n"
-                 . '<p class="pdf-fallback"><a href="' . $url . '">Open / download PDF: ' . $lab . '</a></p>';
+            return '<p class="pdf-download"><a href="' . $url . '" download>Download PDF: ' . $lab . '</a></p>';
         },
         $html
     );

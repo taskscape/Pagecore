@@ -113,8 +113,8 @@ extras:
 - Raw HTML is always escaped and unsafe Markdown URL schemes are neutralized.
   The WordPress importer converts its maintained safe-tag allowlist to Markdown,
   turns supported embeds into ordinary links, and discards active markup.
-- `pdf:/uploads/path/file.pdf "Label"` on its own line becomes an embedded PDF
-  viewer with a labelled download link.
+- `pdf:/uploads/path/file.pdf "Label"` on its own line becomes a labelled PDF
+  download link.
 - Standalone images are wrapped in `<figure>` for styling.
 - Tables get a `cms-table` class hook.
 - Dates display in Polish long form (e.g. *15 czerwca 2026*).
@@ -479,10 +479,12 @@ Pagecore in-place editing workflow.
 - **Safe Markdown boundary** — raw HTML is always escaped and unsafe Markdown
   URL schemes are neutralized; site configuration cannot disable safe mode.
   Imported active elements are removed or converted to non-executable links.
-- **Upload validation** — extension allowlist, size limit, server-side MIME
-  sniffing (never trusts the client), image integrity check, and rejection of
-  SVGs containing scripts or event handlers. Uploaded files get randomized
-  names, and PHP execution is blocked under `uploads/`.
+- **Upload validation and isolation** — the upload allowlist is limited to
+  raster images and PDFs, with a size limit, server-side MIME sniffing (never
+  trusts the client), and raster decoding checks. Active SVG/XML uploads are
+  rejected. PDFs are served through a download-only endpoint with `nosniff`
+  and a restrictive sandbox policy. Uploaded files get randomized names, and
+  PHP execution is blocked under `uploads/`.
 - **Engine internals** (`config.php`, `engine.php`, `auth.php`, `cms/lib/`)
   are not reachable over HTTP.
 - **Atomic writes** (temp file + rename, Windows-safe) so a failed save never

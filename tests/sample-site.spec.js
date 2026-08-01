@@ -103,7 +103,7 @@ test('showcase demonstrates file-based featured images', async ({ page }) => {
   await page.goto('/sample-site/showcase/');
 
   await expect(page.getByRole('heading', { name: 'Pagecore file-based content showcase' })).toBeVisible();
-  await expect(page.locator('.meta-preview')).toContainText('image: /sample-site/working-uploads/2026/07/featured-pagecore.svg');
+  await expect(page.locator('.meta-preview')).toContainText('image: /sample-site/working-uploads/2026/07/featured-pagecore.png');
   await expect(page.locator('.post-card-image[alt="Launch notes for the sample site"]')).toBeVisible();
 
   await page.getByRole('link', { name: 'Launch notes for the sample site' }).click();
@@ -125,7 +125,7 @@ test('post links expose Facebook-friendly title, summary, canonical URL, and fea
   await expect(page.locator('meta[property="og:url"]')).toHaveAttribute('content', `${baseUrl}/sample-site/post/launch-notes/`);
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
     'content',
-    `${baseUrl}/sample-site/working-uploads/2026/07/featured-pagecore.svg`
+    `${baseUrl}/sample-site/working-uploads/2026/07/featured-pagecore.png`
   );
   await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute('content', 'Launch notes for the sample site');
   await expect(page.locator('meta[name="description"]')).toHaveAttribute(
@@ -191,14 +191,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.8.0');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.9.0');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.8.0');
+  expect((await version.json()).version).toBe('2.9.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.8.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.9.0')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {
@@ -277,6 +277,76 @@ test('reusable content and uploads directories ship Apache hardening', () => {
   expect(contentRules).toContain('Require all denied');
   expect(uploadRules).toContain('php_flag engine off');
   expect(uploadRules).toMatch(/FilesMatch[\s\S]*php[\s\S]*Require all denied/);
+});
+
+test('active uploads are rejected and PDFs are delivered only as downloads', async ({ page }) => {
+  await login(page);
+  const token = await page.evaluate(() => window.CMS_CONFIG && window.CMS_CONFIG.token);
+  expect(token).toBeTruthy();
+
+  const rejectedSvgPayloads = [
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><use href="https://attacker.invalid/x.svg#x"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><image href="data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;"/></svg>'
+  ];
+  for (const [index, payload] of rejectedSvgPayloads.entries()) {
+    const response = await page.request.post('/cms/api.php?action=upload', {
+      headers: { 'X-CMS-Token': token },
+      multipart: {
+        file: { name: `active-${index}.svg`, mimeType: 'image/svg+xml', buffer: Buffer.from(payload) }
+      }
+    });
+    expect(response.status()).toBe(400);
+    expect((await response.json()).error).toContain('not allowed');
+  }
+
+  const polyglot = await page.request.post('/cms/api.php?action=upload', {
+    headers: { 'X-CMS-Token': token },
+    multipart: {
+      file: { name: 'svg-polyglot.png', mimeType: 'image/png', buffer: Buffer.from(rejectedSvgPayloads[1]) }
+    }
+  });
+  expect(polyglot.status()).toBe(400);
+  expect((await polyglot.json()).error).toContain('do not match');
+
+  const malformedPng = await page.request.post('/cms/api.php?action=upload', {
+    headers: { 'X-CMS-Token': token },
+    multipart: {
+      file: {
+        name: 'truncated.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex')
+      }
+    }
+  });
+  expect(malformedPng.status()).toBe(400);
+  expect((await malformedPng.json()).error).toMatch(/contents do not match|Invalid image/);
+
+  const pdfBytes = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n');
+  const pdfUpload = await page.request.post('/cms/api.php?action=upload', {
+    headers: { 'X-CMS-Token': token },
+    multipart: {
+      file: { name: 'security-review.pdf', mimeType: 'application/pdf', buffer: pdfBytes }
+    }
+  });
+  expect(pdfUpload.ok()).toBeTruthy();
+  const pdf = await pdfUpload.json();
+  expect(pdf.asset.kind).toBe('pdf');
+  expect(pdf.url).toMatch(/^\/cms\/media-file\.php\?path=/);
+
+  const download = await page.request.get(pdf.url);
+  expect(download.ok()).toBeTruthy();
+  expect(download.headers()['content-type']).toContain('application/pdf');
+  expect(download.headers()['content-disposition']).toContain('attachment');
+  expect(download.headers()['x-content-type-options']).toBe('nosniff');
+  expect(download.headers()['content-security-policy']).toContain("sandbox");
+  expect(download.headers()['content-security-policy']).toContain("default-src 'none'");
+  expect((await download.body()).subarray(0, 5).toString()).toBe('%PDF-');
+
+  const svgDelivery = await page.request.get('/cms/media-file.php?path=2026%2F07%2Fsample-logo.svg');
+  expect(svgDelivery.status()).toBe(404);
 });
 
 test('editor saves a draft, previews it, publishes, and restores a backup', async ({ page }) => {
@@ -409,10 +479,10 @@ test('media library searches assets, edits metadata, inserts existing media, and
 
   await page.goto('/cms/media.php');
   await expect(page.getByRole('heading', { name: 'Media library' })).toBeVisible();
-  await expect(page.locator('[data-media-rel="2026/07/sample-logo.svg"]')).toBeVisible();
+  await expect(page.locator('[data-media-rel="2026/07/sample-logo.png"]')).toBeVisible();
 
   await page.goto('/cms/media.php?q=sample-logo');
-  const sampleCard = page.locator('[data-media-rel="2026/07/sample-logo.svg"]');
+  const sampleCard = page.locator('[data-media-rel="2026/07/sample-logo.png"]');
   await expect(sampleCard).toBeVisible();
   await sampleCard.locator('[name="alt"]').fill('Edited library logo');
   await sampleCard.locator('[name="caption"]').fill('Edited caption from Playwright');
@@ -420,7 +490,7 @@ test('media library searches assets, edits metadata, inserts existing media, and
   await expect(sampleCard.locator('.status')).toHaveText('Metadata saved.');
 
   const meta = JSON.parse(fs.readFileSync(
-    path.join(workingUploads, '2026', '07', 'sample-logo.svg.meta.json'),
+    path.join(workingUploads, '2026', '07', 'sample-logo.png.meta.json'),
     'utf8'
   ));
   expect(meta).toEqual({
@@ -436,7 +506,7 @@ test('media library searches assets, edits metadata, inserts existing media, and
   await media.waitForLoadState('domcontentloaded');
   await media.getByLabel('Search media').fill('sample-logo');
   await media.getByRole('button', { name: 'Search' }).click();
-  const pickerCard = media.locator('[data-media-rel="2026/07/sample-logo.svg"]');
+  const pickerCard = media.locator('[data-media-rel="2026/07/sample-logo.png"]');
   await expect(pickerCard).toBeVisible();
   const closePromise = media.waitForEvent('close');
   await pickerCard.getByRole('button', { name: 'Insert' }).click();

@@ -18,7 +18,7 @@ return array(
     'uploads_dir' => $uploads,
     'uploads_url' => '/sample-site/working-uploads',
     'max_upload_mb' => 8,
-    'allowed_ext' => array('jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf'),
+    'allowed_ext' => array('jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'),
     'post_url' => '/sample-site/post/{slug}/',
     'categories' => array(
         'news' => array('News', '/sample-site/news/'),

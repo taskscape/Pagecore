@@ -21,7 +21,7 @@ sample_header('Showcase');
 title: Launch notes for the sample site
 date: 2026-07-01
 category: news
-image: /sample-site/working-uploads/2026/07/featured-pagecore.svg
+image: /sample-site/working-uploads/2026/07/featured-pagecore.png
 ---</code></pre>
     </div>
   </section>
@@ -53,7 +53,7 @@ image: /sample-site/working-uploads/2026/07/featured-pagecore.svg
         <span>pages/showcase/workflow.md</span>
         <span>posts/launch-notes.md</span>
         <strong>sample-site/working-uploads</strong>
-        <span>2026/07/featured-pagecore.svg</span>
+        <span>2026/07/featured-pagecore.png</span>
       </div>
     </div>
   </section>

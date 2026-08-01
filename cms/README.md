@@ -50,7 +50,8 @@ Paste the output into `password_hash` in `cms/config.php`.
 - Post metadata includes a featured-image drop area. Drop or choose a JPEG/PNG
   within the configured upload limit; Pagecore uploads it and saves its URL to the post draft automatically.
   For a crisp Facebook preview, use a landscape image around 1200 x 630 pixels.
-- Markdown with tables; paste or drag images/PDFs straight into the editor.
+- Markdown with tables; paste or drag raster images/PDFs straight into the
+  editor. SVG uploads are rejected because SVG is active XML.
 - Open **Content** in the toolbar to browse `/cms/content.php`, which lists
   configured pages, editable regions, posts, categories, missing Markdown
   files, and the editable navigation JSON.
@@ -70,7 +71,7 @@ Paste the output into `password_hash` in `cms/config.php`.
 
 `/cms/media.php` lists files from the configured `uploads_dir` and searches by
 relative path, alt text and caption. Images show as thumbnails; PDFs show as a
-file tile with a direct preview link. Picker mode (`/cms/media.php?picker=1`)
+file tile with a download-only link. Picker mode (`/cms/media.php?picker=1`)
 inserts the correct Markdown back into the active editor panel.
 
 Metadata is stored beside the upload as JSON, for example

@@ -40,9 +40,6 @@ function cms_sniff_mime($path) {
     if (strncmp($head, 'GIF87a', 6) === 0 || strncmp($head, 'GIF89a', 6) === 0) { return 'image/gif'; }
     if (strncmp($head, 'RIFF', 4) === 0 && substr($head, 8, 4) === 'WEBP') { return 'image/webp'; }
     if (strncmp($head, '%PDF-', 5) === 0) { return 'application/pdf'; }
-    if (stripos($head, '<svg') !== false || (stripos($head, '<?xml') === 0 && stripos($head, 'svg') !== false)) {
-        return 'image/svg+xml';
-    }
     return 'application/octet-stream';
 }
 
@@ -509,7 +506,7 @@ case 'upload':
     if ($featuredImageOnly && !in_array($ext, array('jpg', 'jpeg', 'png'), true)) {
         cms_fail('Featured image must be a JPEG or PNG file.');
     }
-    if (!in_array($ext, cms_cfg('allowed_ext'), true)) { cms_fail('File type is not allowed.'); }
+    if (!in_array($ext, cms_media_exts(), true)) { cms_fail('File type is not allowed.'); }
 
     // MIME sniff — never trust the client. finfo when available,
     // magic-byte fallback for minimal PHP builds.
@@ -523,50 +520,15 @@ case 'upload':
         'jpg' => array('image/jpeg'), 'jpeg' => array('image/jpeg'),
         'png' => array('image/png'), 'gif' => array('image/gif'),
         'webp' => array('image/webp'),
-        'svg' => array('image/svg+xml', 'text/xml', 'application/xml', 'text/plain'),
         'pdf' => array('application/pdf'),
     );
     if (!isset($allowedMime[$ext]) || !in_array($mime, $allowedMime[$ext], true)) {
         cms_fail('File contents do not match its extension.');
     }
     $isImage = ($ext !== 'pdf');
-    if ($isImage && $ext !== 'svg' && !getimagesize($f['tmp_name'])) {
+    if ($isImage && !getimagesize($f['tmp_name'])) {
         cms_fail('Invalid image file.');
     }
-    if ($ext === 'svg') {
-        $svg = file_get_contents($f['tmp_name']);
-        // Comprehensive SVG sanitization to prevent XSS attacks
-        $prohibitedPatterns = array(
-            '~<script~i',           // Script tags (word boundary)
-            '~</script\s*>~i',       // Closing script tags
-            '~on[a-z]+\s*=~i',       // Inline event handlers (onclick, onload, etc.)
-            '~javascript:~i',         // JavaScript URIs
-            '~data:~i',               // Data URIs (can contain malicious content)
-            '~<iframe~i',             // Iframe tags
-            '~<object~i',             // Object tags
-            '~<embed~i',              // Embed tags
-            '~<link[^>]*rel=[\"\']?stylesheet~i',  // External stylesheets
-            '~<style~i',              // Style tags
-            '~<!\[CDATA\[~i',        // CDATA sections
-            '~import\s*\(~i',        // CSS @import
-            '~url\s*\(~i',           // CSS url() with potential payloads
-        );
-        foreach ($prohibitedPatterns as $pattern) {
-            if (preg_match($pattern, $svg)) {
-                cms_fail('SVG file contains prohibited elements or patterns.');
-            }
-        }
-        // Check for external entity declarations (XXE attacks)
-        if (preg_match('~<!DOCTYPE[^>]*\[~i', $svg) || preg_match('~<!ENTITY~i', $svg)) {
-            cms_fail('SVG file contains prohibited entity declarations.');
-        }
-        // Check for XML processing instructions that could be malicious
-        if (preg_match('~<\?xml[^>]*\?>~i', $svg) && strlen($svg) > 1024) {
-            // Large XML files with processing instructions are suspicious
-            cms_fail('SVG file contains potentially malicious content.');
-        }
-    }
-
     $base = pathinfo($f['name'], PATHINFO_FILENAME);
     $base = strtolower(preg_replace('~[^A-Za-z0-9-]+~', '-', $base));
     $base = trim($base, '-');
