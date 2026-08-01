@@ -2,20 +2,40 @@
 require dirname(__DIR__) . '/_bootstrap.php';
 
 $indexFile = __DIR__ . '/../search-index.json';
-if (!is_file($indexFile)) {
-    cms_regenerate_indexes();
-}
-$items = is_file($indexFile) ? json_decode(file_get_contents($indexFile), true) : array();
+$indexAvailable = is_file($indexFile) && filesize($indexFile) <= cms_limit('max_search_index_bytes', 5242880);
+$items = $indexAvailable ? json_decode((string) file_get_contents($indexFile), true) : array();
 if (!is_array($items)) { $items = array(); }
+$items = array_slice($items, 0, cms_limit('max_search_index_items', 5000));
 
 $query = trim(isset($_GET['q']) ? (string) $_GET['q'] : '');
+$normalizedQuery = preg_replace('/\s+/u', ' ', $query);
+if ($normalizedQuery === null) {
+    http_response_code(400);
+    $query = '';
+    $searchError = 'Search query must be valid UTF-8.';
+} else {
+    $query = $normalizedQuery;
+}
+if (!isset($searchError) && strlen($query) > cms_limit('max_search_query_bytes', 100)) {
+    http_response_code(400);
+    $query = '';
+    $searchError = 'Search query is too long.';
+}
+$page = max(1, isset($_GET['page']) ? (int) $_GET['page'] : 1);
+$perPage = cms_limit('search_results_per_page', 10);
+$maxResults = cms_limit('max_search_results', 100);
 $results = array();
-foreach ($items as $item) {
+foreach ($query === '' ? array() : $items as $item) {
     $haystack = strtolower(($item['t'] ?? '') . ' ' . ($item['k'] ?? '') . ' ' . ($item['e'] ?? ''));
-    if ($query === '' || strpos($haystack, strtolower($query)) !== false) {
+    if (strpos($haystack, strtolower($query)) !== false) {
         $results[] = $item;
+        if (count($results) >= $maxResults) { break; }
     }
 }
+$resultCount = count($results);
+$resultPages = max(1, (int) ceil($resultCount / $perPage));
+if ($page > $resultPages) { $page = $resultPages; }
+$results = array_slice($results, ($page - 1) * $perPage, $perPage);
 
 sample_header('Search');
 ?>
@@ -33,6 +53,9 @@ sample_header('Search');
       </div>
     </form>
     <div class="search-results">
+      <?php if (isset($searchError)): ?><p role="alert"><?= htmlspecialchars($searchError, ENT_QUOTES, 'UTF-8') ?></p><?php endif; ?>
+      <?php if (!$indexAvailable): ?><p>Search is temporarily unavailable while the index is rebuilt by an administrator.</p><?php endif; ?>
+      <?php if ($indexAvailable && $query === '' && !isset($searchError)): ?><p>Enter a search term to find content.</p><?php endif; ?>
       <?php foreach ($results as $item): ?>
         <article class="post-card">
           <p class="eyebrow"><?= htmlspecialchars($item['k'] ?? '', ENT_QUOTES, 'UTF-8') ?></p>
@@ -40,8 +63,15 @@ sample_header('Search');
           <p><?= htmlspecialchars($item['e'] ?? '', ENT_QUOTES, 'UTF-8') ?></p>
         </article>
       <?php endforeach; ?>
-      <?php if (!$results): ?>
+      <?php if ($indexAvailable && $query !== '' && !$results && !isset($searchError)): ?>
         <p>No matching content.</p>
+      <?php endif; ?>
+      <?php if ($resultPages > 1): ?>
+        <nav class="pagination" aria-label="Search result pages">
+          <?php if ($page > 1): ?><a href="?q=<?= rawurlencode($query) ?>&amp;page=<?= $page - 1 ?>">Previous</a><?php endif; ?>
+          <span>Page <?= $page ?> of <?= $resultPages ?></span>
+          <?php if ($page < $resultPages): ?><a href="?q=<?= rawurlencode($query) ?>&amp;page=<?= $page + 1 ?>">Next</a><?php endif; ?>
+        </nav>
       <?php endif; ?>
     </div>
   </section>

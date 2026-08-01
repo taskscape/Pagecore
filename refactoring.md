@@ -156,12 +156,14 @@ This was a source review with targeted local checks, not a production penetratio
   - Resolution: 2026-08-01 — Raised the declared and enforced minimum to PHP 8.3, isolated the version predicate in a directly testable runtime guard, protected that internal endpoint, and documented a twice-yearly lifecycle review. Added a PHP 8.3/8.4/8.5 CI matrix that runs policy checks, PHP lint, and the complete browser suite; synchronized the local Zagozda runtime guard.
   - Evidence: PHP's official support calendar listed 8.3, 8.4, and 8.5 as supported on the implementation date. The policy test proved 7.4 and 8.2 are rejected at the boundary and 8.3-8.5 accepted; it passed on bundled PHP 8.5.6. All tracked CMS PHP files and both local runtime copies passed lint, and the focused version/startup browser flow passed 1/1 on port 18805. The isolated staged checkout passed the policy test and full base browser suite 22/22 on port 18806; the three-runtime CI matrix is ready for remote execution.
 
-- [ ] **SEC-14 — Remove anonymous filesystem mutation and unbounded result rendering from public search.**
+- [x] **SEC-14 — Remove anonymous filesystem mutation and unbounded result rendering from public search.**
   - Severity: Medium-low; confirmed design issue.
   - Explanation: A public search request regenerates indexes when the search file is absent, turning an anonymous GET into an expensive write path. An empty query returns every indexed item in one HTML response. Concurrent first requests can race on generated artifacts.
   - Justification: [`sample-site/search/index.php`](sample-site/search/index.php) lines 4-9 calls `cms_regenerate_indexes()` and lines 11-17 collect all matches with no cap. [`cms/engine.php`](cms/engine.php) lines 1209-1252 scans posts and writes three generated artifacts.
   - Recommendation: Generate indexes only during authenticated publish/import/reindex operations or an explicit maintenance job. Public search should use an existing immutable snapshot, fail gracefully when unavailable, normalize/cap input, paginate results, and never write.
   - Done when: anonymous search performs no writes, missing-index behavior is bounded, and load tests prove response size and work are capped.
+  - Resolution: 2026-08-01 — Removed public index regeneration entirely. Anonymous search now reads only a prebuilt size/item-bounded snapshot, reports a graceful unavailable state, requires a non-empty normalized UTF-8 query, rejects oversized queries, caps matched work, and renders ten results per page with navigation.
+  - Evidence: PHP lint passed. A browser test deleted the index and confirmed an anonymous request did not recreate it, then exercised an empty query, 35 matching records across four pages, ten rendered cards per page, and a 400 response for an over-limit query; it passed 1/1 on port 18807. The isolated staged checkout passed the full base suite 23/23 on port 18808.
 
 ### Lower priority / defense in depth
 

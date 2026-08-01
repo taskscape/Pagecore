@@ -70,6 +70,40 @@ test('visitor sees rendered sample site without editor chrome', async ({ page })
   await expect(page.locator('link[href="/cms/assets/editor.css"]')).toHaveCount(0);
 });
 
+test('anonymous search is read-only, bounded, and paginated', async ({ page }) => {
+  const indexPath = path.join(sampleRoot, 'search-index.json');
+  expect(fs.existsSync(indexPath)).toBe(false);
+
+  await page.goto('/sample-site/search/?q=missing');
+  await expect(page.getByText('Search is temporarily unavailable')).toBeVisible();
+  expect(fs.existsSync(indexPath)).toBe(false);
+
+  const items = Array.from({ length: 35 }, (_, index) => ({
+    t: `Bounded result ${index}`,
+    k: 'Post',
+    e: `needle ${index}`,
+    u: `/sample-site/post/result-${index}/`
+  }));
+  fs.writeFileSync(indexPath, JSON.stringify(items));
+
+  await page.goto('/sample-site/search/');
+  await expect(page.getByText('Enter a search term')).toBeVisible();
+  await expect(page.locator('.search-results article')).toHaveCount(0);
+
+  await page.goto('/sample-site/search/?q=%20%20needle%20%20');
+  await expect(page.locator('.search-results article')).toHaveCount(10);
+  await expect(page.getByRole('link', { name: 'Next' })).toBeVisible();
+  await expect(page.getByText('Page 1 of 4')).toBeVisible();
+
+  await page.goto('/sample-site/search/?q=needle&page=2');
+  await expect(page.locator('.search-results article')).toHaveCount(10);
+  await expect(page.getByRole('link', { name: 'Previous' })).toBeVisible();
+
+  const oversized = await page.goto(`/sample-site/search/?q=${'x'.repeat(101)}`);
+  expect(oversized.status()).toBe(400);
+  await expect(page.getByRole('alert')).toContainText('too long');
+});
+
 test('failed login budget is shared across browser sessions and returns retry guidance', async ({ browser }) => {
   const samplePort = process.env.PAGECORE_SAMPLE_PORT || '8765';
   const baseUrl = process.env.PAGECORE_BASE_URL || `http://127.0.0.1:${samplePort}`;
@@ -324,14 +358,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.16.1');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.16.2');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.16.1');
+  expect((await version.json()).version).toBe('2.16.2');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.16.1')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.16.2')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {
