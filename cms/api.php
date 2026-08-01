@@ -126,6 +126,24 @@ function cms_mutate_locked($resource, callable $callback) {
     }
 }
 
+/** Snapshot a source file plus every artifact regenerated from it. */
+function cms_mutation_snapshot(array $sourcePaths) {
+    $snapshot = cms_file_snapshot(array_merge($sourcePaths, cms_generated_artifact_paths()));
+    if ($snapshot === null) { cms_fail('Could not prepare the content operation.', 500); }
+    return $snapshot;
+}
+
+/** Require all derived artifacts to commit, otherwise restore the full operation. */
+function cms_finish_indexed_mutation(array $snapshot) {
+    $result = cms_regenerate_indexes();
+    if (!is_array($result) || empty($result['ok'])) {
+        $restored = cms_restore_file_snapshot($snapshot);
+        error_log('CMS: content mutation rolled back after derived artifact failure; rollback ' . ($restored ? 'succeeded' : 'failed'));
+        cms_fail('The content operation could not be completed. No changes were published.', 500);
+    }
+    return $result;
+}
+
 function cms_draft_payload($kind, $id, $key) {
     $path = cms_draft_path($kind, $id, true);
     if (!$path) { return null; }
@@ -183,6 +201,7 @@ function cms_current_post_meta($path) {
 }
 
 function cms_write_editor_content($kind, $id, $path, $markdown, ?array $meta = null) {
+    $snapshot = cms_mutation_snapshot(array($path, cms_draft_path($kind, $id, false)));
     $markdown = str_replace("\r\n", "\n", $markdown);
     if ($kind === 'post') {
         if (!is_file($path)) { cms_fail('Post not found.', 404); }
@@ -197,7 +216,7 @@ function cms_write_editor_content($kind, $id, $path, $markdown, ?array $meta = n
         cms_fail('Save failed.', 500);
     }
     cms_clear_draft($kind, $id);
-    cms_regenerate_indexes();
+    cms_finish_indexed_mutation($snapshot);
     return cms_editor_payload($kind, $path);
 }
 
@@ -350,6 +369,7 @@ case 'save':
     $id = $kind === 'post' ? $slug : $key;
     $payload = cms_mutate_locked(cms_target_rel_key($kind, $id), function () use ($kind, $path, $slug, $key, $id, $md) {
         cms_require_revision($path);
+        $snapshot = cms_mutation_snapshot(array($path, cms_draft_path($kind, $id, false)));
         if ($kind === 'post') {
             if (!is_file($path)) { cms_fail('Post not found.', 404); }
             list($meta, ) = cms_parse_front_matter(file_get_contents($path));
@@ -363,7 +383,7 @@ case 'save':
             cms_fail('Save failed.', 500);
         }
         cms_clear_draft($kind, $id);
-        cms_regenerate_indexes();
+        cms_finish_indexed_mutation($snapshot);
         $saved = cms_editor_payload($kind, $path);
         $saved['ok'] = true;
         return $saved;
@@ -448,12 +468,13 @@ case 'restore':
     if (!$revisionPath) { cms_fail('Selected revision not found.', 404); }
     $payload = cms_mutate_locked($relKey, function () use ($path, $revisionPath, $relKey, $kind, $id) {
         cms_require_revision($path, 'expected_revision');
+        $snapshot = cms_mutation_snapshot(array($path, cms_draft_path($kind, $id, false)));
         cms_backup($relKey, $path);
         if (!cms_atomic_write($path, file_get_contents($revisionPath))) {
             cms_fail('Could not restore revision.', 500);
         }
         cms_clear_draft($kind, $id);
-        cms_regenerate_indexes();
+        cms_finish_indexed_mutation($snapshot);
         return cms_editor_payload($kind, $path);
     });
     $payload['ok'] = true;
@@ -470,11 +491,12 @@ case 'save-post-meta':
     if (!$path) { cms_fail('Post not found.', 404); }
     $result = cms_mutate_locked('posts/' . $slug, function () use ($path, $slug) {
         cms_require_revision($path);
+        $snapshot = cms_mutation_snapshot(array($path));
         list($meta, $body) = cms_parse_front_matter(file_get_contents($path));
         $meta = cms_post_meta_from_request($meta, true);
         cms_backup('posts/' . $slug, $path);
         if (!cms_atomic_write($path, cms_build_front_matter($meta, $body))) { cms_fail('Save failed.', 500); }
-        cms_regenerate_indexes();
+        cms_finish_indexed_mutation($snapshot);
         return array('ok' => true, 'meta' => $meta, 'revision' => cms_content_revision($path));
     });
     cms_json($result);
@@ -493,6 +515,7 @@ case 'create-post':
         if (!$reservation) { cms_fail('Could not reserve a unique post URL.', 409); }
         $slug = $reservation['slug'];
         $path = $reservation['path'];
+        $snapshot = cms_mutation_snapshot(array($path));
         $data = cms_build_front_matter(array(
             'title' => $title, 'date' => date('Y-m-d H:i:s'), 'category' => $cat,
         ), "Post content…\n");
@@ -501,7 +524,7 @@ case 'create-post':
             cms_fail('Could not create post.', 500);
         }
         cms_release_post_slug_reservation($reservation);
-        cms_regenerate_indexes();
+        cms_finish_indexed_mutation($snapshot);
         return array('ok' => true, 'slug' => $slug, 'revision' => cms_content_revision($path),
             'url' => str_replace('{slug}', $slug, cms_cfg('post_url')));
     });
@@ -515,10 +538,11 @@ case 'delete-post':
     if (!$path) { cms_fail('Post not found.', 404); }
     cms_mutate_locked('posts/' . $slug, function () use ($path, $slug) {
         cms_require_revision($path);
+        $snapshot = cms_mutation_snapshot(array($path, cms_draft_path('post', $slug, false)));
         cms_backup('posts/' . $slug, $path);
         if (!@unlink($path)) { cms_fail('Could not delete post.', 500); }
         cms_clear_draft('post', $slug);
-        cms_regenerate_indexes();
+        cms_finish_indexed_mutation($snapshot);
     });
     cms_audit_event('content.delete', 'success', array('kind' => 'post'));
     cms_json(array('ok' => true, 'slug' => $slug));
@@ -567,11 +591,12 @@ case 'create-region':
     }
     $result = cms_mutate_locked('pages/' . $key, function () use ($path, $key, $markdown) {
         cms_require_revision($path);
+        $snapshot = cms_mutation_snapshot(array($path));
         if (is_file($path)) { cms_fail('This file already exists.', 409); }
         if (!cms_atomic_write($path, str_replace("\r\n", "\n", $markdown))) {
             cms_fail('Could not create Markdown file.', 500);
         }
-        cms_regenerate_indexes();
+        cms_finish_indexed_mutation($snapshot);
         return array('ok' => true, 'key' => $key, 'revision' => cms_content_revision($path), 'inventory' => cms_content_inventory());
     });
     cms_json($result);
@@ -623,8 +648,15 @@ case 'delete-media':
         if (cms_media_is_referenced($asset['url'], $asset['rel'])) {
             cms_fail('This file is still referenced by content. Remove references before deleting it.', 409);
         }
+        $metaPath = cms_media_meta_path($path);
+        $snapshot = cms_file_snapshot(array($path, $metaPath));
+        if ($snapshot === null) { cms_fail('Could not prepare the media operation.', 500); }
         if (!$path || !@unlink($path)) { cms_fail('Could not delete file.', 500); }
-        @unlink(cms_media_meta_path($path));
+        if (is_file($metaPath) && !@unlink($metaPath)) {
+            $restored = cms_restore_file_snapshot($snapshot);
+            error_log('CMS: media deletion rolled back after metadata delete failure; rollback ' . ($restored ? 'succeeded' : 'failed'));
+            cms_fail('The media operation could not be completed. No changes were published.', 500);
+        }
     });
     cms_audit_event('media.delete', 'success', array('kind' => $asset['kind']));
     cms_json(array('ok' => true));

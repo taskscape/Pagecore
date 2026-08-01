@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.19.0');
+define('PAGECORE_VERSION', '2.20.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
@@ -261,6 +261,14 @@ function cms_atomic_write($path, $data) {
     }
     if (function_exists('fsync')) { @fsync($handle); }
     fclose($handle);
+    if (!empty($GLOBALS['PAGECORE_WRITE_FAILURES']) && is_array($GLOBALS['PAGECORE_WRITE_FAILURES'])) {
+        $match = array_search(basename($path), $GLOBALS['PAGECORE_WRITE_FAILURES'], true);
+        if ($match !== false) {
+            unset($GLOBALS['PAGECORE_WRITE_FAILURES'][$match]);
+            @unlink($tmp);
+            return false;
+        }
+    }
     $forceRecoveryPath = !empty($GLOBALS['PAGECORE_FORCE_RECOVERABLE_REPLACE']);
     if (!$forceRecoveryPath && rename($tmp, $path)) { return true; }
 
@@ -283,6 +291,31 @@ function cms_atomic_write($path, $data) {
     if (!is_file($path)) { @rename($recovery, $path); }
     @unlink($tmp);
     return false;
+}
+
+/** Capture complete file values so a multi-file mutation can be rolled back. */
+function cms_file_snapshot(array $paths) {
+    $snapshot = array();
+    foreach (array_unique($paths) as $path) {
+        $exists = is_file($path);
+        $data = $exists ? file_get_contents($path) : null;
+        if ($exists && $data === false) { return null; }
+        $snapshot[$path] = array('exists' => $exists, 'data' => $data);
+    }
+    return $snapshot;
+}
+
+/** Restore a snapshot; return false if any file cannot be restored completely. */
+function cms_restore_file_snapshot(array $snapshot) {
+    $ok = true;
+    foreach ($snapshot as $path => $state) {
+        if ($state['exists']) {
+            if (!cms_atomic_write($path, $state['data'])) { $ok = false; }
+        } elseif (is_file($path) && !@unlink($path)) {
+            $ok = false;
+        }
+    }
+    return $ok;
 }
 
 /** Back up the current file for a key ("pages/foo/bar" or "posts/slug"). */
@@ -850,19 +883,20 @@ function cms_posts_from_disk() {
     return $list;
 }
 
-/** Write the cached posts index; returns the list that was written. */
+/** Write the cached posts index; returns the list, or false on a write/encoding failure. */
 function cms_write_posts_index($list = null) {
     if ($list === null) { $list = cms_posts_from_disk(); }
     $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
     if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) { $flags |= JSON_INVALID_UTF8_SUBSTITUTE; }
     $json = json_encode($list, $flags);
-    if ($json !== false) {
-        cms_atomic_write(cms_posts_index_path(), $json);
+    if ($json !== false && cms_atomic_write(cms_posts_index_path(), $json)) {
+        return $list;
     } else {
-        cms_audit_event('index.posts', 'failure', array('reason' => 'json_encode'));
-        error_log('CMS: posts index json_encode failed — index left unchanged');
+        $reason = $json === false ? 'json_encode' : 'write_failed';
+        cms_audit_event('index.posts', 'failure', array('reason' => $reason));
+        error_log('CMS: posts index ' . $reason . ' — index left unchanged');
     }
-    return $list;
+    return false;
 }
 
 /**
@@ -908,7 +942,9 @@ function cms_posts($category = null) {
             }
         }
         if ($cache === false) {
-            $cache = cms_write_posts_index(cms_posts_from_disk());
+            $diskPosts = cms_posts_from_disk();
+            $writtenPosts = cms_write_posts_index($diskPosts);
+            $cache = is_array($writtenPosts) ? $writtenPosts : $diskPosts;
         }
         // URLs are derived data. Recompute them from each slug so a stale index
         // cannot retain a broken post_url pattern after configuration is fixed.
@@ -1453,14 +1489,18 @@ function cms_release_post_slug_reservation($reservation) {
 }
 
 /* ------------------------------------------------- generated index files */
-/** Regenerate search-index.json and sitemap.xml after content changes. */
+/** Paths produced from source Markdown by the index regeneration operation. */
+function cms_generated_artifact_paths() {
+    return array(cms_posts_index_path(), cms_cfg('site_root') . '/search-index.json', cms_cfg('site_root') . '/sitemap.xml');
+}
+
+/** Regenerate all derived indexes as one observable, rollback-capable operation. */
 function cms_regenerate_indexes() {
     $root = cms_cfg('site_root');
     $site = rtrim(cms_cfg('site_url'), '/');
 
     // Scan disk once, then reuse the same list for every generated artifact.
     $posts = cms_posts_from_disk();
-    cms_write_posts_index($posts);
 
     $index = array();
     foreach (cms_cfg('search_pages', array()) as $url => $def) {
@@ -1479,11 +1519,9 @@ function cms_regenerate_indexes() {
     $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
     if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) { $flags |= JSON_INVALID_UTF8_SUBSTITUTE; }
     $json = json_encode($index, $flags);
-    if ($json !== false) {
-        cms_atomic_write($root . '/search-index.json', $json);
-    } else {
+    if ($json === false) {
         cms_audit_event('index.search', 'failure', array('reason' => 'json_encode'));
-        error_log('CMS: search index json_encode failed — index left unchanged');
+        return array('ok' => false, 'error' => 'index_generation_failed', 'artifact' => 'search-index.json');
     }
 
     $urls = array_keys(cms_cfg('search_pages', array()));
@@ -1497,7 +1535,25 @@ function cms_regenerate_indexes() {
         $xml .= '  <url><loc>' . htmlspecialchars($site . $u, ENT_QUOTES, 'UTF-8') . "</loc></url>\n";
     }
     $xml .= "</urlset>\n";
-    cms_atomic_write($root . '/sitemap.xml', $xml);
+    $paths = cms_generated_artifact_paths();
+    return cms_with_resource_lock('generated-indexes', function () use ($paths, $posts, $json, $xml) {
+        $snapshot = cms_file_snapshot($paths);
+        if ($snapshot === null) { return array('ok' => false, 'error' => 'index_snapshot_failed'); }
+        $postsWritten = cms_write_posts_index($posts);
+        $writes = array(
+            'posts-index.json' => is_array($postsWritten),
+            'search-index.json' => cms_atomic_write($paths[1], $json),
+            'sitemap.xml' => cms_atomic_write($paths[2], $xml),
+        );
+        foreach ($writes as $artifact => $ok) {
+            if ($ok) { continue; }
+            $restored = cms_restore_file_snapshot($snapshot);
+            cms_audit_event('index.regenerate', 'failure', array('reason' => 'write_failed', 'artifact' => $artifact, 'rollback' => $restored ? 'success' : 'failure'));
+            error_log('CMS: generated artifact write failed (' . $artifact . '); rollback ' . ($restored ? 'succeeded' : 'failed'));
+            return array('ok' => false, 'error' => 'index_write_failed', 'artifact' => $artifact, 'rollback' => $restored);
+        }
+        return array('ok' => true, 'artifacts' => $paths, 'posts' => count($posts));
+    });
 }
 
 /* -------------------------------------------------------------- editor UI */

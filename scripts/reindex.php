@@ -25,7 +25,12 @@ define('CMS_CONFIG_FILE', $config);
 require dirname(__DIR__) . '/cms/engine.php';
 
 $start = microtime(true);
-cms_regenerate_indexes();
+$result = cms_regenerate_indexes();
+if (!is_array($result) || empty($result['ok'])) {
+    $artifact = is_array($result) && isset($result['artifact']) ? ' (' . $result['artifact'] . ')' : '';
+    fwrite(STDERR, "Reindex failed" . $artifact . ". Existing generated files were restored.\n");
+    exit(1);
+}
 $posts = cms_posts();
 $ms = (int) round((microtime(true) - $start) * 1000);
 
