@@ -37,12 +37,14 @@ This was a source review with targeted local checks, not a production penetratio
 
 ### Critical and high priority
 
-- [ ] **SEC-01 — Upgrade the vendored Parsedown security boundary.**
+- [x] **SEC-01 — Upgrade the vendored Parsedown security boundary.**
   - Severity: High; confirmed outdated component with applicable upstream security fixes.
   - Explanation: Pagecore renders editor and imported Markdown through a vendored parser that declares version 1.7.4. Parsedown 1.8.0 added possessive regular expressions to prevent catastrophic backtracking/ReDoS and recursive safe-mode sanitization for nested elements. A crafted stored document can therefore consume excessive resources or reach sanitization behavior that the current release has since corrected.
   - Justification: [`cms/lib/Parsedown.php`](cms/lib/Parsedown.php) declares `const version = '1.7.4'` at line 20. Rendering is performed on public requests by [`cms/engine.php`](cms/engine.php) at lines 432-455 and 785-807. The official [Parsedown 1.8.0 release](https://github.com/erusev/parsedown/releases/tag/1.8.0) identifies ReDoS and recursive safe-mode fixes; the [Parsedown security guidance](https://github.com/erusev/parsedown#security) also recommends safe mode, an HTML sanitizer when HTML is allowed, and CSP as defense in depth.
   - Recommendation: Upgrade to Parsedown 1.8.0 or later, review local modifications instead of overwriting them blindly, synchronize the deployed copy, and add regression fixtures for nested unsafe URLs/attributes and adversarial emphasis/list input. Prefer Composer or a documented checksum/update process so the vendored dependency appears in routine dependency review.
   - Done when: the base and deployed parser versions are current and identical by design; security regression tests pass; a dependency inventory/update procedure exists; base and Zagozda rendering suites pass.
+  - Resolution: 2026-08-01 — Upgraded the byte-identical upstream 1.7.4 vendor file to official Parsedown 1.8.0 and synchronized the local Zagozda deployment. Added a tag-commit/checksum manifest, checksum-enforcing updater, focused safe-mode/ReDoS regression harness, package command, and documented update procedure.
+  - Evidence: Official tag `1.8.0` resolves to `96baaad00f71ba04d76e45b4620f54d3beabd6f7`; both parser copies declare 1.8.0 and match SHA-256 `34075a6f176841dbb91ca6a26ac7455b5bb576e368cfadb8249edb79d67b1a06`. The pre-upgrade harness passed characterized behavior then failed the deliberate version gate; after upgrade `npm run test:parsedown` passed (adversarial input 0.067s), PHP lint/manifest parsing/`git diff --check` passed, `PAGECORE_SAMPLE_PORT=18770 npm run test:e2e` passed 16/16, and the local Zagozda rendering suite passed 4/4 on port 18900.
 
 - [ ] **SEC-02 — Remove privileged raw HTML and third-party script execution from CMS content.**
   - Severity: High; confirmed in the local Zagozda copy.

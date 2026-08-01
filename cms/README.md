@@ -119,6 +119,21 @@ In **Content inventory**, click **Delete** beside the post's **Edit** and
 and any draft, preserves a backup revision, and regenerates the listings,
 search index, and sitemap.
 
+## Vendored dependencies
+
+Parsedown is pinned in `lib/Parsedown.version.json`, including its upstream tag
+commit and SHA-256 checksum. Refresh the vendored file only through the checked
+updater so a changed or compromised download is rejected before it is copied:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Update-Parsedown.ps1
+npm run test:parsedown
+```
+
+Pass `-DeploymentRoot <site-root>` to synchronize an existing deployment copy
+whose parser is at `<site-root>/cms/lib/Parsedown.php`. Review upstream release
+notes and update the pinned version, tag commit, URL, and checksum together.
+
 ## Requirements
 
 PHP 7.4+ with `fileinfo` (standard). The reusable `cms/`, `content/`, and

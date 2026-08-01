@@ -1,6 +1,6 @@
 {
   "name": "pagecore",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "private": true,
   "description": "Pagecore CMS sample site and end-to-end tests.",
   "scripts": {
@@ -8,7 +8,8 @@
     "sample:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Start-SampleSite.ps1",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "test:migration": "playwright test -c playwright.migration.config.js"
+    "test:migration": "playwright test -c playwright.migration.config.js",
+    "test:parsedown": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-Parsedown.ps1"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0"
