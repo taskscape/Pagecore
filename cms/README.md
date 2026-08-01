@@ -146,4 +146,5 @@ PHP 7.4+ with `fileinfo` (standard). Production configuration, content,
 backups, and uploads must be outside `DOCUMENT_ROOT`; Pagecore fails closed if
 they are not. The bundled PHP router is a loopback-only development facility,
 started through the repository script so its explicit development opt-in and
-denial policy are applied.
+denial policy are applied. Its `-HostAddress` option is an explicit override
+for controlled network testing, not a production deployment mode.

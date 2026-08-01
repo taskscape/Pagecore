@@ -230,14 +230,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.11.0');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.12.0');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.11.0');
+  expect((await version.json()).version).toBe('2.12.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.11.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.12.0')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {
@@ -336,8 +336,14 @@ test('development HTTP boundary denies configuration, content, backups, and exec
     '/sample-site/working-content/.backups/http-sentinel.md',
     '/sample-site/working-uploads/http-sentinel.php',
     '/cms/engine.php',
+    '/cms/%65ngine.php',
+    '/cms/%252e%252e/engine.php',
+    '/cms%2Fengine.php',
+    '/cms%5Cengine.php',
     '/cms/auth.php',
-    '/cms/lib/Parsedown.php'
+    '/cms/lib/Parsedown.php',
+    '/cms/README.md',
+    '/cms/.htaccess'
   ];
   for (const url of deniedPaths) {
     const response = await page.request.get(url);

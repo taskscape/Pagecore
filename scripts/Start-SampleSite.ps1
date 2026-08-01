@@ -1,6 +1,7 @@
 param(
     [ValidateRange(1, 65535)]
-    [int] $Port = 8765
+    [int] $Port = 8765,
+    [string] $HostAddress = '127.0.0.1'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,9 +30,9 @@ $PhpExe = (Resolve-Path -LiteralPath $PhpCandidate).Path
 & (Join-Path $PSScriptRoot 'Reset-SampleSite.ps1')
 
 $env:PAGECORE_CONFIG = $Config
-$env:PAGECORE_SITE_URL = "http://127.0.0.1:$Port"
+$env:PAGECORE_SITE_URL = "http://${HostAddress}:$Port"
 $env:PAGECORE_DEVELOPMENT = '1'
 
 # Keep transport limits above the CMS rule so application validation owns the test result.
-& $PhpExe -d upload_max_filesize=16M -d post_max_size=16M -S "127.0.0.1:$Port" -t $RepoRoot $Router
+& $PhpExe -d upload_max_filesize=16M -d post_max_size=16M -S "${HostAddress}:$Port" -t $RepoRoot $Router
 exit $LASTEXITCODE

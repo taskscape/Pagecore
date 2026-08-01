@@ -3,19 +3,15 @@ error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
 ini_set('display_errors', '0');
 
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$path = rawurldecode($uri);
 $root = dirname(__DIR__);
+require_once $root . '/cms/request-guard.php';
+$path = pagecore_request_path($_SERVER['REQUEST_URI']);
 
-if (preg_match('~^/sample-site/(working-content|fixtures)(/|$)~', $path)
-    || $path === '/sample-site/config.php'
-    || preg_match('~^/sample-site/working-uploads/.*\.php$~i', $path)) {
-    http_response_code(404);
-    echo 'Not found';
-    return true;
-}
-
-if (preg_match('~^/cms/(config|engine|auth)\.php$~', $path)
-    || preg_match('~^/cms/lib(/|$)~', $path)) {
+if ($path === false || pagecore_request_is_denied(
+    $_SERVER['REQUEST_URI'],
+    array('/sample-site/config.php', '/sample-site/fixtures', '/sample-site/working-content'),
+    array('/sample-site/working-uploads')
+)) {
     http_response_code(404);
     echo 'Not found';
     return true;
@@ -47,8 +43,8 @@ if (preg_match('~^/sample-site/post/([a-z0-9-]+)/?$~', $path, $m)) {
     return true;
 }
 
-$file = realpath($root . str_replace('/', DIRECTORY_SEPARATOR, $path));
-if ($file !== false && strpos(str_replace('\\', '/', $file), str_replace('\\', '/', $root) . '/') === 0 && is_file($file)) {
+$file = pagecore_public_file($root, $path);
+if ($file !== false) {
     return false;
 }
 
