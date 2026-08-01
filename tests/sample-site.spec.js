@@ -71,7 +71,8 @@ test('visitor sees rendered sample site without editor chrome', async ({ page })
 });
 
 test('failed logins in one browser session do not lock out another session', async ({ browser }) => {
-  const baseUrl = process.env.PAGECORE_BASE_URL || 'http://127.0.0.1:8765';
+  const samplePort = process.env.PAGECORE_SAMPLE_PORT || '8765';
+  const baseUrl = process.env.PAGECORE_BASE_URL || `http://127.0.0.1:${samplePort}`;
   const loginUrl = `${baseUrl}/cms/login.php?next=${encodeURIComponent('/sample-site/')}`;
   const attackerContext = await browser.newContext();
   const editorContext = await browser.newContext();
@@ -111,7 +112,8 @@ test('showcase demonstrates file-based featured images', async ({ page }) => {
 });
 
 test('post links expose Facebook-friendly title, summary, canonical URL, and featured image', async ({ page }) => {
-  const baseUrl = process.env.PAGECORE_BASE_URL || 'http://127.0.0.1:8765';
+  const samplePort = process.env.PAGECORE_SAMPLE_PORT || '8765';
+  const baseUrl = process.env.PAGECORE_BASE_URL || `http://127.0.0.1:${samplePort}`;
   await page.goto('/sample-site/post/launch-notes/');
 
   await expect(page.locator('meta[property="og:type"]')).toHaveAttribute('content', 'article');
@@ -176,14 +178,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.5');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.6.1');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.5');
+  expect((await version.json()).version).toBe('2.6.1');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.5')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.6.1')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {

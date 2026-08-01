@@ -1,0 +1,366 @@
+# Pagecore security and refactoring review
+
+Review date: 2026-07-31
+Review snapshot: `main` at `7163df2` plus the uncommitted working-tree changes present on the review date
+Scope: the version-controlled Pagecore CMS, sample site, WordPress importer, browser tests, deployment rules, and the ignored local `zagozda/` deployment copy
+
+## How to use this file
+
+1. Read this entire file before choosing an item. Several refactorings depend on security invariants described earlier in the list.
+2. Recheck every cited path against the current branch before editing. Line numbers and working-tree facts describe the snapshot above and will drift.
+3. An unchecked box, `[ ]`, means the item is still open. Work in severity/priority order unless a dependency in another item must be completed first.
+4. Keep the item's stated security or behavior objective even if implementation details change. A materially different solution is acceptable when it satisfies the same “Done when” conditions.
+5. Add two indented lines under the item when resolving it:
+   - `Resolution: YYYY-MM-DD — concise description or accepted-risk decision, owner, and expiry/review date.`
+   - `Evidence: tests, commands, deployment checks, commit, or pull request.`
+6. Change `[ ]` to `[x]` only after all “Done when” conditions are met and the relevant checks pass. Do not check an item merely because work started or one code path was changed.
+7. If the risk is intentionally accepted rather than fixed, record the owner, reason, compensating controls, and a review date before marking it complete.
+8. Preserve Pagecore's versioning rule when implementing code changes: feature-level work requires a minor bump and bug fixes require a patch bump, synchronized across `package.json`, the root package entries in `package-lock.json`, `PAGECORE_VERSION`, and version assertions.
+
+## Review basis and limitations
+
+The review traced authentication, sessions, CSRF, redirects, Markdown rendering, uploads, filesystem paths, drafts/backups, post visibility, navigation, generated indexes, the WordPress importer, PHP development routers, browser code, and test configuration. It also inspected the local ignored `zagozda/` tree because it is a deployment-shaped copy with security-relevant drift.
+
+Checks run during the review:
+
+- PHP lint passed for all 18 tracked PHP files using the bundled PHP 8.5.6 runtime.
+- `npm audit --json` reported zero known vulnerabilities in the installed npm dependency graph.
+- `npm outdated --json` reported `@playwright/test` 1.61.1 installed and 1.62.1 available; this is maintenance drift, not a reported vulnerability.
+- `npx playwright test --list` discovered 20 tests: 16 base sample tests and 4 ignored local Zagozda tests.
+- `npm run sample:start` failed because `scripts/Start-SampleSite.ps1` does not exist.
+- The login redirect validator returned `/\\evil.example/path`; standard browser URL resolution treats that value as `https://evil.example/path`.
+- The local Zagozda configuration explicitly enables raw HTML, and its content currently contains same-origin pages that load remote scripts.
+
+This was a source review with targeted local checks, not a production penetration test. Apache, reverse-proxy, TLS, PHP-FPM, filesystem-permission, and live Zagozda deployment behavior were not verified. Server-level controls may mitigate some findings, but they must be demonstrated before an item is closed.
+
+## Security vulnerabilities and hardening opportunities
+
+### Critical and high priority
+
+- [ ] **SEC-01 — Upgrade the vendored Parsedown security boundary.**
+  - Severity: High; confirmed outdated component with applicable upstream security fixes.
+  - Explanation: Pagecore renders editor and imported Markdown through a vendored parser that declares version 1.7.4. Parsedown 1.8.0 added possessive regular expressions to prevent catastrophic backtracking/ReDoS and recursive safe-mode sanitization for nested elements. A crafted stored document can therefore consume excessive resources or reach sanitization behavior that the current release has since corrected.
+  - Justification: [`cms/lib/Parsedown.php`](cms/lib/Parsedown.php) declares `const version = '1.7.4'` at line 20. Rendering is performed on public requests by [`cms/engine.php`](cms/engine.php) at lines 432-455 and 785-807. The official [Parsedown 1.8.0 release](https://github.com/erusev/parsedown/releases/tag/1.8.0) identifies ReDoS and recursive safe-mode fixes; the [Parsedown security guidance](https://github.com/erusev/parsedown#security) also recommends safe mode, an HTML sanitizer when HTML is allowed, and CSP as defense in depth.
+  - Recommendation: Upgrade to Parsedown 1.8.0 or later, review local modifications instead of overwriting them blindly, synchronize the deployed copy, and add regression fixtures for nested unsafe URLs/attributes and adversarial emphasis/list input. Prefer Composer or a documented checksum/update process so the vendored dependency appears in routine dependency review.
+  - Done when: the base and deployed parser versions are current and identical by design; security regression tests pass; a dependency inventory/update procedure exists; base and Zagozda rendering suites pass.
+
+- [ ] **SEC-02 — Remove privileged raw HTML and third-party script execution from CMS content.**
+  - Severity: High; confirmed in the local Zagozda copy.
+  - Explanation: `allow_html => true` disables Parsedown safe mode for all content. The current Zagozda content contains inline and remote `<script>` elements, including Cal.com and Publitas loaders. Those scripts execute with the site's origin; when an editor is logged in they can access the DOM-visible `window.CMS_CONFIG` CSRF token and make authenticated CMS requests. A compromised import, content file, or third-party script becomes a stored-XSS or supply-chain compromise of the CMS.
+  - Justification: `zagozda/cms/config.php` enables `allow_html`; `zagozda/cms/engine.php:412` converts that flag into disabled safe mode. Raw scripts exist at `zagozda/content/pages/schedule/body.md:3` and repeatedly in `zagozda/content/posts/czego-sie-boja.md`. [`scripts/import-wordpress.php`](scripts/import-wordpress.php) lines 11-14 and 213-239 deliberately preserve scripts, iframes, objects, embeds, forms, and SVG and instruct operators to enable raw HTML.
+  - Recommendation: Keep `allow_html` false. Sanitize imported HTML with a maintained allowlist sanitizer, turn supported embeds into application-generated components, and place unavoidable third-party content in sandboxed cross-origin iframes without `allow-same-origin`. Do not allow arbitrary content to emit scripts. Add a restrictive CSP after inline application code has been extracted.
+  - Done when: no published Markdown can emit arbitrary script or event-handler markup; existing remote scripts have been removed or isolated; imported HTML passes an allowlist sanitizer; an authenticated browser regression proves stored payloads cannot read the token or call the API.
+
+- [ ] **SEC-03 — Replace regex-based SVG sanitization and isolate active uploads.**
+  - Severity: High; confirmed validation defect plus a fragile security design.
+  - Explanation: SVG is active XML content, but the upload endpoint attempts to secure it with a blacklist of regular expressions. The first script pattern contains an actual U+0008 backspace character where a regex word boundary was intended, so it does not match ordinary opening script tags as documented. Blacklists also miss encoded, namespaced, and newly introduced active SVG features. Uploaded SVG and PDF files are then served from the application origin and opened inline.
+  - Justification: [`cms/api.php`](cms/api.php) lines 536-568 implement the blacklist; line 540 contains character code 8 after `script`. [`cms/engine.php`](cms/engine.php) lines 292-357 creates direct public URLs, and [`cms/media.php`](cms/media.php) lines 175-188 opens them in the browser. OWASP's [File Upload Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html) recommends isolating public uploads, using maintained validation, and treating client-side active content as a threat.
+  - Recommendation: Safest default: remove SVG from `allowed_ext` and accept raster images only. If SVG is required, parse it with a maintained allowlist sanitizer, reject external references and active elements, and serve it from a cookieless separate origin or through a download/transform handler with `nosniff`. Consider forcing PDFs to download or embedding them in a sandboxed, separate-origin viewer. Add a malicious corpus rather than a few string checks.
+  - Done when: the malformed pattern is gone; active upload types cannot execute with the CMS origin; bypass fixtures are rejected; raster size/decoding and PDF/SVG delivery behavior are covered by tests.
+
+- [ ] **SEC-04 — Enforce publication status consistently across import, storage, listing, search, sitemap, and direct routes.**
+  - Severity: High when non-public statuses are imported; confirmed semantic mismatch.
+  - Explanation: The importer supports `private`, draft, or other WordPress statuses and records non-published post status in front matter, but the runtime ignores the field. Such posts are included in public listings, search indexes, sitemaps, and direct `cms_post()` lookups. Non-published pages are likewise written to normal page content and added to search configuration.
+  - Justification: [`scripts/import-wordpress.php`](scripts/import-wordpress.php) lines 23, 56, 63-64, 668-754 accept configurable statuses and persist `status`. [`cms/engine.php`](cms/engine.php) lines 608-634 and 675-697 index every Markdown post; lines 784-809 return a post without checking status; lines 1218-1252 publish every indexed post. The importer writes every selected page at lines 714-721 without retaining a page visibility policy.
+  - Recommendation: Define one status model. Public readers must see only `publish`; authenticated editors may preview other states explicitly. Make import default to `publish` only, require an explicit risk acknowledgement for other statuses, keep non-public content outside public indexes, and add direct-route, listing, search, sitemap, and page tests for each supported status.
+  - Done when: a private/draft import fixture is inaccessible anonymously from every public surface but remains available to an authorized editor through an intentional workflow.
+
+- [ ] **SEC-05 — Move secrets and non-public content outside the document root, or ship enforceable server configurations for every supported server.**
+  - Severity: High if Apache rules are missing or ignored; deployment-dependent.
+  - Explanation: Production configuration, published source Markdown, drafts, and backups are designed to live under the web root. Their confidentiality and upload non-execution depend on Apache `.htaccess`; non-Apache protection is only a documentation instruction. A misconfigured Nginx/IIS/PHP built-in deployment can expose private drafts/backups or execute uploaded server-side files.
+  - Justification: [`cms/engine.php`](cms/engine.php) lines 24-26 default to `cms/config.php`. [`README.md`](README.md) lines 188-203 and 445-455 place `cms/`, `content/`, and `uploads/` in the public tree and ask operators to configure equivalent rules. [`content/.htaccess`](content/.htaccess) and [`uploads/.htaccess`](uploads/.htaccess) are Apache-specific. OWASP recommends storing uploads on a different host or outside the web root where possible.
+  - Recommendation: Prefer config/content/drafts/backups outside the document root and deliver public media through a controlled handler or isolated origin. If that is outside Pagecore's design, ship tested Apache, Nginx, IIS, and local-router examples plus a deployment smoke test that requests known sentinel files and executable extensions and requires denial.
+  - Done when: non-public files cannot be retrieved and uploads cannot execute on every officially supported deployment target; the result is proven by automated HTTP tests, not only documentation.
+
+- [ ] **SEC-06 — Make development routers enforce the same denials as production.**
+  - Severity: High if a development server is reachable beyond localhost; confirmed drift in the ignored deployment copy.
+  - Explanation: `.htaccess` is not applied by PHP's built-in server. The base sample router blocks its working content and selected CMS internals, but the Zagozda router serves existing site files directly and dispatches every PHP file under `/cms/`. It does not deny `/content/`, drafts/backups, config/engine/auth/lib, or dangerous upload extensions consistently.
+  - Justification: [`sample-site/router.php`](sample-site/router.php) lines 9-21 contains explicit denials. `zagozda/router.php:29-52` instead strips `..`, executes any matching CMS PHP file, and returns existing files to the built-in server; the Apache rules in `zagozda/content/.htaccess` and `zagozda/cms/.htaccess` do not apply there. Prefix checks at `zagozda/router.php:49-51` also lack a path-separator boundary.
+  - Recommendation: Create one reusable request-path guard shared by local routers, bind development servers to loopback by default, deny all non-public roots before static-file dispatch, use an allowlist for public CMS endpoints/assets, and test traversal/encoding/backslash variants.
+  - Done when: the same negative HTTP matrix passes against Apache-equivalent and PHP built-in routes, and the development start command binds only to `127.0.0.1` unless explicitly overridden.
+
+### Medium priority
+
+- [ ] **SEC-07 — Close the post-login open redirect.**
+  - Severity: Medium; confirmed.
+  - Explanation: The `next` validator rejects a leading `//` but accepts backslashes. Browsers normalize `/\\evil.example/path` into a scheme-relative external URL, allowing a trusted Pagecore login link to redirect to a phishing domain after login.
+  - Justification: [`cms/login.php`](cms/login.php) lines 5-9 perform only first-character, `//`, and CR/LF checks, then lines 15-25 use the value in `Location`. The same implementation exists in `zagozda/cms/login.php`. The behavior was reproduced with the current function and standard URL resolution. See OWASP's [Unvalidated Redirects and Forwards Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html).
+  - Recommendation: Accept only a parsed, root-relative application path: reject backslashes, control characters, scheme/host/userinfo, and all values beginning with more than one slash; normalize once; or use an allowlisted route identifier rather than a URL. Add encoded and mixed-separator regression cases.
+  - Done when: all `//`, `\\`, encoded, mixed-separator, scheme, and control-character payloads fall back to a local safe route, while valid path/query/fragment destinations still work.
+
+- [ ] **SEC-08 — Replace session-scoped login throttling with shared anti-automation controls.**
+  - Severity: Medium; confirmed bypass.
+  - Explanation: Failure counts live only in the attacker's anonymous PHP session. An attacker can obtain a fresh cookie or rotate sessions after four attempts and continue indefinitely. The endpoint also sleeps inside PHP workers, making resource exhaustion cheaper while not stopping distributed guessing.
+  - Justification: [`cms/auth.php`](cms/auth.php) lines 13-48 store counters in `$_SESSION`, lock after five failures, and call `sleep()`. The existing test at [`tests/sample-site.spec.js`](tests/sample-site.spec.js) lines 73-98 proves a second session remains unaffected, which is good for availability but also demonstrates the bypass. OWASP's [Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html) recommends account-associated throttling with DoS-aware design; its anti-automation guidance recommends separate per-account and per-source limits.
+  - Recommendation: Add reverse-proxy or shared-store rate limits for both account and source, return `429`, use bounded exponential backoff, log events, and consider optional MFA or upstream identity-provider protection. Avoid a permanent global lockout for the single editor account.
+  - Done when: changing cookies does not reset the effective attempt budget, distributed and single-source cases are tested, legitimate recovery remains possible, and worker-blocking sleeps are removed or tightly bounded behind infrastructure throttling.
+
+- [ ] **SEC-09 — Make secure-session behavior explicit behind TLS proxies and require HTTPS in production.**
+  - Severity: Medium; deployment-dependent.
+  - Explanation: The `Secure` cookie flag is inferred only from `$_SERVER['HTTPS']`. TLS-terminating reverse proxies commonly forward HTTP to PHP, so an otherwise HTTPS site can issue a non-Secure authentication cookie. The codebase also does not supply an HTTPS redirect or HSTS policy.
+  - Justification: [`cms/engine.php`](cms/engine.php) lines 29-40 calculates `$secure` directly from `HTTPS`. PHP documents that a Secure session cookie is sent only over secure connections and recommends `session.cookie_secure=On` and HSTS for HTTPS-only sites in its [session security guidance](https://www.php.net/manual/en/session.security.ini.php).
+  - Recommendation: Add an explicit production `cookie_secure` setting defaulting to true, support trusted-proxy headers only from configured proxy addresses, reject production HTTP, and document/test HSTS at the web-server layer. Set `session.use_only_cookies` and disable trans-SID explicitly rather than relying on environment defaults.
+  - Done when: direct HTTPS and trusted-proxy HTTPS both issue `Secure; HttpOnly; SameSite=...`, HTTP cannot reach authenticated CMS pages, and spoofed forwarding headers from untrusted clients are ignored.
+
+- [ ] **SEC-10 — Add a tested security-header policy and refactor toward a strict CSP.**
+  - Severity: Medium; confirmed absence in repository-managed responses.
+  - Explanation: Pagecore does not set CSP, `frame-ancestors`/X-Frame-Options, `X-Content-Type-Options`, Referrer-Policy, or Permissions-Policy. Inline CSS/JavaScript and remote Google Fonts make a strict CSP difficult. This removes defense in depth against renderer/upload bypasses, clickjacking, and MIME confusion.
+  - Justification: No PHP endpoint or bundled `.htaccess` sets these headers. [`cms/login.php`](cms/login.php), [`cms/content.php`](cms/content.php), and [`cms/media.php`](cms/media.php) contain inline style/script blocks and remote font loads. OWASP's [HTTP Headers Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html) and [CSP Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html) recommend `frame-ancestors`, `nosniff`, HSTS on HTTPS sites, and moving inline code to external files.
+  - Recommendation: First extract application inline code. Then deploy CSP in report-only mode, converge on `default-src 'self'`, explicit image/font/object/frame/connect policies, `frame-ancestors 'none'` for CMS pages, and no arbitrary script sources. Add `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, a deliberate Permissions-Policy, and production-only HSTS.
+  - Done when: browser tests assert the header set; CMS workflows function without `unsafe-inline`/`unsafe-eval`; framing is denied; CSP reports show no unintended violations.
+
+- [ ] **SEC-11 — Enforce the declared HTTP method for every API action.**
+  - Severity: Medium-low; confirmed method confusion and logout CSRF.
+  - Explanation: The authentication guard requires CSRF for non-GET requests, but the switch does not reject a wrong method. Most mutation handlers happen to read only `$_POST`, limiting impact, while `?action=logout` works via GET and can be triggered cross-site. Future actions could accidentally become GET mutations.
+  - Justification: [`cms/auth.php`](cms/auth.php) lines 68-83 makes CSRF conditional on the request method. [`cms/api.php`](cms/api.php) lines 202-204 dispatches only by action; lines 593-596 log out without a method check.
+  - Recommendation: Define an action table with handler and allowed method, return `405` plus `Allow` on mismatch, require POST+CSRF for logout, and add tests for every action/method pair. Consider an Origin check as defense in depth for state changes.
+  - Done when: every mutation rejects GET/HEAD and missing/invalid tokens, read actions reject unintended methods, and cross-site logout no longer succeeds.
+
+- [ ] **SEC-12 — Add application-level request, media-dimension, storage, and inventory limits.**
+  - Severity: Medium; authenticated/session-compromise availability risk.
+  - Explanation: Individual uploads have a byte limit, but Markdown, navigation JSON, metadata, media count, total storage, SVG complexity, raster dimensions, and public search results do not. A small compressed image can have huge dimensions, and repeated allowed uploads can fill disk. Media and content inventory endpoints recursively process entire trees.
+  - Justification: [`cms/api.php`](cms/api.php) lines 259-321 and 409-479 accept unbounded text; lines 503-535 check upload bytes but not pixel count; [`cms/engine.php`](cms/engine.php) lines 360-380 enumerates all media; [`cms/media.php`](cms/media.php) renders every result. OWASP's upload guidance calls out storage exhaustion, decompression/XML bombs, file limits, and public retrieval risks.
+  - Recommendation: Add configurable content/body/meta/nav limits, image width/height/pixel limits with safe decode/re-encode, total/per-period upload quotas, media pagination, and maximum search result/page sizes. Enforce web-server and application limits consistently and return `413`/structured errors.
+  - Done when: boundary tests cover each limit, oversized inputs fail before expensive parsing or writes, and quotas cannot leave partial files.
+
+- [ ] **SEC-13 — Stop advertising end-of-life PHP 7.4 as a safe deployment baseline.**
+  - Severity: Medium; confirmed documentation/runtime-policy risk.
+  - Explanation: The project promises PHP 7.4+ compatibility, which can encourage deployment on a runtime that has received no security fixes since 2022. The bundled local runtime is modern, but production requirements remain permissive.
+  - Justification: [`cms/engine.php`](cms/engine.php) line 16 and [`README.md`](README.md) lines 491-498 state PHP 7.4+. PHP's official [unsupported branches list](https://www.php.net/eol.php) records PHP 7.4 end of life on 2022-11-28; the current [supported versions page](https://www.php.net/supported-versions.php) lists 8.2-8.5 as supported on the review date.
+  - Recommendation: Raise the minimum to a supported branch, preferably PHP 8.3+ for a reasonable support window, add a CI matrix for supported versions, and document a runtime upgrade policy before dropping compatibility code.
+  - Done when: requirements and automated checks reject unsupported PHP branches and all supported-runtime lint/unit/browser lanes pass.
+
+- [ ] **SEC-14 — Remove anonymous filesystem mutation and unbounded result rendering from public search.**
+  - Severity: Medium-low; confirmed design issue.
+  - Explanation: A public search request regenerates indexes when the search file is absent, turning an anonymous GET into an expensive write path. An empty query returns every indexed item in one HTML response. Concurrent first requests can race on generated artifacts.
+  - Justification: [`sample-site/search/index.php`](sample-site/search/index.php) lines 4-9 calls `cms_regenerate_indexes()` and lines 11-17 collect all matches with no cap. [`cms/engine.php`](cms/engine.php) lines 1209-1252 scans posts and writes three generated artifacts.
+  - Recommendation: Generate indexes only during authenticated publish/import/reindex operations or an explicit maintenance job. Public search should use an existing immutable snapshot, fail gracefully when unavailable, normalize/cap input, paginate results, and never write.
+  - Done when: anonymous search performs no writes, missing-index behavior is bounded, and load tests prove response size and work are capped.
+
+### Lower priority / defense in depth
+
+- [ ] **SEC-15 — Add security-relevant audit logging without leaking secrets or content.**
+  - Severity: Low; detection and response gap.
+  - Explanation: Login successes/failures, throttling, logout, publish, restore, delete, upload rejection, and configuration/index failures are not recorded consistently. The few `error_log()` calls are free-form and omit event context.
+  - Justification: [`cms/auth.php`](cms/auth.php) has no logging; [`cms/api.php`](cms/api.php) logs only selected write failures; many filesystem failures are suppressed with `@`. OWASP authentication guidance recommends logging and monitoring failures and lockouts.
+  - Recommendation: Introduce a small structured audit logger with event name, outcome, timestamp, correlation ID, authenticated account identifier, and privacy-safe source context. Never log passwords, CSRF/session tokens, full Markdown, or sensitive absolute paths. Document retention and alert thresholds.
+  - Done when: security events are queryable, failed actions retain useful server-side causes, sensitive values are redacted, and tests assert representative events.
+
+- [ ] **SEC-16 — Protect the login endpoint from login CSRF and make demo credentials impossible to mistake for production.**
+  - Severity: Low; defense in depth and deployment safety.
+  - Explanation: The login POST has no CSRF token. The repository also includes documented, fixed demo credentials. Although the single-account design limits classic login-CSRF impact and the sample is labelled, a copied sample configuration or exposed development server creates an immediately guessable CMS login.
+  - Justification: [`cms/login.php`](cms/login.php) lines 20-30 and 114-120 accept credentials without a login-form token. [`sample-site/config.php`](sample-site/config.php) lines 8-11 contains the fixed hash; [`sample-site/README.md`](sample-site/README.md) lines 20-21 publishes the credentials.
+  - Recommendation: Issue a pre-authentication login token, verify Origin/Referer where reliable, and add a `development_only` guard that refuses non-loopback or production-mode startup with the sample config. Keep the sample credentials clearly separate from deployable configuration templates.
+  - Done when: cross-site login POSTs fail, local sample login still works, and a production-mode process cannot start with sample credentials.
+
+## Refactoring and maintainability opportunities
+
+### Priority 1 — restore reliable delivery and protect data integrity
+
+- [x] **REF-01 — Restore and track the server start scripts referenced by package and Playwright configuration.**
+  - Explanation: The documented and configured sample workflow calls a file that is absent, so the canonical local and end-to-end commands cannot start a server.
+  - Justification: [`package.json`](package.json) line 8 and [`playwright.config.js`](playwright.config.js) line 20 reference `scripts/Start-SampleSite.ps1`; [`README.md`](README.md) line 515 and [`sample-site/README.md`](sample-site/README.md) line 10 document it. `npm run sample:start` failed during this review. The ignored Zagozda config similarly references missing `scripts/Start-ZagozdaSite.ps1`.
+  - Recommendation: Recreate and version a safe loopback-only start helper, or replace the PowerShell dependency with a cross-platform Node/PHP launcher. Validate ports, resolve the bundled PHP path, pass environment variables explicitly, and ensure the process is terminated by Playwright.
+  - Done when: `npm run sample:start` works from a clean checkout, `npm run test:e2e` starts and stops its own server, and no untracked helper is required.
+  - Resolution: 2026-08-01 — Restored tracked sample and Zagozda PowerShell launchers with validated ports, explicit runtime/path checks, loopback-only binding, and foreground process ownership for Playwright cleanup. Test URL construction now honors the configured sample port.
+  - Evidence: PowerShell parser validation passed; the pre-change Playwright start failed on the missing script; `PAGECORE_SAMPLE_PORT=18765 npx playwright test tests/sample-site.spec.js` passed 16/16 in the working tree; an isolated checkout containing only this staged change ran `PAGECORE_SAMPLE_PORT=18766 npm run test:e2e`, started/stopped its own bundled PHP server, and passed 15/15; `git diff --check` passed.
+
+- [ ] **REF-02 — Make base and migration browser suites hermetic, explicit, and source-controlled.**
+  - Explanation: The base Playwright configuration discovers an ignored local migration spec, so results depend on files present in one checkout and can run tests against the wrong server. The dedicated Zagozda config/spec and deployment tree are ignored and have no package script.
+  - Justification: [`playwright.config.js`](playwright.config.js) uses the whole `tests/` directory without `testIgnore`; `npx playwright test --list` found both `sample-site.spec.js` and ignored `zagozda.spec.js`. [`.gitignore`](.gitignore) lines 25-27 excludes the migration config/spec. [`package.json`](package.json) has no `test:zagozda` command.
+  - Recommendation: Track reusable migration fixtures/tests in a separate explicit lane, set `testMatch`/`testIgnore` in both configs, add named package scripts, and keep site-specific private data outside the test fixture. A clean clone must discover the same tests as CI.
+  - Done when: base discovery lists only base tests, migration discovery lists only migration tests, both commands are documented and repeatable, and CI runs the intended lanes independently.
+
+- [ ] **REF-03 — Eliminate manual CMS copies and make deployments consume one versioned artifact.**
+  - Explanation: `zagozda/cms` is a manually duplicated, ignored copy. Every reviewed core file except Parsedown and `.htaccess` currently differs from the base; the deployed engine lacks the current version constant. Security fixes can silently land in one copy only.
+  - Justification: Hash comparison found differences in `engine.php`, `api.php`, `auth.php`, `login.php`, `content.php`, `media.php`, and `assets/editor.js`. The entire `zagozda/` tree is ignored by [`.gitignore`](.gitignore).
+  - Recommendation: Build a release archive from the tracked `cms/`, `content/`, and `uploads/` package; keep site-specific configuration/templates/content separate; deploy the artifact or a pinned package rather than copying source. Add a manifest/checksum and a compatibility/deployment test.
+  - Done when: there is one authoritative CMS implementation, deployment drift is detected automatically, and the running site exposes a verifiable Pagecore version matching the artifact.
+
+- [ ] **REF-04 — Add concurrency control and optimistic editing to every mutable content path.**
+  - Explanation: Atomic temp-file rename prevents partial writes in the common case but does not prevent two tabs/requests from overwriting each other. The Windows fallback deletes the live target before a second rename, so it is not guaranteed atomic if that rename also fails. Backups, draft writes, region creation, metadata writes, and index rebuilds are not coordinated.
+  - Justification: [`cms/engine.php`](cms/engine.php) lines 114-149 performs unlink-then-rename and unlocked backup pruning. [`cms/api.php`](cms/api.php) lines 263-368 writes based on a previously read file with no version token. Only post creation has an explicit reservation at `cms/engine.php:1174-1206`; region creation has a check-then-replace race at `cms/api.php:418-450`.
+  - Recommendation: Return a content revision/ETag on reads, require it on save/publish/metadata mutations, reject stale writes with `409`, and use a per-content lock around backup+write+index changes. Replace the Windows fallback with a recoverable replace strategy and test injected failures/concurrent requests.
+  - Done when: concurrent edits cannot silently lose data, duplicate region creation is exclusive, a failed replacement leaves either the old or new complete file recoverable, and concurrency tests pass on Windows and a Unix-like CI runner.
+
+- [ ] **REF-05 — Treat each mutation and its generated artifacts as one observable operation.**
+  - Explanation: API actions can report success after search, sitemap, posts-index, or metadata writes fail. Upload can leave an orphan when metadata/asset construction fails; deletion and restore can leave indexes stale. This produces false success and hard-to-repair partial state.
+  - Justification: [`cms/engine.php`](cms/engine.php) lines 637-648 ignores the result of `cms_atomic_write()` for the posts index; lines 1209-1252 ignore all artifact write results. [`cms/api.php`](cms/api.php) line 582 ignores metadata-write failure after an upload, then reports orphans only indirectly. Many callers invoke `cms_regenerate_indexes()` without checking a result.
+  - Recommendation: Return a typed result from each filesystem operation, stage all derived files, commit them under a lock, roll back or queue a repair when possible, and surface a stable client error plus diagnostic server log. Provide an idempotent repair/reindex command.
+  - Done when: fault-injection tests for every write boundary produce no false success, partial files are cleaned or repairable, and the API communicates a stable failure without leaking paths.
+
+- [ ] **REF-06 — Add a validated configuration schema and production startup checks.**
+  - Explanation: Configuration is an untyped array read directly into globals. Missing/wrong values cause late warnings, insecure defaults, invalid routes, or writes to unintended locations. Security-sensitive relationships such as content/backup/upload containment are not validated centrally.
+  - Justification: [`cms/engine.php`](cms/engine.php) lines 24-26 and 51-55 load and expose arbitrary config. Call sites assume categories, session name/hours, paths, URL patterns, hashes, and limits are valid. Several functions call `cms_cfg('categories')` without a default.
+  - Recommendation: Validate required keys once at bootstrap; normalize paths/URLs; verify directories are distinct and contained as intended; validate the password hash, session name, upload extensions, limits, site URL, and `{slug}` placeholder; fail closed with an operator-safe message and detailed server log.
+  - Done when: invalid config fixtures fail before sessions or writes begin, production mode rejects demo/insecure settings, and a documented config schema/example is versioned.
+
+### Priority 2 — separate responsibilities and remove correctness traps
+
+- [ ] **REF-07 — Split `cms/engine.php` into cohesive modules while retaining a simple public facade.**
+  - Explanation: One file contains bootstrap/config, sessions, path resolution, filesystem writes, backup/revision logic, media, Markdown, posts/tags, navigation, inventory, index generation, and HTML asset generation. Changes in one concern require loading and reasoning about all concerns.
+  - Justification: [`cms/engine.php`](cms/engine.php) is approximately 1,287 physical lines in the current snapshot and defines the entire global API. It also makes pure logic difficult to test without loading config and global state.
+  - Recommendation: Extract internal modules for configuration, paths/storage, rendering, posts, media, navigation, indexing, and session context. Preserve current `cms_*` functions as a compatibility facade during migration so existing sites do not break.
+  - Done when: responsibilities have explicit dependencies, pure modules can be unit-tested without a web request, the facade preserves documented behavior, and no circular bootstrap loading is introduced.
+
+- [ ] **REF-08 — Replace the 600-line API switch with a method-aware action registry and handlers.**
+  - Explanation: Routing, authentication, request extraction, validation, domain logic, filesystem work, and response serialization are interleaved in one switch. This caused method ambiguity and duplicated save/publish logic.
+  - Justification: [`cms/api.php`](cms/api.php) lines 200-600 dispatch all actions. `save`, `publish`, `save-post-meta`, `restore`, and `create-region` repeat read/backup/write/regenerate/response sequences.
+  - Recommendation: Define an action registry with method, authorization, request schema, handler, and response type. Extract handlers around application services; keep one JSON/error boundary that maps known failures to stable status codes.
+  - Done when: each action is independently testable, method enforcement is declarative, duplicate mutation sequences are removed, and existing JSON shapes remain compatible.
+
+- [ ] **REF-09 — Centralize scalar input parsing and domain validation.**
+  - Explanation: Request values are cast inconsistently, arrays can reach string functions, UTF-8 validation omits fields, date validation checks shape rather than a real calendar date, and path checks are repeated after already-strict resolvers.
+  - Justification: [`cms/api.php`](cms/api.php) lines 106-140 calls `cms_utf8_or_fail($tags, $tags)` instead of validating all post fields; lines 117-119 accept impossible dates such as month 99. Numerous handlers read raw `$_GET`/`$_POST` without rejecting arrays. `create-region` and `save-media-meta` duplicate format/traversal checks at lines 418-475.
+  - Recommendation: Add request helpers that require a scalar string/int/bool, enforce UTF-8 and length, and return field-specific validation errors. Use `DateTimeImmutable::createFromFormat()` with round-trip validation, and let one domain resolver own each identifier rule.
+  - Done when: array/malformed/invalid-UTF-8/impossible-date/oversized fixtures return consistent `400` responses without PHP warnings, and duplicate validation is removed.
+
+- [ ] **REF-10 — Use one canonical, boundary-safe filesystem containment API.**
+  - Explanation: Path normalization and prefix containment are implemented repeatedly with subtly different separator, case, trailing-slash, symlink, and non-existent-target behavior. Some checks use raw `strpos($path, $base) === 0`, which also matches a sibling with the same prefix.
+  - Justification: Variants exist in [`cms/engine.php`](cms/engine.php) at lines 74-103, 193-214, 260-289, and 956-963; [`cms/api.php`](cms/api.php) at lines 432-470; [`scripts/import-wordpress.php`](scripts/import-wordpress.php) at lines 82-107; and both routers.
+  - Recommendation: Introduce a canonical `pathIsWithin`/resolver that normalizes platform case and separators, requires a separator boundary, resolves symlinks, and safely handles a non-existent leaf by validating its nearest existing parent. Use it at every I/O boundary.
+  - Done when: all duplicated prefix logic is removed and a cross-platform test matrix covers siblings with shared prefixes, case variants, symlinks, UNC/drive paths, encoded separators, and non-existent leaves.
+
+- [ ] **REF-11 — Replace the ad-hoc front-matter parser with a documented schema and visibility-aware model.**
+  - Explanation: Front matter is parsed with a search for the next `\n---` and simple first-colon splitting. There is no schema, type validation, quoting/escaping, or central handling for status. Malformed values fail late or silently change behavior.
+  - Justification: [`cms/engine.php`](cms/engine.php) lines 402-429 implements the parser/builder. Metadata is interpreted independently across `cms_posts_from_disk()`, `cms_post()`, and API request handling.
+  - Recommendation: Define a minimal Pagecore front-matter schema and parser with exact delimiter lines, normalized newline handling, allowed keys/types, real date/status/category validation, unknown-key preservation policy, and round-trip tests. A maintained YAML library is acceptable if dependency cost is justified.
+  - Done when: parse/build round trips are deterministic, malformed metadata yields diagnostics instead of notices, and every consumer uses one normalized post/page object.
+
+- [ ] **REF-12 — Centralize route and URL generation and remove reusable-engine site assumptions.**
+  - Explanation: `/cms`, `/`, content/media endpoints, search/contact sitemap paths, and upload/post URLs are hard-coded across PHP and JavaScript. This impedes subdirectory installs and leaks Zagozda-specific Polish routes into the reusable engine.
+  - Justification: [`cms/engine.php`](cms/engine.php) lines 1241-1245 hard-codes `/szukaj/` and `/kontakt/`; lines 1271-1286 hard-code CMS asset/API paths. [`cms/login.php`](cms/login.php), [`cms/content.php`](cms/content.php), [`cms/media.php`](cms/media.php), and [`cms/assets/editor.js`](cms/assets/editor.js) repeat root-relative routes.
+  - Recommendation: Add validated `base_url`, `cms_url`, route helpers, and configurable sitemap extras. Generate all server and browser endpoint URLs from the same configuration object and keep site-specific routes in the site configuration/templates.
+  - Done when: the sample passes both at the web root and under a subdirectory, sitemap contains only configured valid routes, and no reusable core file contains Zagozda-specific paths.
+
+- [ ] **REF-13 — Route every post URL through `cms_post_url()`.**
+  - Explanation: The engine has a defensive helper that repairs a missing `{slug}` placeholder, but post creation bypasses it. A malformed migration config can therefore generate correct listing URLs yet return a broken redirect immediately after creation.
+  - Justification: [`cms/engine.php`](cms/engine.php) lines 563-576 defines the safeguard. [`cms/api.php`](cms/api.php) lines 393-394 uses `str_replace('{slug}', ...)` directly.
+  - Recommendation: Make `cms_post_url()` the only public URL generator and remove direct placeholder replacements from runtime/importer code where the helper is available.
+  - Done when: a missing-placeholder regression produces one consistent repaired URL in create response, index, listing, sitemap, social metadata, and direct navigation.
+
+- [ ] **REF-14 — Share the admin shell, escaping, assets, and browser API client.**
+  - Explanation: Login, content inventory, and media pages duplicate HTML head/font/sidebar patterns, escape helpers, button/status styles, CSRF bootstrap, POST wrappers, and error parsing. Duplication has already produced visual and behavior drift and blocks a strict CSP.
+  - Justification: [`cms/login.php`](cms/login.php), [`cms/content.php`](cms/content.php), and [`cms/media.php`](cms/media.php) each contain large inline style blocks and repeated Google Font links. `content.php:442-603` and `media.php:220-350` contain near-duplicate API/status code.
+  - Recommendation: Extract a small PHP admin layout/view helper, one escape helper, external page-specific CSS/JS files, and a shared fetch client that handles HTTP status, JSON failures, authentication expiry, and CSRF consistently.
+  - Done when: admin pages share one shell and client, inline application code is removed, existing routes/labels remain stable, and visual/browser tests pass.
+
+- [ ] **REF-15 — Consolidate conflicting CSS generations and establish a small design-token layer.**
+  - Explanation: New visual rules have been appended over older rules rather than replacing them. The same selectors have conflicting definitions, so ordering determines behavior and future edits are risky.
+  - Justification: [`cms/assets/editor.css`](cms/assets/editor.css) defines `.cms-btn` and variants around lines 131-140 and again around 275-281; similar shared admin/button rules exist inline and in [`cms/assets/admin.css`](cms/assets/admin.css). Font stacks and colors are repeated across files.
+  - Recommendation: Remove dead declarations, consolidate tokens for color/spacing/type/radius/focus, scope public-editor and dedicated-admin styles deliberately, and add a visual regression baseline for desktop/mobile/focus/disabled/error states.
+  - Done when: duplicate selectors are intentional and documented or removed, computed styles remain stable across entry points, and no inline page CSS is needed for shared components.
+
+- [ ] **REF-16 — Split the editor into explicit state/transport/view modules and cancel stale asynchronous work.**
+  - Explanation: The editor is a 700-line closure managing toolbar, modal/panel lifecycle, metadata, drafts, previews, revisions, uploads, and page DOM replacement. Debounced preview requests are not cancelled or sequenced, so a slow older response can replace a newer preview. General uploads can overlap and insert in completion rather than selection order.
+  - Justification: [`cms/assets/editor.js`](cms/assets/editor.js) lines 102-646 implement the panel and all asynchronous workflows. `renderPreview()` at lines 411-414 and debounce at 504-510 have no `AbortController` or generation check; `uploadFile()` at 513-525 does not participate in the busy state.
+  - Recommendation: Introduce an API client, editor state model, renderer, draft/revision controller, and upload queue. Abort or sequence previews, make busy/error/finalization behavior consistent, and keep the current global facade only where the popup picker needs it.
+  - Done when: stale responses cannot overwrite current state, multi-file ordering is deterministic, network/401/non-JSON failures are handled, and unit/browser tests cover transitions.
+
+- [ ] **REF-17 — Make media operations paginated, transactional, and reference-aware.**
+  - Explanation: The media library scans every upload and metadata file, calls image inspection, renders every card, and checks deletion references by substring-scanning all Markdown. That becomes slow at scale and can miss template/CSS/config references or block on false substring matches.
+  - Justification: [`cms/engine.php`](cms/engine.php) lines 360-399 implements full enumeration and substring reference search. [`cms/media.php`](cms/media.php) lines 171-214 renders the full result. Upload/meta/delete steps are spread across `cms/api.php:452-591` without rollback.
+  - Recommendation: Add server-side pagination and indexed metadata/reference tracking, or parse exact Markdown/front-matter references plus declared static references. Reserve filenames exclusively with stronger randomness, make upload+metadata atomic/cleanable, and return an impact list before deletion.
+  - Done when: large-library tests have bounded time/memory/DOM size, references are exact and extensible, collisions/metadata failures clean up safely, and delete cannot break a declared reference silently.
+
+- [ ] **REF-18 — Bound and cache content inventory/template discovery.**
+  - Explanation: Opening inventory recursively scans the site root for every PHP file and parses source with regular expressions. Unreadable directories can throw iterator exceptions, and a large document root makes an admin page unexpectedly expensive.
+  - Justification: [`cms/engine.php`](cms/engine.php) lines 982-1017 scans the entire configured `site_root`; lines 1034-1148 combines that work with all-post filtering/counting. Similar recursive iterators are used for media and references without a shared error boundary.
+  - Recommendation: Cache discovered region keys by template path+mtime or use an explicit template manifest, cap scan roots, handle unreadable paths deterministically, and separate summary counts from paged data.
+  - Done when: inventory work is bounded on a large fixture, cached results invalidate correctly, unreadable directories produce a diagnostic instead of a fatal page, and missing-region discovery remains accurate.
+
+- [ ] **REF-19 — Make index freshness correct for external edits and add an optional rendered-content cache.**
+  - Explanation: Posts-index freshness checks only the posts directory mtime; editing an existing file over FTP/SSH may not update that directory, so stale metadata/search persists until manual reindex. Every public request also re-renders Markdown, increasing cost and exposure to parser worst cases.
+  - Justification: [`cms/engine.php`](cms/engine.php) lines 651-665 documents the limitation, and lines 675-686 trusts the cache. `cms_post()` at lines 784-807 parses/render every request.
+  - Recommendation: Store a manifest of file mtimes/sizes or a content revision updated by all writers; offer a cheap validation/maintenance mode for external edits; optionally cache sanitized rendered HTML keyed by renderer version, safety policy, and content hash.
+  - Done when: modifying an existing Markdown file is detected without operator guesswork, renderer upgrades invalidate cached HTML, and public output remains identical under cache on/off tests.
+
+- [ ] **REF-20 — Make WordPress import streaming, transactional, repeatable, and fail-fast.**
+  - Explanation: The importer loads the entire SQL dump and all extracted tuples into memory, writes directly over target files, accepts unknown options silently, and ignores most `file_put_contents()` results. A typo, disk-full event, or large dump can produce partial output with a success-looking tail.
+  - Justification: [`scripts/import-wordpress.php`](scripts/import-wordpress.php) lines 43-46 accept any option key; lines 382-396 load and expand the full dump; lines 646-837 write directly to final directories with mostly unchecked results.
+  - Recommendation: Validate options/statuses/URLs, stream or incrementally parse the dump, write to a new staging directory, verify counts/links/encoding/security policy, then promote atomically. Add `--dry-run`, `--force`/empty-target safeguards, a manifest, resumable logging, and non-zero exits for every failed write/copy.
+  - Done when: a large fixture stays within a documented memory bound, injected write/copy failures cannot leave a promoted partial import, reruns are deterministic, and unknown/unsafe options fail before writes.
+
+- [ ] **REF-21 — Extract the WordPress SQL and HTML conversion code into tested components.**
+  - Explanation: SQL tuple parsing, serialized options, menu reconstruction, HTML-to-Markdown conversion, URL rewriting, content policy, and filesystem orchestration live in one procedural script. The converter preserves unknown active HTML but has no focused fixture suite documenting transformations or loss.
+  - Justification: [`scripts/import-wordpress.php`](scripts/import-wordpress.php) is roughly 840 physical lines; `Html2Md` occupies lines 178-380 and SQL parsing lines 109-164. Current browser migration tests cover four public flows, not conversion edge cases.
+  - Recommendation: Extract pure dump-row, converter, URL, menu, and import-plan components. Add fixtures for escaping, malformed dumps, multibyte content, tables/lists/code, unsafe URLs, embeds, serialization, duplicate slugs, statuses, and upload traversal. Apply the SEC-02 sanitization policy at a named boundary.
+  - Done when: converter behavior is deterministic and fixture-tested, unsafe preserved nodes are reported or transformed explicitly, and orchestration can be tested without a 2,000-post deployment copy.
+
+### Priority 3 — improve operability, testing, and user experience
+
+- [ ] **REF-22 — Add a fast PHP unit/security suite below Playwright.**
+  - Explanation: Pure parsers, validators, path resolvers, rendering, status filtering, and failure paths are tested mainly through long serial browser flows or not tested. This slows security work and leaves platform-specific edge cases uncovered.
+  - Justification: The repository has no PHP unit-test configuration. [`tests/sample-site.spec.js`](tests/sample-site.spec.js) is a single 600+ line browser file; the existing security test covers default Markdown but not redirect, method matrix, SVG, status, proxy cookies, symlinks, malformed inputs, or write failures.
+  - Recommendation: Add a lightweight PHP unit runner with isolated temporary roots, then retain Playwright for user-visible end-to-end flows. Cover all security acceptance criteria in this report and run lint/unit checks before browser tests.
+  - Done when: pure/security tests run without starting a server, have cross-platform fixtures, and failures identify one contract rather than a long UI scenario.
+
+- [ ] **REF-23 — Isolate browser-test state so tests can be safely parallelized.**
+  - Explanation: Every test resets the same fixed working content/uploads and generated files, forcing one worker and preventing reliable parallel or shard execution. The reset safety check uses a raw prefix without a separator boundary, although current targets are hard-coded.
+  - Justification: [`tests/sample-site.spec.js`](tests/sample-site.spec.js) lines 5-38 defines shared directories and destructive reset; [`playwright.config.js`](playwright.config.js) lines 12-13 forces one worker. [`scripts/Reset-SampleSite.ps1`](scripts/Reset-SampleSite.ps1) lines 16-22 repeats a prefix containment check.
+  - Recommendation: Create a unique temporary content/upload/site-artifact root per worker/test, pass it through environment/config, and clean only validated exact roots. Share reset helpers instead of implementing deletion twice.
+  - Done when: representative tests pass with multiple workers and repeated runs, no test can delete outside its assigned root, and artifacts are retained on failure where useful.
+
+- [ ] **REF-24 — Add continuous integration, static checks, and dependency/update gates.**
+  - Explanation: There is no tracked CI workflow, PHP static analysis, JavaScript linting, dependency update automation, or explicit vendored-library check. The broken start command and cross-discovered tests could therefore reach a release unnoticed.
+  - Justification: No tracked `.github`/pipeline file is present. `npm audit` is currently clean, but Parsedown is invisible to npm and Playwright has a newer compatible release.
+  - Recommendation: Add gates for version synchronization, PHP lint, unit/security tests, a modest PHPStan/Psalm level, JavaScript lint, npm audit, dependency freshness, Playwright base lane, optional migration lane, and packaging checks for hidden hardening files. Pin or schedule updates with review rather than silently floating production tools.
+  - Done when: a clean checkout runs the same named commands locally and in CI, every gate blocks release on failure, and vendored dependencies have an explicit update signal.
+
+- [ ] **REF-25 — Centralize error handling and remove broad suppression at operational boundaries.**
+  - Explanation: `@unlink`, `@scandir`, `@filemtime`, `@fopen`, and similar suppression hide why an operation failed, while client code receives generic or even successful results. Conversely, uncaught warnings/type errors can corrupt JSON responses.
+  - Justification: Suppression is widespread in [`cms/engine.php`](cms/engine.php) backup/draft/reservation paths and [`cms/api.php`](cms/api.php) delete/upload paths. `cms_json()` at `cms/api.php:58-64` does not handle `json_encode()` failure or an uncaught throwable.
+  - Recommendation: Keep client messages generic, but capture last errors/throwables into structured server logs and typed results. Install one API exception/error boundary, detect JSON encoding failure, and use suppression only around an immediately inspected return value.
+  - Done when: expected filesystem failures remain client-safe but diagnosable, API responses stay valid JSON, and tests cover warnings, exceptions, invalid UTF-8, and encoding failure.
+
+- [ ] **REF-26 — Normalize time, calendar dates, and timezone configuration.**
+  - Explanation: File labels, post creation, import timestamps, and display rely on process-local `date()` while metadata accepts impossible calendar values. Deployments in different timezones can produce inconsistent ordering/labels.
+  - Justification: [`cms/engine.php`](cms/engine.php) lines 138, 227-234, and 506-510 and [`cms/api.php`](cms/api.php) lines 117-119 and 381-385 use ad-hoc date strings; the importer uses `date('c')` for its manifest comment.
+  - Recommendation: Add a validated site timezone, use `DateTimeImmutable`, parse and round-trip dates strictly, keep machine timestamps in UTC where practical, and format display dates at the edge.
+  - Done when: invalid dates are rejected, timezone behavior is deterministic in tests, and existing valid post ordering/display remains compatible.
+
+- [ ] **REF-27 — Add correct dialog/panel semantics, focus management, and keyboard lifecycle.**
+  - Explanation: The content and add-post modals and editor panel lack a complete focus trap, focus restoration, background inertness, and consistent Escape behavior. The editor panel is visually modal but is not exposed as a dialog to assistive technology.
+  - Justification: [`cms/content.php`](cms/content.php) lines 309-329 and 498-540 and [`cms/assets/editor.js`](cms/assets/editor.js) lines 115-145 and 648-692 manage modals manually. Closing generally removes/hides UI without restoring focus to the opener.
+  - Recommendation: Create one accessible dialog utility with `role="dialog"`, `aria-modal`, labelled title, initial focus, Tab containment, Escape, overlay handling, background `inert`, and opener focus restoration. Test keyboard-only and mobile flows.
+  - Done when: automated accessibility/keyboard tests cover all dialogs/panels and focus returns predictably without changing requested editor behavior.
+
+- [ ] **REF-28 — Add versioned asset URLs and a release manifest.**
+  - Explanation: Editor/admin CSS and JavaScript are loaded from stable paths without a version query or content hash. Browser/proxy caches can serve an old client against a new API after deployment. Version synchronization is currently manual and the ignored deployment copy lacks the current version marker.
+  - Justification: [`cms/engine.php`](cms/engine.php) lines 1281-1286 emits fixed asset URLs. The repository instruction requires four version locations to remain synchronized, but there is no dedicated automated assertion beyond browser expectations.
+  - Recommendation: Emit asset URLs with `PAGECORE_VERSION` or a content manifest, define cache headers deliberately, and add a release check that validates every required version location and packaged file checksum.
+  - Done when: a version bump invalidates browser assets, CI detects any version mismatch, and the deployable archive reports its exact version/checksum.
+
+- [ ] **REF-29 — Consolidate slug/transliteration and URL normalization policies.**
+  - Explanation: Post slugs, tag slugs, importer slugs, upload names, and menu/internal URLs use separate transliteration and normalization rules. The same Polish map is duplicated, while importer fallback lowercasing can behave differently for multibyte text.
+  - Justification: [`cms/engine.php`](cms/engine.php) lines 538-560 and 1151-1171 duplicate slug logic; [`scripts/import-wordpress.php`](scripts/import-wordpress.php) lines 658-684 implements another policy; upload naming uses a fourth rule at `cms/api.php:570-577`.
+  - Recommendation: Define separate but shared policies for content slugs, tag slugs, and filenames, with Unicode/transliteration behavior, reserved names, maximum lengths, collision handling, and fixtures. Reuse them in runtime and importer through a small common library.
+  - Done when: identical input has documented deterministic output across import and editor creation, legacy slugs remain addressable, and collision/reserved-name tests pass.
+
+- [ ] **REF-30 — Make JSON encoding/decoding contracts explicit.**
+  - Explanation: JSON is used for API responses, navigation, media metadata, and generated indexes with different flags and inconsistent failure behavior. Invalid UTF-8 may be rejected in some request fields, substituted in indexes, or produce an empty response elsewhere.
+  - Justification: [`cms/api.php`](cms/api.php) lines 58-64 echoes `json_encode()` without checking false; [`cms/engine.php`](cms/engine.php) lines 304-321, 637-648, 902-936, and 1232-1239 use different policies.
+  - Recommendation: Add JSON helpers with named strict/substitution policies, depth limits, exception or checked-error handling, stable formatting where files are reviewed, and atomic writes. Validate decoded shapes rather than only `is_array()`.
+  - Done when: invalid/deep/malformed fixtures have consistent diagnostics, API output is never an empty successful body, and stored JSON formats remain backward-compatible or have an explicit migration.
+
+## Existing controls to preserve
+
+These are positive controls observed in the snapshot and should not be lost during refactoring:
+
+- Password verification uses `password_verify()`, comparison uses `hash_equals()`, login regenerates the session ID, and state-changing non-GET API calls currently require a per-session header token.
+- Session cookies are HttpOnly and SameSite=Lax; the secure/proxy caveat is tracked in SEC-09.
+- Default Markdown rendering enables Parsedown safe mode unless `allow_html` is explicitly enabled.
+- Region/post/media identifiers use restrictive character policies, and several resolvers perform realpath containment checks.
+- Uploads use extension and server-side MIME checks, byte limits, image checks, randomized stored names, and authenticated CSRF-protected handling.
+- Reusable `content/`, `uploads/`, and `cms/` directories contain Apache hardening files.
+- Post creation has an exclusive filename reservation, and saves retain revisions/backups.
+- HTML attributes and text in the sample/admin server-rendered views are generally escaped before output.
+- npm audit was clean at the review snapshot.
+
+## Recommended execution order
+
+1. Fix SEC-01 through SEC-06 before expanding functionality or importing more content.
+2. Restore the reproducible test/runtime workflow with REF-01 through REF-03.
+3. Address redirect, throttling, sessions, headers, method enforcement, and limits (SEC-07 through SEC-14).
+4. Protect data integrity with REF-04 through REF-06, then modularize behind compatibility facades (REF-07 through REF-21).
+5. Finish the testing, CI, observability, accessibility, and release improvements (REF-22 through REF-30).
