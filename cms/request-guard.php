@@ -58,7 +58,7 @@ function pagecore_request_is_denied($requestUri, $privatePrefixes = array(), $up
             '/cms/media.php',
         );
         if (in_array($path, $publicEndpoints, true)) { return false; }
-        if (preg_match('~^/cms/assets/(?:admin|admin-client|editor)\.(?:css|js)$~', $path)) { return false; }
+        if (preg_match('~^/cms/assets/(?:admin|admin-client|editor|tokens)\.(?:css|js)$~', $path)) { return false; }
         return true;
     }
 

@@ -1,23 +1,3 @@
-:root {
-  --pc-bg: #eeeeec;
-  --pc-sidebar: #f4f4f2;
-  --pc-surface: #ffffff;
-  --pc-surface-soft: #fafaf9;
-  --pc-border: #e3e3df;
-  --pc-border-strong: #d2d2cc;
-  --pc-text: #20201e;
-  --pc-muted: #71716c;
-  --pc-subtle: #9a9a94;
-  --pc-accent: #20201e;
-  --pc-success: #286443;
-  --pc-success-bg: #e8f3ec;
-  --pc-danger: #a33d32;
-  --pc-danger-bg: #fbecea;
-  --pc-radius-sm: 8px;
-  --pc-radius: 12px;
-  --pc-shadow: 0 1px 2px rgba(25, 25, 22, .06), 0 6px 20px rgba(25, 25, 22, .04);
-}
-
 * { box-sizing: border-box; }
 html { background: var(--pc-bg); }
 body.pc-admin {
@@ -25,7 +5,7 @@ body.pc-admin {
   min-height: 100vh;
   background: var(--pc-bg);
   color: var(--pc-text);
-  font: 14px/1.5 "Inter", "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font: 14px/1.5 var(--pc-font-sans);
   -webkit-font-smoothing: antialiased;
 }
 body.pc-admin a { color: inherit; }
@@ -191,7 +171,13 @@ body.pc-admin input:focus,
 body.pc-admin select:focus,
 body.pc-admin textarea:focus {
   border-color: #85857f;
-  box-shadow: 0 0 0 3px rgba(32,32,30,.08);
+  box-shadow: var(--pc-focus);
+}
+
+@media (max-width: 760px) {
+  body.pc-admin button,
+  body.pc-admin .button,
+  body.pc-admin .nav a { min-height: 44px; }
 }
 
 body.pc-admin .summary {

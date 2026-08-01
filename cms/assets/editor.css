@@ -162,7 +162,10 @@
 .cms-table th { font-family: var(--font-sans, sans-serif); font-size: 13px;
     text-transform: uppercase; letter-spacing: .04em; }
 
-/* --- Pagecore workspace redesign ---------------------------------------- */
+/* --- Pagecore workspace redesign ----------------------------------------
+   The prefixed rules above remain the low-specificity compatibility base for
+   embedded sites. Repeated selectors in this section intentionally apply the
+   Pagecore tokenized workspace theme without requiring host-site resets. */
 .material-symbols-rounded {
     font-family: "Material Symbols Rounded";
     font-weight: normal;
@@ -191,14 +194,14 @@
 
 .cms-toolbar {
     right: 18px; bottom: 18px; gap: 5px; padding: 7px;
-    border: 1px solid #deded9; border-radius: 12px; background: #fff; color: #20201e;
-    font: 600 12px/1.4 "Inter", -apple-system, "Segoe UI", sans-serif;
+    border: 1px solid var(--pc-border); border-radius: var(--pc-radius); background: var(--pc-surface); color: var(--pc-text);
+    font: 600 12px/1.4 var(--pc-font-sans);
     box-shadow: 0 12px 36px rgba(20,20,18,.16);
 }
 .cms-toolbar-brand { display: inline-flex; align-items: center; gap: 6px; padding: 0 9px 0 3px; }
 .cms-toolbar-brand > .material-symbols-rounded {
     display: grid; place-items: center; width: 29px; height: 29px; border-radius: 8px;
-    background: #20201e; color: #fff; font-size: 17px;
+    background: var(--pc-accent); color: #fff; font-size: 17px;
 }
 .cms-toolbar a {
     display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 6px 9px;
@@ -213,9 +216,9 @@
     top: 16px; right: 16px; bottom: 16px;
     width: min(1180px, calc(100vw - 32px));
     overflow: hidden; border: 1px solid #deded9; border-radius: 14px;
-    background: #fff; color: #20201e;
+    background: var(--pc-surface); color: var(--pc-text);
     box-shadow: 0 30px 90px rgba(20,20,18,.25);
-    font: 14px/1.5 "Inter", -apple-system, "Segoe UI", sans-serif;
+    font: 14px/1.5 var(--pc-font-sans);
 }
 .cms-panel-head { min-height: 78px; padding: 14px 22px; border-bottom-color: #e5e5e1; }
 .cms-panel-title { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 12px; }
@@ -244,7 +247,7 @@
 .cms-meta .cms-field-wide { grid-column: auto; }
 .cms-field label { margin-bottom: 6px; color: #71716c; font-size: 10px; font-weight: 700; letter-spacing: .07em; }
 .cms-field input, .cms-field select { padding: 9px 10px; border-color: #d2d2cc; border-radius: 7px; background: #fff; color: #20201e; }
-.cms-field input:focus, .cms-field select:focus, .cms-textarea:focus { outline: 0; border-color: #85857f; box-shadow: 0 0 0 3px rgba(32,32,30,.07); }
+.cms-field input:focus, .cms-field select:focus, .cms-textarea:focus { outline: 0; border-color: #85857f; box-shadow: var(--pc-focus); }
 .cms-featured-image-drop { min-height: 118px; border: 1px dashed #bcbcb5; border-radius: 9px; background: #fafaf8; color: #71716c; }
 .cms-featured-image-drop:hover, .cms-featured-image-drop:focus, .cms-featured-image-dragover { border-color: #20201e; background: #f1f1ee; }
 .cms-featured-image-preview { width: 100%; max-height: 180px; object-fit: cover; border-radius: 8px; }
@@ -272,10 +275,10 @@
 .cms-revision-restore { border-color: #d2d2cc; border-radius: 7px; background: #fff; }
 .cms-panel-foot { gap: 8px; min-height: 66px; padding: 12px 22px; border-top-color: #e5e5e1; }
 .cms-btn { min-height: 38px; padding: 8px 13px; border: 1px solid transparent; border-radius: 8px; font-weight: 650; }
-.cms-btn-primary { border-color: #20201e; background: #20201e; }
-.cms-btn-primary:hover { background: #353532; }
-.cms-btn-publish { border-color: #286443; background: #286443; }
-.cms-btn-publish:hover { background: #215438; }
+.cms-btn-primary { border-color: var(--pc-accent); background: var(--pc-accent); }
+.cms-btn-primary:hover { background: var(--pc-accent-hover); }
+.cms-btn-publish { border-color: var(--pc-success); background: var(--pc-success); }
+.cms-btn-publish:hover { background: var(--pc-success-hover); }
 .cms-btn-ghost { border-color: #d2d2cc; background: #fff; }
 .cms-btn-ghost:hover { background: #f4f4f1; }
 .cms-status { color: #71716c; }
