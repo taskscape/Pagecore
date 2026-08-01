@@ -1,6 +1,6 @@
 {
   "name": "pagecore",
-  "version": "2.24.0",
+  "version": "2.25.0",
   "private": true,
   "description": "Pagecore CMS sample site and end-to-end tests.",
   "scripts": {
@@ -25,6 +25,7 @@
     "test:modules": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-Modules.ps1",
     "test:api-registry": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-ApiRegistry.ps1",
     "test:input-validation": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-InputValidation.ps1",
+    "test:path-policy": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-PathPolicy.ps1",
     "release:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Build-PagecoreRelease.ps1",
     "release:test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-ReleaseArtifact.ps1"
   },

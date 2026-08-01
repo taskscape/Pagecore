@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__) . '/cms/modules/PathPolicy.php';
 /**
  * One-time WordPress -> Pagecore importer.
  *
@@ -101,13 +102,7 @@ function safe_upload_rel_path($path) {
 
 /** Confirm a resolved filesystem path remains inside its configured root. */
 function path_is_within($path, $root) {
-    $path = str_replace('\\', '/', (string) $path);
-    $root = rtrim(str_replace('\\', '/', (string) $root), '/');
-    if (DIRECTORY_SEPARATOR === '\\') {
-        $path = strtolower($path);
-        $root = strtolower($root);
-    }
-    return strpos($path, $root . '/') === 0;
+    return PagecorePathPolicy::isWithin($path, $root) && PagecorePathPolicy::normalize($path) !== PagecorePathPolicy::normalize($root);
 }
 
 /* --------------------------------------------------------- SQL value parser */

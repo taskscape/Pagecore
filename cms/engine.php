@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.24.0');
+define('PAGECORE_VERSION', '2.25.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
@@ -160,42 +160,13 @@ function cms_csrf_token() {
  */
 function cms_region_path($key, $mustExist = false) {
     if (!preg_match('~^[a-z0-9-]+(/[a-z0-9-]+){0,2}$~', $key)) { return null; }
-    // Check for path traversal attempts in the key itself
-    if (strpos($key, '..') !== false || strpos($key, "/../") !== false || strpos($key, "./") === 0) {
-        return null;
-    }
-    $path = cms_cfg('content_dir') . '/pages/' . $key . '.md';
-    if ($mustExist && !is_file($path)) { return null; }
-    $dir = dirname($path);
-    // Only verify realpath when the file exists or the directory exists
-    if (is_file($path)) {
-        $real = realpath($path);
-        $base = realpath(cms_cfg('content_dir'));
-        // Normalize both paths using stream_resolve_with_base (PHP 8.0+) or manual normalization
-        // Use normalized string comparison to prevent directory traversal bypasses
-        if ($real === false || $base === false) { return null; }
-        $realNorm = str_replace('\\', '/', $real);
-        $baseNorm = rtrim(str_replace('\\', '/', $base), '/');
-        // Ensure the real path starts with the base path followed by a separator or is within it
-        if (strpos($realNorm, $baseNorm . '/') !== 0 && $realNorm !== $baseNorm) { return null; }
-    } elseif (is_dir($dir)) {
-        $realDir = realpath($dir);
-        $base = realpath(cms_cfg('content_dir'));
-        if ($realDir === false || $base === false) { return null; }
-        $realDirNorm = str_replace('\\', '/', $realDir);
-        $baseNorm = rtrim(str_replace('\\', '/', $base), '/');
-        // Ensure the directory path starts with the base path followed by a separator or is within it
-        if (strpos($realDirNorm, $baseNorm . '/') !== 0 && $realDirNorm !== $baseNorm) { return null; }
-    }
-    return $path;
+    return PagecorePathPolicy::resolveWithin(cms_cfg('content_dir'), 'pages/' . $key . '.md', $mustExist);
 }
 
 /** Validate a post slug and resolve to content/posts/<slug>.md. */
 function cms_post_path($slug, $mustExist = false) {
     if (!preg_match('~^[a-z0-9-]+$~', $slug)) { return null; }
-    $path = cms_cfg('content_dir') . '/posts/' . $slug . '.md';
-    if ($mustExist && !is_file($path)) { return null; }
-    return $path;
+    return PagecorePathPolicy::resolveWithin(cms_cfg('content_dir'), 'posts/' . $slug . '.md', $mustExist);
 }
 
 /* -------------------------------------------------------- atomic file I/O */
@@ -324,16 +295,12 @@ function cms_target_rel_key($kind, $id) {
 
 function cms_draft_region_path($key, $mustExist = false) {
     if (!preg_match('~^[a-z0-9-]+(/[a-z0-9-]+){0,2}$~', $key)) { return null; }
-    $path = cms_cfg('content_dir') . '/.drafts/pages/' . $key . '.md';
-    if ($mustExist && !is_file($path)) { return null; }
-    return $path;
+    return PagecorePathPolicy::resolveWithin(cms_cfg('content_dir'), '.drafts/pages/' . $key . '.md', $mustExist);
 }
 
 function cms_draft_post_path($slug, $mustExist = false) {
     if (!preg_match('~^[a-z0-9-]+$~', $slug)) { return null; }
-    $path = cms_cfg('content_dir') . '/.drafts/posts/' . $slug . '.md';
-    if ($mustExist && !is_file($path)) { return null; }
-    return $path;
+    return PagecorePathPolicy::resolveWithin(cms_cfg('content_dir'), '.drafts/posts/' . $slug . '.md', $mustExist);
 }
 
 function cms_draft_path($kind, $id, $mustExist = false) {
@@ -361,26 +328,13 @@ function cms_clear_draft($kind, $id) {
 }
 
 function cms_revision_id($file) {
-    $base = realpath(cms_cfg('backup_dir'));
-    $real = realpath($file);
-    if ($base === false || $real === false) { return null; }
-    $base = rtrim(str_replace('\\', '/', $base), '/') . '/';
-    $real = str_replace('\\', '/', $real);
-    if (strpos($real, $base) !== 0) { return null; }
-    return substr($real, strlen($base));
+    return PagecorePathPolicy::relativeTo($file, cms_cfg('backup_dir'));
 }
 
 function cms_revision_path($id) {
     if (!preg_match('~^[A-Za-z0-9._/-]+\.md$~', (string) $id)) { return null; }
     if (strpos($id, '..') !== false) { return null; }
-    $path = cms_cfg('backup_dir') . '/' . str_replace('/', DIRECTORY_SEPARATOR, $id);
-    if (!is_file($path)) { return null; }
-    $base = realpath(cms_cfg('backup_dir'));
-    $real = realpath($path);
-    if ($base === false || $real === false) { return null; }
-    $base = rtrim(str_replace('\\', '/', $base), '/') . '/';
-    $real = str_replace('\\', '/', $real);
-    return strpos($real, $base) === 0 ? $path : null;
+    return PagecorePathPolicy::resolveWithin(cms_cfg('backup_dir'), $id, true);
 }
 
 function cms_revision_belongs_to($id, $relKey) {
@@ -439,26 +393,11 @@ function cms_media_is_valid_rel($rel) {
 
 function cms_media_path($rel, $mustExist = true) {
     if (!cms_media_is_valid_rel($rel)) { return null; }
-    $base = rtrim(cms_cfg('uploads_dir'), '/\\');
-    $path = $base . '/' . str_replace('/', DIRECTORY_SEPARATOR, $rel);
-    if ($mustExist && !is_file($path)) { return null; }
-    $baseReal = realpath($base);
-    $dirReal = realpath(dirname($path));
-    if ($baseReal === false || $dirReal === false) { return null; }
-    $baseNorm = rtrim(str_replace('\\', '/', $baseReal), '/') . '/';
-    $dirNorm = rtrim(str_replace('\\', '/', $dirReal), '/') . '/';
-    if (strpos($dirNorm, $baseNorm) !== 0 && $dirNorm !== $baseNorm) { return null; }
-    return $path;
+    return PagecorePathPolicy::resolveWithin(cms_cfg('uploads_dir'), $rel, $mustExist);
 }
 
 function cms_media_rel_from_path($path) {
-    $base = realpath(cms_cfg('uploads_dir'));
-    $real = realpath($path);
-    if ($base === false || $real === false) { return null; }
-    $base = rtrim(str_replace('\\', '/', $base), '/') . '/';
-    $real = str_replace('\\', '/', $real);
-    if (strpos($real, $base) !== 0) { return null; }
-    return substr($real, strlen($base));
+    return PagecorePathPolicy::relativeTo($path, cms_cfg('uploads_dir'));
 }
 
 function cms_media_url($rel) {
@@ -1189,13 +1128,7 @@ function cms_nav_html() {
 }
 
 function cms_content_rel_path($path, $base) {
-    $base = realpath($base);
-    $real = realpath($path);
-    if ($base === false || $real === false) { return null; }
-    $base = rtrim(str_replace('\\', '/', $base), '/') . '/';
-    $real = str_replace('\\', '/', $real);
-    if (strpos($real, $base) !== 0) { return null; }
-    return substr($real, strlen($base));
+    return PagecorePathPolicy::relativeTo($path, $base);
 }
 
 function cms_region_files() {

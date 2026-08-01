@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/modules/PathPolicy.php';
 
 /**
  * Normalize a request path without allowing ambiguous traversal or separator
@@ -66,15 +67,6 @@ function pagecore_request_is_denied($requestUri, $privatePrefixes = array(), $up
 
 /** Resolve a static file only when it remains below the exact root boundary. */
 function pagecore_public_file($root, $path) {
-    $root = realpath($root);
-    if ($root === false) { return false; }
-    $candidate = realpath($root . str_replace('/', DIRECTORY_SEPARATOR, $path));
-    if ($candidate === false || !is_file($candidate)) { return false; }
-    $rootKey = rtrim(str_replace('\\', '/', $root), '/');
-    $candidateKey = str_replace('\\', '/', $candidate);
-    if (DIRECTORY_SEPARATOR === '\\') {
-        $rootKey = strtolower($rootKey);
-        $candidateKey = strtolower($candidateKey);
-    }
-    return strpos($candidateKey, $rootKey . '/') === 0 ? $candidate : false;
+    $candidate = PagecorePathPolicy::resolveWithin($root, ltrim((string) $path, '/'), true);
+    return $candidate !== null && is_file($candidate) ? $candidate : false;
 }
