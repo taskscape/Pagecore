@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.27.0');
+define('PAGECORE_VERSION', '2.27.1');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
@@ -728,11 +728,7 @@ function cms_tag_slugify($label) {
  * defensively so every listing link remains unique and usable.
  */
 function cms_post_url($slug) {
-    $pattern = (string) cms_cfg('post_url', '/post/{slug}/');
-    if (strpos($pattern, '{slug}') === false) {
-        $pattern = rtrim($pattern, '/') . '/{slug}/';
-    }
-    return str_replace('{slug}', (string) $slug, $pattern);
+    return PagecoreRoutes::post(cms_cfg('post_url', '/post/{slug}/'), $slug);
 }
 
 /** Convert a site-relative public URL to the absolute URL social crawlers need. */

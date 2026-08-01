@@ -43,4 +43,10 @@ final class PagecoreRoutes {
         }
         return true;
     }
+
+    public static function post($pattern, $slug) {
+        $pattern = (string) $pattern;
+        if (strpos($pattern, '{slug}') === false) { $pattern = rtrim($pattern, '/') . '/{slug}/'; }
+        return str_replace('{slug}', rawurlencode((string) $slug), $pattern);
+    }
 }

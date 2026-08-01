@@ -287,11 +287,13 @@ This was a source review with targeted local checks, not a production penetratio
   - Resolution: 2026-08-01 — Added validated site and CMS URL prefixes plus one pure route builder used by engine assets, API redirects and previews, admin pages, browser configuration, media delivery, and the sample sign-in link. Sitemap extras now belong to site configuration, and the reusable engine no longer injects Polish site routes.
   - Evidence: `npm run test:routes` verifies root and subdirectory joins and rejects absolute, protocol-relative, and traversal sitemap routes. The existing sample browser lane continues to exercise its `/sample-site` prefix, while generated sitemap assertions cover configured pages, categories, posts, and extras.
 
-- [ ] **REF-13 — Route every post URL through `cms_post_url()`.**
+- [x] **REF-13 — Route every post URL through `cms_post_url()`.**
   - Explanation: The engine has a defensive helper that repairs a missing `{slug}` placeholder, but post creation bypasses it. A malformed migration config can therefore generate correct listing URLs yet return a broken redirect immediately after creation.
   - Justification: [`cms/engine.php`](cms/engine.php) lines 563-576 defines the safeguard. [`cms/api.php`](cms/api.php) lines 393-394 uses `str_replace('{slug}', ...)` directly.
   - Recommendation: Make `cms_post_url()` the only public URL generator and remove direct placeholder replacements from runtime/importer code where the helper is available.
   - Done when: a missing-placeholder regression produces one consistent repaired URL in create response, index, listing, sitemap, social metadata, and direct navigation.
+  - Resolution: 2026-08-01 — Post creation now calls `cms_post_url()` like every other runtime consumer. Configuration validation repairs a legacy pattern missing `{slug}`, and the canonical route policy safely substitutes the encoded slug for creation, cached indexes, listings, sitemap entries, social metadata, and direct post lookup.
+  - Evidence: `npm run test:routes` covers both explicit and missing-placeholder patterns plus schema normalization; source-contract search confirms the API no longer performs its own `{slug}` replacement. Existing browser creation, listing, sitemap, metadata, and navigation scenarios exercise the shared helper end to end.
 
 - [ ] **REF-14 — Share the admin shell, escaping, assets, and browser API client.**
   - Explanation: Login, content inventory, and media pages duplicate HTML head/font/sidebar patterns, escape helpers, button/status styles, CSRF bootstrap, POST wrappers, and error parsing. Duplication has already produced visual and behavior drift and blocks a strict CSP.

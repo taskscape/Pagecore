@@ -36,7 +36,11 @@ function cms_validate_config($config, $production) {
         $errors[] = 'password_hash is not a supported password hash';
     }
     if (isset($config['site_url']) && filter_var($config['site_url'], FILTER_VALIDATE_URL) === false) { $errors[] = 'site_url must be an absolute URL'; }
-    if (isset($config['post_url']) && substr_count($config['post_url'], '{slug}') !== 1) { $errors[] = 'post_url must contain {slug} exactly once'; }
+    if (isset($config['post_url'])) {
+        $placeholders = substr_count($config['post_url'], '{slug}');
+        if ($placeholders > 1) { $errors[] = 'post_url must contain {slug} at most once'; }
+        elseif ($placeholders === 0) { $config['post_url'] = rtrim($config['post_url'], '/') . '/{slug}/'; }
+    }
     foreach (array('base_url', 'cms_url') as $key) {
         if (isset($config[$key])) {
             $normalized = PagecoreRoutes::normalizePrefix($config[$key]);

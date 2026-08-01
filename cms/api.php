@@ -526,7 +526,7 @@ $actionHandlers = array(
         cms_release_post_slug_reservation($reservation);
         cms_finish_indexed_mutation($snapshot);
         return array('ok' => true, 'slug' => $slug, 'revision' => cms_content_revision($path),
-            'url' => str_replace('{slug}', $slug, cms_cfg('post_url')));
+            'url' => cms_post_url($slug));
     });
     cms_json($created);
 
