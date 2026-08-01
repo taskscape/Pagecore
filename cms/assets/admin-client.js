@@ -30,7 +30,7 @@
         body = new URLSearchParams();
         Object.keys(options.data).forEach(function (key) { body.append(key, options.data[key]); });
       }
-      return fetch(config.api + '?' + query.toString(), { method: method, headers: headers, body: method === 'GET' ? null : body })
+      return fetch(config.api + '?' + query.toString(), { method: method, headers: headers, body: method === 'GET' ? null : body, signal: options.signal })
         .then(decode)
         .catch(function (error) {
           if (error.status === 401 && config.login) {
@@ -42,7 +42,7 @@
 
     return {
       get: function (action, query) { return request(action, { method: 'GET', query: query }); },
-      post: function (action, data) { return request(action, { data: data }); },
+      post: function (action, data, options) { return request(action, { data: data, signal: options && options.signal }); },
       upload: function (action, form) { return request(action, { form: form }); }
     };
   }

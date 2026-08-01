@@ -8,18 +8,15 @@
     var TOKEN = CFG.token || '';
     var VERSION = CFG.version || '';
     var CLIENT = window.PagecoreAdminClient.create(CFG);
+    var STATE = window.PagecoreEditorState.create();
+    var VIEW = window.PagecoreEditorView;
 
     /* ---------------------------------------------------------- helpers */
     function h(tag, cls, text) {
-        var el = document.createElement(tag);
-        if (cls) el.className = cls;
-        if (text != null) el.textContent = text;
-        return el;
+        return VIEW.element(tag, cls, text);
     }
     function icon(name) {
-        var el = h('span', 'material-symbols-rounded', name);
-        el.setAttribute('aria-hidden', 'true');
-        return el;
+        return VIEW.icon(name);
     }
     function api(action, data, isForm) {
         return isForm ? CLIENT.upload(action, data) : CLIENT.post(action, data);
@@ -400,8 +397,11 @@
             });
         }
         function renderPreview() {
-            api('preview', { markdown: ta.value }).then(function (res) {
-                if (res.ok) preview.innerHTML = res.html;
+            var request = STATE.beginPreview();
+            CLIENT.post('preview', { markdown: ta.value }, { signal: request.signal }).then(function (res) {
+                if (STATE.isCurrentPreview(request.generation)) { preview.innerHTML = res.html; }
+            }).catch(function (err) {
+                if (err.name !== 'AbortError' && STATE.isCurrentPreview(request.generation)) { setStatus(err.message, true); }
             });
         }
         function saveDraft(openPreview) {
@@ -506,13 +506,14 @@
         /* uploads: paste + drag/drop */
         function uploadFile(file) {
             if (!file) return;
-            setStatus('Uploading: ' + file.name + '…');
-            var fd = new FormData();
-            fd.append('file', file, file.name);
-            api('upload', fd, true).then(function (res) {
-                if (!res.ok) { throw new Error(res.error || 'Upload error'); }
-                setStatus('Uploaded: ' + res.url);
-                insertAtCaret(ta, res.markdown);
+            STATE.enqueueUpload(function () {
+                setStatus('Uploading: ' + file.name + '…');
+                var fd = new FormData();
+                fd.append('file', file, file.name);
+                return api('upload', fd, true).then(function (res) {
+                    setStatus('Uploaded: ' + res.url);
+                    insertAtCaret(ta, res.markdown);
+                });
             }).catch(function (err) {
                 setStatus(err.message || 'Network error while uploading.', true);
             });
