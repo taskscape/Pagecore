@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.18.0');
+define('PAGECORE_VERSION', '2.19.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
@@ -219,18 +219,68 @@ function cms_post_path($slug, $mustExist = false) {
 }
 
 /* -------------------------------------------------------- atomic file I/O */
-/** Write atomically (tmp + rename); Windows-safe (unlink-then-rename retry). */
+/** Return a stable optimistic-concurrency token for a file or a missing target. */
+function cms_content_revision($path) {
+    if (!is_file($path)) { return 'missing'; }
+    $hash = hash_file('sha256', $path);
+    return $hash === false ? null : $hash;
+}
+
+/** Run a mutation while holding an advisory lock scoped to one logical resource. */
+function cms_with_resource_lock($resource, callable $callback) {
+    $dir = cms_cfg('content_dir') . '/.locks';
+    if (!is_dir($dir) && !mkdir($dir, 0700, true) && !is_dir($dir)) {
+        throw new RuntimeException('Could not create the content lock directory.');
+    }
+    $path = $dir . '/' . hash('sha256', (string) $resource) . '.lock';
+    $handle = fopen($path, 'c+b');
+    if ($handle === false) { throw new RuntimeException('Could not open a content lock.'); }
+    try {
+        if (!flock($handle, LOCK_EX)) { throw new RuntimeException('Could not acquire a content lock.'); }
+        return $callback();
+    } finally {
+        flock($handle, LOCK_UN);
+        fclose($handle);
+    }
+}
+
+/** Write atomically while retaining a complete recoverable target on Windows failures. */
 function cms_atomic_write($path, $data) {
     $dir = dirname($path);
     if (!is_dir($dir)) {
         if (!mkdir($dir, 0775, true)) { return false; }
     }
     $tmp = $path . '.' . bin2hex(random_bytes(4)) . '.tmp';
-    if (file_put_contents($tmp, $data) === false) { return false; }
-    if (rename($tmp, $path)) { return true; }
-    // Windows: rename may fail when the target exists
-    @unlink($path);  // Suppress error if file is locked
-    if (rename($tmp, $path)) { return true; }
+    $handle = fopen($tmp, 'xb');
+    if ($handle === false) { return false; }
+    $written = fwrite($handle, $data);
+    if ($written === false || $written !== strlen($data) || !fflush($handle)) {
+        fclose($handle);
+        @unlink($tmp);
+        return false;
+    }
+    if (function_exists('fsync')) { @fsync($handle); }
+    fclose($handle);
+    $forceRecoveryPath = !empty($GLOBALS['PAGECORE_FORCE_RECOVERABLE_REPLACE']);
+    if (!$forceRecoveryPath && rename($tmp, $path)) { return true; }
+
+    // Windows cannot replace an existing target with rename(). Keep a complete
+    // recovery copy until the new file is known to be in place.
+    if (!is_file($path)) { @unlink($tmp); return false; }
+    $recovery = $path . '.replace-' . bin2hex(random_bytes(4)) . '.bak';
+    if (!copy($path, $recovery)) { @unlink($tmp); return false; }
+    if (isset($GLOBALS['PAGECORE_ATOMIC_WRITE_FAILURE']) && $GLOBALS['PAGECORE_ATOMIC_WRITE_FAILURE'] === 'after-recovery') {
+        @unlink($tmp);
+        return false;
+    }
+    if (!unlink($path)) { @unlink($tmp); return false; }
+    if (rename($tmp, $path)) {
+        @unlink($recovery);
+        return true;
+    }
+    // Best-effort restoration preserves the old complete file. If restoration
+    // is blocked, the uniquely named recovery copy remains for an operator.
+    if (!is_file($path)) { @rename($recovery, $path); }
     @unlink($tmp);
     return false;
 }
@@ -480,6 +530,8 @@ function cms_media_asset($rel) {
         'size' => filesize($path),
         'modified' => filemtime($path),
         'meta' => $meta,
+        'revision' => cms_content_revision($path),
+        'meta_revision' => cms_content_revision(cms_media_meta_path($path)),
     );
     if ($asset['kind'] === 'image') {
         $size = @getimagesize($path);
@@ -1268,6 +1320,7 @@ function cms_content_inventory($postQuery = '', $postCategory = '', $postPage = 
             'size' => $summary['size'],
             'modified' => $summary['modified'],
             'draft' => $draft ? true : false,
+            'revision' => cms_content_revision($path),
         );
         $regions[] = $item;
         if (!$item['exists']) { $missing[] = $item; }
@@ -1293,6 +1346,10 @@ function cms_content_inventory($postQuery = '', $postCategory = '', $postPage = 
     if ($postPage > $postPages) { $postPage = $postPages; }
     $postOffset = ($postPage - 1) * $postsPerPage;
     $posts = array_slice($filteredPosts, $postOffset, $postsPerPage);
+    foreach ($posts as &$post) {
+        $post['revision'] = cms_content_revision(cms_post_path($post['slug'], false));
+    }
+    unset($post);
 
     $counts = array();
     foreach (cms_cfg('categories', array()) as $slug => $def) { $counts[$slug] = 0; }
@@ -1333,6 +1390,7 @@ function cms_content_inventory($postQuery = '', $postCategory = '', $postPage = 
             'exists' => is_file(cms_nav_file()),
             'items' => cms_nav_items(),
             'json' => cms_nav_json(),
+            'revision' => cms_content_revision(cms_nav_file()),
         ),
     );
 }

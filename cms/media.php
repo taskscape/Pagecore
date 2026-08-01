@@ -181,6 +181,8 @@ function cms_media_bytes($bytes) {
               data-media-card
               data-media-rel="<?= cms_media_e($asset['rel']) ?>"
               data-media-url="<?= cms_media_e($asset['url']) ?>"
+              data-media-revision="<?= cms_media_e($asset['revision']) ?>"
+              data-media-meta-revision="<?= cms_media_e($asset['meta_revision']) ?>"
               data-media-markdown="<?= cms_media_e($asset['markdown']) ?>">
             <a class="thumb" href="<?= cms_media_e($asset['url']) ?>" target="_blank" rel="noopener">
               <?php if ($asset['kind'] === 'image'): ?>
@@ -277,10 +279,12 @@ function cms_media_bytes($bytes) {
       setStatus(card, 'Saving metadata...');
       post('save-media-meta', {
         rel: card.getAttribute('data-media-rel'),
+        revision: card.getAttribute('data-media-meta-revision'),
         alt: card.querySelector('[name="alt"]').value,
         caption: card.querySelector('[name="caption"]').value
       }).then(function (res) {
         card.setAttribute('data-media-markdown', res.asset.markdown || '');
+        card.setAttribute('data-media-meta-revision', res.asset.meta_revision || 'missing');
         setStatus(card, 'Metadata saved.');
       }).catch(function (err) {
         setStatus(card, err.message, true);
@@ -294,7 +298,7 @@ function cms_media_bytes($bytes) {
       if (!confirm('Delete this media file? This is only allowed when content does not reference it.')) { return; }
       setBusy(card, true);
       setStatus(card, 'Deleting...');
-      post('delete-media', { rel: rel }).then(function () {
+      post('delete-media', { rel: rel, revision: card.getAttribute('data-media-revision') }).then(function () {
         card.remove();
         if (!document.querySelector('[data-media-card]')) {
           location.reload();

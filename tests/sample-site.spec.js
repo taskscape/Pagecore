@@ -423,14 +423,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.18.0');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.19.0');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.18.0');
+  expect((await version.json()).version).toBe('2.19.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.18.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.19.0')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {
@@ -1024,4 +1024,39 @@ test('content inventory paginates 100 posts and filters by title, slug, and cate
   await page.getByRole('button', { name: 'Filter' }).click();
   await expect(postRows).toHaveCount(1);
   await expect(page.getByRole('link', { name: 'Inventory pagination 101' })).toBeVisible();
+});
+
+test('optimistic revisions reject stale writes and region creation is exclusive', async ({ page }) => {
+  await login(page);
+  const token = await page.evaluate(() => window.CMS_CONFIG && window.CMS_CONFIG.token);
+  const get = await page.request.get('/cms/api.php?action=get&key=home%2Fhero');
+  const current = await get.json();
+  const original = current.markdown;
+  const write = markdown => page.request.post('/cms/api.php?action=save', {
+    headers: { 'X-CMS-Token': token },
+    form: { key: 'home/hero', markdown, revision: current.revision }
+  });
+
+  const competing = await Promise.all([write('Concurrent winner A'), write('Concurrent winner B')]);
+  expect(competing.map(response => response.status()).sort()).toEqual([200, 409]);
+  const saved = await page.request.get('/cms/api.php?action=get&key=home%2Fhero');
+  const savedPayload = await saved.json();
+  expect(['Concurrent winner A', 'Concurrent winner B']).toContain(savedPayload.markdown);
+  const restore = await page.request.post('/cms/api.php?action=save', {
+    headers: { 'X-CMS-Token': token },
+    form: { key: 'home/hero', markdown: original, revision: savedPayload.revision }
+  });
+  expect(restore.ok()).toBeTruthy();
+
+  const regionKey = 'concurrency-check';
+  const regionPath = path.join(workingContent, 'pages', `${regionKey}.md`);
+  fs.rmSync(regionPath, { force: true });
+  const create = markdown => page.request.post('/cms/api.php?action=create-region', {
+    headers: { 'X-CMS-Token': token },
+    form: { key: regionKey, markdown, revision: 'missing' }
+  });
+  const creations = await Promise.all([create('Exclusive A'), create('Exclusive B')]);
+  expect(creations.map(response => response.status()).sort()).toEqual([200, 409]);
+  expect(['Exclusive A', 'Exclusive B']).toContain(fs.readFileSync(regionPath, 'utf8'));
+  fs.rmSync(regionPath, { force: true });
 });

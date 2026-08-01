@@ -22,6 +22,7 @@ jobs:
         shell: powershell
         run: |
           $env:PAGECORE_PHP_EXE = (Get-Command php).Source
+          npm run test:concurrency
           npm run test:e2e
 
   migration-browser-suite:

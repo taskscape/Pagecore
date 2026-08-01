@@ -258,7 +258,7 @@ function cms_content_posts_url($page, $query, $category) {
                   <div class="post-actions">
                     <a class="button button-primary" href="<?= cms_content_e($post['url']) ?>#cms-edit">Edit</a>
                     <a class="button" href="<?= cms_content_e($post['url']) ?>">View</a>
-                    <button type="button" class="button button-danger" data-action="delete-post" data-slug="<?= cms_content_e($post['slug']) ?>" data-title="<?= cms_content_e($post['title']) ?>">Delete</button>
+                    <button type="button" class="button button-danger" data-action="delete-post" data-slug="<?= cms_content_e($post['slug']) ?>" data-revision="<?= cms_content_e($post['revision']) ?>" data-title="<?= cms_content_e($post['title']) ?>">Delete</button>
                   </div>
                   <div class="status" role="status" aria-live="polite"></div>
                 </td>
@@ -441,7 +441,8 @@ function cms_content_posts_url($page, $query, $category) {
   <script nonce="<?= cms_content_e(cms_csp_nonce()) ?>">
     window.PAGECORE_CONTENT = {
       api: '/cms/api.php',
-      token: <?= json_encode(cms_csrf_token(), JSON_UNESCAPED_SLASHES) ?>
+      token: <?= json_encode(cms_csrf_token(), JSON_UNESCAPED_SLASHES) ?>,
+      navRevision: <?= json_encode($inventory['nav']['revision'], JSON_UNESCAPED_SLASHES) ?>
     };
   </script>
   <script nonce="<?= cms_content_e(cms_csp_nonce()) ?>">
@@ -548,7 +549,7 @@ function cms_content_posts_url($page, $query, $category) {
         if (!confirm('Delete the published post “' + title + '”? Its draft will also be removed.')) { return; }
         remove.disabled = true;
         setStatus(postStatus, 'Deleting...');
-        post('delete-post', { slug: remove.getAttribute('data-slug') })
+        post('delete-post', { slug: remove.getAttribute('data-slug'), revision: remove.getAttribute('data-revision') })
           .then(function () {
             // Removing the row mirrors the server state without requiring a full inventory reload.
             postRow.remove();
@@ -566,7 +567,7 @@ function cms_content_posts_url($page, $query, $category) {
         var key = create.getAttribute('data-key');
         create.disabled = true;
         setStatus(status, 'Creating...');
-        post('create-region', { key: key, markdown: '# ' + key.split('/').pop().replace(/-/g, ' ') + '\n\nNew content.\n' })
+        post('create-region', { key: key, revision: 'missing', markdown: '# ' + key.split('/').pop().replace(/-/g, ' ') + '\n\nNew content.\n' })
           .then(function () {
             row.removeAttribute('data-content-missing');
             row.querySelector('td:nth-child(3)').innerHTML = '<span class="tag tag-ok">Markdown present</span>';
@@ -586,9 +587,10 @@ function cms_content_posts_url($page, $query, $category) {
     saveNav.addEventListener('click', function () {
       saveNav.disabled = true;
       setStatus(navStatus, 'Saving navigation...');
-      post('save-nav', { json: navJson.value })
+      post('save-nav', { json: navJson.value, revision: cfg.navRevision || 'missing' })
         .then(function (res) {
           navJson.value = res.json || navJson.value;
+          cfg.navRevision = res.revision || cfg.navRevision;
           setStatus(navStatus, 'Navigation saved.');
         })
         .catch(function (err) {

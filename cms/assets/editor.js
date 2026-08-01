@@ -117,6 +117,7 @@
         var key = regionEl.getAttribute('data-cms-key');
         var isPost = key.indexOf('post:') === 0;
         var currentDraft = null;
+        var publishedRevision = 'missing';
         var busy = false;
 
         var overlay = h('div', 'cms-overlay');
@@ -333,8 +334,11 @@
                 tags: metaInputs.tags.value
             };
         }
-        function currentPayload() {
-            var out = { key: key, markdown: ta.value };
+        function currentPayload(target) {
+            var revision = target === 'draft'
+                ? (currentDraft && currentDraft.revision ? currentDraft.revision : 'missing')
+                : publishedRevision;
+            var out = { key: key, markdown: ta.value, revision: revision };
             var meta = currentMeta();
             Object.keys(meta).forEach(function (k) { out[k] = meta[k]; });
             return out;
@@ -417,7 +421,7 @@
             var win = openPreview ? window.open('about:blank', '_blank') : null;
             setBusy(true);
             setStatus('Saving draft…');
-            return api('save-draft', currentPayload()).then(function (res) {
+            return api('save-draft', currentPayload('draft')).then(function (res) {
                 if (!res.ok) { throw new Error(res.error || 'Could not save draft.'); }
                 panel._dirty = false;
                 updateDraftState(res.draft);
@@ -438,8 +442,9 @@
             if (!confirm('Publish this version to the site?')) { return; }
             setBusy(true);
             setStatus('Publishing…');
-            api('publish', currentPayload()).then(function (res) {
+            api('publish', currentPayload('published')).then(function (res) {
                 if (!res.ok) { throw new Error(res.error || 'Could not publish.'); }
+                publishedRevision = res.revision || publishedRevision;
                 panel._dirty = false;
                 updateDraftState(null);
                 applyPayloadToPage(res);
@@ -454,7 +459,7 @@
             if (!currentDraft || !confirm('Discard the saved draft and return to the published version?')) { return; }
             setBusy(true);
             setStatus('Discarding draft…');
-            api('discard-draft', { key: key }).then(function (res) {
+            api('discard-draft', { key: key, revision: currentDraft.revision || 'missing' }).then(function (res) {
                 if (!res.ok) { throw new Error(res.error || 'Could not discard draft.'); }
                 fillEditor(res);
                 panel._dirty = false;
@@ -471,8 +476,9 @@
             if (!confirm('Restore revision from ' + label + '? It will replace the published version.')) { return; }
             setBusy(true);
             setStatus('Restoring revision…');
-            api('restore', { key: key, revision: id }).then(function (res) {
+            api('restore', { key: key, revision: id, expected_revision: publishedRevision }).then(function (res) {
                 if (!res.ok) { throw new Error(res.error || 'Could not restore revision.'); }
+                publishedRevision = res.revision || publishedRevision;
                 fillEditor(res);
                 applyPayloadToPage(res);
                 panel._dirty = false;
@@ -490,6 +496,7 @@
         /* load current content */
         apiGet(key).then(function (res) {
             if (!res.ok) { setStatus(res.error || 'Error', true); return; }
+            publishedRevision = res.revision || 'missing';
             fillEditor(res.draft || res);
             ta.disabled = false;
             ta.placeholder = '';
@@ -574,7 +581,7 @@
                 updateFeaturedImageDisplay();
                 panel._dirty = true;
                 setStatus('Saving featured image to draft…');
-                return api('save-draft', currentPayload());
+                return api('save-draft', currentPayload('draft'));
             }).then(function (saved) {
                 if (!saved.ok) { throw new Error(saved.error || 'Could not save featured image to draft.'); }
                 panel._dirty = false;
