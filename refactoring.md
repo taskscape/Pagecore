@@ -409,11 +409,13 @@ This was a source review with targeted local checks, not a production penetratio
   - Resolution: One shared dialog lifecycle now applies semantics and labels, traps Tab focus, handles Escape and overlays, makes background branches inert, and restores the exact opener for the inventory modal, listing modal, and editor panel.
   - Evidence: The mobile-width Playwright keyboard scenario opens every dialog, verifies initial and wrapped focus, checks background inertness, closes with Escape, and confirms focus restoration.
 
-- [ ] **REF-28 — Add versioned asset URLs and a release manifest.**
+- [x] **REF-28 — Add versioned asset URLs and a release manifest.**
   - Explanation: Editor/admin CSS and JavaScript are loaded from stable paths without a version query or content hash. Browser/proxy caches can serve an old client against a new API after deployment. Version synchronization is currently manual and the ignored deployment copy lacks the current version marker.
   - Justification: [`cms/engine.php`](cms/engine.php) lines 1281-1286 emits fixed asset URLs. The repository instruction requires four version locations to remain synchronized, but there is no dedicated automated assertion beyond browser expectations.
   - Recommendation: Emit asset URLs with `PAGECORE_VERSION` or a content manifest, define cache headers deliberately, and add a release check that validates every required version location and packaged file checksum.
   - Done when: a version bump invalidates browser assets, CI detects any version mismatch, and the deployable archive reports its exact version/checksum.
+  - Resolution: Every admin/editor CSS and JavaScript URL now carries `PAGECORE_VERSION`; Apache serves these URLs with an explicit immutable cache policy. Release builds retain their per-file manifest and now emit a SHA-256 sidecar for the complete versioned archive.
+  - Evidence: `npm run quality:version`, `npm run test:admin-view`, the browser version/asset assertion, and `npm run release:test` verify synchronized versions, cache-busting URLs, manifest file hashes, deployment drift, and the archive checksum sidecar.
 
 - [ ] **REF-29 — Consolidate slug/transliteration and URL normalization policies.**
   - Explanation: Post slugs, tag slugs, importer slugs, upload names, and menu/internal URLs use separate transliteration and normalization rules. The same Polish map is duplicated, while importer fallback lowercasing can behave differently for multibyte text.

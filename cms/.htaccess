@@ -6,3 +6,10 @@ RedirectMatch 404 ^/cms/(lib|tools)/
 
 # Match the default application request cap (8 MiB upload plus multipart overhead).
 LimitRequestBody 8912896
+
+# Asset URLs carry PAGECORE_VERSION, so immutable caching is safe across deployments.
+<IfModule mod_headers.c>
+    <FilesMatch "\.(?:css|js)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+</IfModule>

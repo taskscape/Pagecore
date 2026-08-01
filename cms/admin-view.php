@@ -8,8 +8,8 @@ function cms_admin_head_assets() {
     return '<link rel="preconnect" href="https://fonts.googleapis.com">' . "\n"
         . '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' . "\n"
         . '<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&family=Inter:wght@400;500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&display=swap" rel="stylesheet">' . "\n"
-        . '<link rel="stylesheet" href="' . cms_admin_e(cms_admin_url('assets/tokens.css')) . '">' . "\n"
-        . '<link rel="stylesheet" href="' . cms_admin_e(cms_admin_url('assets/admin.css')) . '">';
+        . '<link rel="stylesheet" href="' . cms_admin_e(cms_asset_url('tokens.css')) . '">' . "\n"
+        . '<link rel="stylesheet" href="' . cms_admin_e(cms_asset_url('admin.css')) . '">';
 }
 
 function cms_admin_sidebar($active, $picker = false) {
@@ -46,6 +46,6 @@ function cms_admin_client_assets($configName, $config) {
     $json = json_encode($config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     if ($json === false) { throw new RuntimeException('Could not encode admin client configuration.'); }
     return '<script nonce="' . cms_admin_e(cms_csp_nonce()) . '">window.' . $configName . ' = ' . $json . ';</script>' . "\n"
-        . '<script src="' . cms_admin_e(cms_admin_url('assets/dialog.js')) . '"></script>' . "\n"
-        . '<script src="' . cms_admin_e(cms_admin_url('assets/admin-client.js')) . '"></script>';
+        . '<script src="' . cms_admin_e(cms_asset_url('dialog.js')) . '"></script>' . "\n"
+        . '<script src="' . cms_admin_e(cms_asset_url('admin-client.js')) . '"></script>';
 }

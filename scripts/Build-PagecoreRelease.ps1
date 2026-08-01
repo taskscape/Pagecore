@@ -37,10 +37,14 @@ try {
     [System.IO.File]::WriteAllText((Join-Path $staging 'manifest.json'), ($manifest | ConvertTo-Json -Depth 5), $utf8NoBom)
     if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
     Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $archive -CompressionLevel Optimal
+    $archiveSha256 = Get-PagecoreSha256 -Path $archive
+    $checksumFile = "$archive.sha256"
+    [System.IO.File]::WriteAllText($checksumFile, "$archiveSha256  $([System.IO.Path]::GetFileName($archive))`n", $utf8NoBom)
     [pscustomobject]@{
         Version = $version
         Archive = $archive
-        Sha256 = Get-PagecoreSha256 -Path $archive
+        Sha256 = $archiveSha256
+        ChecksumFile = $checksumFile
     }
 } finally {
     if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
