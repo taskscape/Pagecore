@@ -25,6 +25,7 @@ return array(
     'backup_dir' => $private . '/backups',
     'backup_keep' => 20,
     'site_root' => '/var/www/example/public',
+    'generated_dir' => '/var/www/example/public',
     'site_url' => 'https://www.example.com',
     'site_name' => 'Example site',
     'base_url' => '/',

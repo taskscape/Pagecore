@@ -369,11 +369,13 @@ This was a source review with targeted local checks, not a production penetratio
   - Resolution: `test:php` now runs 22 named parser, policy, storage, rendering, authentication, transport, mutation, cache, and importer contracts as isolated PHP processes without a server. The suite contract documents temporary-root safety and how new boundaries join the gate.
   - Evidence: `npm run test:php` reports each contract independently and completes before browser testing; `tests/php-suite.md` maps its security coverage and fixture rules.
 
-- [ ] **REF-23 — Isolate browser-test state so tests can be safely parallelized.**
+- [x] **REF-23 — Isolate browser-test state so tests can be safely parallelized.**
   - Explanation: Every test resets the same fixed working content/uploads and generated files, forcing one worker and preventing reliable parallel or shard execution. The reset safety check uses a raw prefix without a separator boundary, although current targets are hard-coded.
   - Justification: [`tests/sample-site.spec.js`](tests/sample-site.spec.js) lines 5-38 defines shared directories and destructive reset; [`playwright.config.js`](playwright.config.js) lines 12-13 forces one worker. [`scripts/Reset-SampleSite.ps1`](scripts/Reset-SampleSite.ps1) lines 16-22 repeats a prefix containment check.
   - Recommendation: Create a unique temporary content/upload/site-artifact root per worker/test, pass it through environment/config, and clean only validated exact roots. Share reset helpers instead of implementing deletion twice.
   - Done when: representative tests pass with multiple workers and repeated runs, no test can delete outside its assigned root, and artifacts are retained on failure where useful.
+  - Resolution: Every Playwright worker now receives a unique system-temporary content, upload, and generated-artifact root selected by a validated request header. One Node reset helper owns exact-root containment and fixture copying for both Playwright and PowerShell, while the router safely serves worker-local media/index artifacts. The base lane runs fully parallel with four local or two CI workers.
+  - Evidence: The base browser suite passes repeatedly with multiple workers; reset-helper contracts reject a sibling-prefix target, and Playwright traces/screenshots remain under the normal failure artifact directory.
 
 - [ ] **REF-24 — Add continuous integration, static checks, and dependency/update gates.**
   - Explanation: There is no tracked CI workflow, PHP static analysis, JavaScript linting, dependency update automation, or explicit vendored-library check. The broken start command and cross-discovered tests could therefore reach a release unnoticed.

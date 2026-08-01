@@ -31,7 +31,7 @@ if (-not (Test-Path -LiteralPath $Config -PathType Leaf)) {
 
 $PhpExe = (Resolve-Path -LiteralPath $PhpCandidate).Path
 
-& (Join-Path $PSScriptRoot 'Reset-SampleSite.ps1')
+if (-not $env:PAGECORE_TEST_ROOT) { & (Join-Path $PSScriptRoot 'Reset-SampleSite.ps1') }
 
 $env:PAGECORE_CONFIG = $Config
 $env:PAGECORE_SITE_URL = "http://${HostAddress}:$Port"

@@ -3,6 +3,16 @@ $root = __DIR__;
 $content = getenv('PAGECORE_SAMPLE_CONTENT') ?: $root . '/working-content';
 $uploads = getenv('PAGECORE_SAMPLE_UPLOADS') ?: $root . '/working-uploads';
 $siteUrl = getenv('PAGECORE_SITE_URL') ?: 'http://127.0.0.1:8765';
+$testRoot = getenv('PAGECORE_TEST_ROOT');
+$testWorker = isset($_SERVER['HTTP_X_PAGECORE_TEST_WORKER']) ? (string) $_SERVER['HTTP_X_PAGECORE_TEST_WORKER'] : '';
+if ($testRoot && preg_match('~^worker-[0-9]+$~', $testWorker)) {
+    $workerRoot = rtrim($testRoot, '/\\') . DIRECTORY_SEPARATOR . $testWorker;
+    $content = $workerRoot . '/content';
+    $uploads = $workerRoot . '/uploads';
+    $generated = $workerRoot . '/generated';
+} else {
+    $generated = $root;
+}
 
 return array(
     'development_only' => true,
@@ -23,6 +33,7 @@ return array(
     'audit_log_path' => $content . '/.state/audit.jsonl',
     'audit_max_bytes' => 5242880,
     'content_dir' => $content,
+    'generated_dir' => $generated,
     'external_edit_validation' => true,
     'rendered_content_cache' => true,
     'backup_dir' => $content . '/.backups',

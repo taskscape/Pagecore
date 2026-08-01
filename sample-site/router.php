@@ -43,6 +43,24 @@ if (preg_match('~^/sample-site/post/([a-z0-9-]+)/?$~', $path, $m)) {
     return true;
 }
 
+if (preg_match('~^/sample-site/working-uploads/(.+)$~', $path, $match)) {
+    $config = require __DIR__ . '/config.php';
+    $file = pagecore_public_file($config['uploads_dir'], $match[1]);
+    if ($file !== false && preg_match('~\.(?:jpe?g|png|gif|webp|pdf)$~i', $file)) { readfile($file); return true; }
+    http_response_code(404); echo 'Not found'; return true;
+}
+
+if ($path === '/sample-site/search-index.json' || $path === '/sample-site/sitemap.xml') {
+    $config = require __DIR__ . '/config.php';
+    $file = pagecore_public_file($config['generated_dir'], basename($path));
+    if ($file !== false) {
+        header('Content-Type: ' . (substr($path, -5) === '.json' ? 'application/json' : 'application/xml') . '; charset=UTF-8');
+        readfile($file);
+        return true;
+    }
+    http_response_code(404); echo 'Not found'; return true;
+}
+
 $file = pagecore_public_file($root, $path);
 if ($file !== false) {
     return false;

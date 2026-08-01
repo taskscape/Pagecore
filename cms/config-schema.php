@@ -13,11 +13,12 @@ function cms_validate_config($config, $production) {
     if (!isset($config['base_url'])) { $config['base_url'] = '/'; }
     if (!isset($config['cms_url'])) { $config['cms_url'] = '/cms'; }
     if (!isset($config['sitemap_extra_routes'])) { $config['sitemap_extra_routes'] = array(); }
+    if (!isset($config['generated_dir']) && isset($config['site_root'])) { $config['generated_dir'] = $config['site_root']; }
     $requiredStrings = array('session_name', 'username', 'password_hash', 'content_dir', 'backup_dir', 'site_root', 'site_url', 'site_name', 'uploads_dir', 'uploads_url', 'post_url', 'base_url', 'cms_url');
     foreach ($requiredStrings as $key) {
         if (!isset($config[$key]) || !is_string($config[$key]) || trim($config[$key]) === '') { $errors[] = $key . ' must be a non-empty string'; }
     }
-    foreach (array('content_dir', 'backup_dir', 'site_root', 'uploads_dir', 'login_rate_limit_dir', 'audit_log_path') as $key) {
+    foreach (array('content_dir', 'backup_dir', 'site_root', 'generated_dir', 'uploads_dir', 'login_rate_limit_dir', 'audit_log_path') as $key) {
         if (isset($config[$key]) && !cms_config_is_absolute_path($config[$key])) { $errors[] = $key . ' must be an absolute path'; }
     }
     $pathKeys = array('content_dir', 'backup_dir', 'uploads_dir');

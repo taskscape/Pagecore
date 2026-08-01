@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.36.0');
+define('PAGECORE_VERSION', '2.37.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
@@ -1399,7 +1399,7 @@ function cms_release_post_slug_reservation($reservation) {
 /* ------------------------------------------------- generated index files */
 /** Paths produced from source Markdown by the index regeneration operation. */
 function cms_generated_artifact_paths() {
-    return array(cms_posts_index_path(), cms_cfg('site_root') . '/search-index.json', cms_cfg('site_root') . '/sitemap.xml');
+    return array(cms_posts_index_path(), cms_cfg('generated_dir', cms_cfg('site_root')) . '/search-index.json', cms_cfg('generated_dir', cms_cfg('site_root')) . '/sitemap.xml');
 }
 
 /** Regenerate all derived indexes as one observable, rollback-capable operation. */

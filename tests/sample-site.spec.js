@@ -1,41 +1,21 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
+const { resetSampleSite, isWithin } = require('../scripts/reset-sample-site');
 
 const repoRoot = path.resolve(__dirname, '..');
 const sampleRoot = path.join(repoRoot, 'sample-site');
-const fixturesContent = path.join(sampleRoot, 'fixtures', 'content');
-const fixturesUploads = path.join(sampleRoot, 'fixtures', 'uploads');
-const workingContent = path.join(sampleRoot, 'working-content');
-const workingUploads = path.join(sampleRoot, 'working-uploads');
+const testRoot = path.resolve(process.env.PAGECORE_TEST_ROOT);
+const workerToken = `worker-${process.env.TEST_WORKER_INDEX || '0'}`;
+const workerRoot = path.join(testRoot, workerToken);
+const workingContent = path.join(workerRoot, 'content');
+const workingUploads = path.join(workerRoot, 'uploads');
 const generatedFiles = [
-  path.join(sampleRoot, 'search-index.json'),
-  path.join(sampleRoot, 'sitemap.xml')
+  path.join(workerRoot, 'generated', 'search-index.json'),
+  path.join(workerRoot, 'generated', 'sitemap.xml')
 ];
 
-function copyDirContents(from, to) {
-  fs.mkdirSync(to, { recursive: true });
-  for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
-    const source = path.join(from, entry.name);
-    const target = path.join(to, entry.name);
-    if (entry.isDirectory()) {
-      fs.cpSync(source, target, { recursive: true });
-    } else {
-      fs.copyFileSync(source, target);
-    }
-  }
-}
-
-function resetSampleSite() {
-  for (const target of [workingContent, workingUploads, ...generatedFiles]) {
-    if (!path.resolve(target).startsWith(path.resolve(sampleRoot))) {
-      throw new Error(`Refusing to reset path outside sample site: ${target}`);
-    }
-    fs.rmSync(target, { recursive: true, force: true });
-  }
-  copyDirContents(fixturesContent, workingContent);
-  copyDirContents(fixturesUploads, workingUploads);
-}
+test.use({ extraHTTPHeaders: { 'X-Pagecore-Test-Worker': workerToken } });
 
 async function login(page, next = '/sample-site/') {
   await page.goto(`/cms/login.php?next=${encodeURIComponent(next)}`);
@@ -56,7 +36,12 @@ async function openEditor(page, key) {
 }
 
 test.beforeEach(() => {
-  resetSampleSite();
+  resetSampleSite(workerRoot, testRoot);
+});
+
+test.afterAll(() => {
+  if (!isWithin(workerRoot, testRoot)) throw new Error(`Refusing to remove unassigned worker root: ${workerRoot}`);
+  fs.rmSync(workerRoot, { recursive: true, force: true });
 });
 
 test('visitor sees rendered sample site without editor chrome', async ({ page }) => {
@@ -71,7 +56,7 @@ test('visitor sees rendered sample site without editor chrome', async ({ page })
 });
 
 test('anonymous search is read-only, bounded, and paginated', async ({ page }) => {
-  const indexPath = path.join(sampleRoot, 'search-index.json');
+  const indexPath = generatedFiles[0];
   expect(fs.existsSync(indexPath)).toBe(false);
 
   await page.goto('/sample-site/search/?q=missing');
@@ -451,14 +436,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.36.0');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.37.0');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.36.0');
+  expect((await version.json()).version).toBe('2.37.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.36.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.37.0')).toBeVisible();
 });
 
 test('admin design tokens preserve desktop, focus, disabled, and mobile states', async ({ page }) => {

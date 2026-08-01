@@ -1,7 +1,7 @@
 <?php
 require dirname(__DIR__) . '/_bootstrap.php';
 
-$indexFile = __DIR__ . '/../search-index.json';
+$indexFile = cms_cfg('generated_dir', dirname(__DIR__)) . '/search-index.json';
 $indexAvailable = is_file($indexFile) && filesize($indexFile) <= cms_limit('max_search_index_bytes', 5242880);
 $items = $indexAvailable ? json_decode((string) file_get_contents($indexFile), true) : array();
 if (!is_array($items)) { $items = array(); }
