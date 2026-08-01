@@ -19,6 +19,8 @@ Set `PAGECORE_CONFIG` to the absolute private `config.php` path and
 `PAGECORE_DOCUMENT_ROOT` to the absolute `public/` path in the PHP process
 environment. Grant the PHP worker write access only to the three private data
 directories and to the generated public `search-index.json` and `sitemap.xml`.
+The private state directory also stores the shared account/source login attempt
+budget; all PHP workers for an installation must see the same filesystem path.
 
 The browser never reads Markdown or upload files directly. `/cms/media-file.php`
 validates the requested relative media path and supplies a fixed MIME policy;

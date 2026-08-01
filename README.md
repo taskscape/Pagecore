@@ -470,6 +470,7 @@ from `content/posts/` and `categories`.
 - Direct HTTP access to `cms/engine.php`, `cms/auth.php`, and `cms/lib/` is
   denied; private storage has no HTTP route.
 - Media is delivered only by `/cms/media-file.php`; the private upload directory is not executable or HTTP-addressable.
+- The private `login_rate_limit_dir` is shared by all PHP workers so account and source attempt budgets survive cookie rotation.
 - `PAGECORE_DEVELOPMENT` is absent in production; the engine rejects any
   configuration, content, backup, or upload path below `DOCUMENT_ROOT`.
 - Post URL rewrites match the configured `post_url`.

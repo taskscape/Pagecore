@@ -17,9 +17,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . $next);
         exit;
     }
-    $error = cms_is_locked_out()
-        ? 'Too many failed attempts. Try again in a few minutes.'
-        : 'Invalid username or password.';
+    if (cms_is_locked_out($user)) {
+        http_response_code(429);
+        header('Retry-After: ' . cms_login_retry_after());
+        $error = 'Too many failed attempts. Try again in a few minutes.';
+    } else {
+        $error = 'Invalid username or password.';
+    }
 }
 ?><!doctype html>
 <html lang="en">

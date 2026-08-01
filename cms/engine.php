@@ -20,7 +20,7 @@ if (defined('CMS_LOADED')) { return; }
 define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
-define('PAGECORE_VERSION', '2.12.1');
+define('PAGECORE_VERSION', '2.13.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
@@ -47,6 +47,7 @@ function cms_private_storage_violations($documentRoot, $configFile) {
         'content_dir' => cms_cfg('content_dir'),
         'backup_dir' => cms_cfg('backup_dir'),
         'uploads_dir' => cms_cfg('uploads_dir'),
+        'login_rate_limit_dir' => cms_cfg('login_rate_limit_dir', cms_cfg('content_dir') . '/.state'),
     ) as $label => $path) {
         if (!$path || cms_path_within_root($path, $documentRoot)) { $violations[] = $label; }
     }

@@ -70,7 +70,7 @@ test('visitor sees rendered sample site without editor chrome', async ({ page })
   await expect(page.locator('link[href="/cms/assets/editor.css"]')).toHaveCount(0);
 });
 
-test('failed logins in one browser session do not lock out another session', async ({ browser }) => {
+test('failed login budget is shared across browser sessions and returns retry guidance', async ({ browser }) => {
   const samplePort = process.env.PAGECORE_SAMPLE_PORT || '8765';
   const baseUrl = process.env.PAGECORE_BASE_URL || `http://127.0.0.1:${samplePort}`;
   const loginUrl = `${baseUrl}/cms/login.php?next=${encodeURIComponent('/sample-site/')}`;
@@ -78,24 +78,24 @@ test('failed logins in one browser session do not lock out another session', asy
   const editorContext = await browser.newContext();
   try {
     const attackerPage = await attackerContext.newPage();
-    await attackerPage.goto(loginUrl);
-    // Exhaust this session's throttle to verify it cannot create a global editor lockout.
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      await attackerPage.getByLabel('Username').fill('admin');
-      await attackerPage.getByLabel('Password').fill('incorrect-password');
-      await attackerPage.getByRole('button', { name: 'Sign in' }).click();
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const response = await attackerPage.request.post(loginUrl, {
+        form: { username: 'admin', password: `wrong-${attempt}` }
+      });
+      expect(response.status()).toBe(200);
     }
-    await expect(attackerPage.locator('.error')).toContainText('Too many failed attempts');
 
     const editorPage = await editorContext.newPage();
-    await editorPage.goto(loginUrl);
-    await editorPage.getByLabel('Username').fill('admin');
-    await editorPage.getByLabel('Password').fill('pagecore-demo');
-    await editorPage.getByRole('button', { name: 'Sign in' }).click();
-    await expect(editorPage.locator('.cms-toolbar')).toBeVisible();
+    const rotatedCookieAttempt = await editorPage.request.post(loginUrl, {
+      form: { username: 'admin', password: 'still-wrong' }
+    });
+    expect(rotatedCookieAttempt.status()).toBe(429);
+    expect(Number(rotatedCookieAttempt.headers()['retry-after'])).toBeGreaterThan(0);
+    expect(await rotatedCookieAttempt.text()).toContain('Too many failed attempts');
   } finally {
     await attackerContext.close();
     await editorContext.close();
+    fs.rmSync(path.join(workingContent, '.state', 'login-rate-limits.json'), { force: true });
   }
 });
 
@@ -254,14 +254,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.12.1');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.13.0');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.12.1');
+  expect((await version.json()).version).toBe('2.13.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.12.1')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.13.0')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {

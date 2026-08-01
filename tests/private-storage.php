@@ -16,6 +16,7 @@ $privateRoot = dirname($documentRoot) . '/pagecore-private-example';
 $GLOBALS['CMS_CONFIG']['content_dir'] = $privateRoot . '/content';
 $GLOBALS['CMS_CONFIG']['backup_dir'] = $privateRoot . '/backups';
 $GLOBALS['CMS_CONFIG']['uploads_dir'] = $privateRoot . '/uploads';
+$GLOBALS['CMS_CONFIG']['login_rate_limit_dir'] = $privateRoot . '/state';
 $safe = cms_private_storage_violations($documentRoot, $privateRoot . '/config.php');
 if ($safe !== array()) {
     fwrite(STDERR, 'FAIL: external paths were rejected: ' . implode(', ', $safe) . "\n");
