@@ -20,6 +20,11 @@ CMS login:
 - Username: `admin`
 - Password: `pagecore-demo`
 
+These are public demo credentials, not a deployment default. The sample
+configuration is `development_only` and cannot start in production mode or
+serve non-loopback clients. Use the private production template under
+`deployment/` with a newly generated password hash for a real site.
+
 The sample uses `sample-site/config.php` via the `PAGECORE_CONFIG` environment
 variable. Mutable runtime files are copied from `fixtures/` into ignored
 folders:

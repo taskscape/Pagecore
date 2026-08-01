@@ -1,6 +1,6 @@
 {
   "name": "pagecore",
-  "version": "2.17.0",
+  "version": "2.17.1",
   "private": true,
   "description": "Pagecore CMS sample site and end-to-end tests.",
   "scripts": {
@@ -17,7 +17,8 @@
     "test:login-redirect": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-LoginRedirect.ps1",
     "test:login-throttle": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-LoginThrottle.ps1",
     "test:transport": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-Transport.ps1",
-    "test:php-runtime": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-PhpRuntime.ps1"
+    "test:php-runtime": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-PhpRuntime.ps1",
+    "test:demo-config": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-DemoConfig.ps1"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0"

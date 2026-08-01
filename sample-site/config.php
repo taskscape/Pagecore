@@ -5,6 +5,8 @@ $uploads = getenv('PAGECORE_SAMPLE_UPLOADS') ?: $root . '/working-uploads';
 $siteUrl = getenv('PAGECORE_SITE_URL') ?: 'http://127.0.0.1:8765';
 
 return array(
+    'development_only' => true,
+    'demo_credentials' => true,
     'session_name' => 'PAGECORE_SAMPLE',
     'session_hours' => 8,
     'require_https' => false,

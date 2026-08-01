@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.17.0');
+define('PAGECORE_VERSION', '2.17.1');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
@@ -60,6 +60,18 @@ function cms_private_storage_violations($documentRoot, $configFile) {
 // Demo/local servers opt in explicitly. Production fails closed until secrets,
 // source Markdown, drafts, backups, and uploads are outside the public root.
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
+if (cms_cfg('demo_credentials', false) === true && cms_cfg('development_only', false) !== true) {
+    cms_audit_event('config.demo_credentials', 'failure', array('reason' => 'production_profile'));
+    throw new RuntimeException('Demo credentials are allowed only in an explicitly development-only Pagecore configuration.');
+}
+if (cms_cfg('development_only', false) === true) {
+    $remote = isset($_SERVER['REMOTE_ADDR']) ? (string) $_SERVER['REMOTE_ADDR'] : '';
+    $loopback = PHP_SAPI === 'cli' || $remote === '127.0.0.1' || $remote === '::1';
+    if (!$cmsDevelopment || !$loopback) {
+        cms_audit_event('config.development_only', 'failure', array('reason' => 'unsafe_runtime'));
+        throw new RuntimeException('This Pagecore configuration is development-only and requires an explicit loopback development runtime.');
+    }
+}
 if (PHP_SAPI !== 'cli' && !$cmsDevelopment) {
     $storageViolations = cms_private_storage_violations(
         isset($_SERVER['DOCUMENT_ROOT']) ? $_SERVER['DOCUMENT_ROOT'] : '',

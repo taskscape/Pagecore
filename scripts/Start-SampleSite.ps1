@@ -6,6 +6,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+if ($HostAddress -notin @('127.0.0.1', '::1')) {
+    throw 'The demo launcher is development-only and may bind only to a loopback address.'
+}
+
 $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $PhpCandidate = if ($env:PAGECORE_PHP_EXE) {
     $env:PAGECORE_PHP_EXE

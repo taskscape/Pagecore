@@ -36,6 +36,36 @@ function cms_login_source() {
         : 'unknown';
 }
 
+function cms_login_csrf_token() {
+    if (empty($_SESSION['cms_login_csrf'])) {
+        $_SESSION['cms_login_csrf'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['cms_login_csrf'];
+}
+
+function cms_login_request_same_origin() {
+    $source = isset($_SERVER['HTTP_ORIGIN']) ? (string) $_SERVER['HTTP_ORIGIN'] : '';
+    if ($source === '' && isset($_SERVER['HTTP_REFERER'])) { $source = (string) $_SERVER['HTTP_REFERER']; }
+    if ($source === '') { return true; }
+    $expected = parse_url((string) cms_cfg('site_url'));
+    $actual = parse_url($source);
+    if (!is_array($expected) || !is_array($actual) || empty($expected['scheme']) || empty($expected['host']) || empty($actual['scheme']) || empty($actual['host'])) {
+        return false;
+    }
+    $portFor = function ($parts) {
+        if (isset($parts['port'])) { return (int) $parts['port']; }
+        return strtolower($parts['scheme']) === 'https' ? 443 : 80;
+    };
+    return strtolower($expected['scheme']) === strtolower($actual['scheme'])
+        && strtolower($expected['host']) === strtolower($actual['host'])
+        && $portFor($expected) === $portFor($actual);
+}
+
+function cms_verify_login_request($token) {
+    $expected = isset($_SESSION['cms_login_csrf']) ? (string) $_SESSION['cms_login_csrf'] : '';
+    return $expected !== '' && is_string($token) && hash_equals($expected, $token) && cms_login_request_same_origin();
+}
+
 function cms_login_throttle_file() {
     $dir = cms_cfg('login_rate_limit_dir', cms_cfg('content_dir') . '/.state');
     return rtrim($dir, '/\\') . '/login-rate-limits.json';
@@ -154,6 +184,7 @@ function cms_login($user, $pass) {
     $_SESSION['cms_auth']    = true;
     $_SESSION['cms_auth_at'] = time();
     $_SESSION['cms_csrf']    = bin2hex(random_bytes(32));
+    unset($_SESSION['cms_login_csrf']);
     cms_audit_event('auth.login', 'success', array('account' => $user));
     return true;
 }

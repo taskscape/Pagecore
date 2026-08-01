@@ -540,9 +540,10 @@ npm run sample:start
 Open `http://127.0.0.1:8765/sample-site/` and sign in at `/cms/login.php` with
 `admin / pagecore-demo`.
 
-The launcher binds to `127.0.0.1` by default. An operator may deliberately use
-`-HostAddress` when testing from another machine; do not expose the demo server
-to an untrusted network.
+These credentials are intentionally public and cannot boot in production
+mode. The sample configuration is marked `development_only`; Pagecore requires
+the explicit development opt-in and rejects non-loopback requests. The
+launcher therefore binds to `127.0.0.1` and must not be exposed to a network.
 
 Run the Playwright suite against the sample site:
 

@@ -13,11 +13,15 @@ if (cms_is_logged_in()) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $user = isset($_POST['username']) ? $_POST['username'] : '';
     $pass = isset($_POST['password']) ? $_POST['password'] : '';
-    if (cms_login($user, $pass)) {
+    $loginToken = isset($_POST['login_token']) ? (string) $_POST['login_token'] : '';
+    if (!cms_verify_login_request($loginToken)) {
+        http_response_code(403);
+        cms_audit_event('auth.login_csrf', 'failure', array('account' => $user, 'reason' => 'invalid_request'));
+        $error = 'The sign-in form expired or came from another site. Reload and try again.';
+    } elseif (cms_login($user, $pass)) {
         header('Location: ' . $next);
         exit;
-    }
-    if (cms_is_locked_out($user)) {
+    } elseif (cms_is_locked_out($user)) {
         http_response_code(429);
         header('Retry-After: ' . cms_login_retry_after());
         $error = 'Too many failed attempts. Try again in a few minutes.';
@@ -109,6 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <p class="error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></p>
         <?php endif; ?>
         <form method="post" action="/cms/login.php?next=<?= rawurlencode($next) ?>">
+          <input type="hidden" name="login_token" value="<?= htmlspecialchars(cms_login_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
           <label for="cms-login-username">Username</label>
           <input id="cms-login-username" name="username" autocomplete="username" placeholder="Enter your username" required autofocus>
           <label for="cms-login-password">Password</label>

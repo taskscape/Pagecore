@@ -8,6 +8,8 @@ $publicRoot = getenv('PAGECORE_DOCUMENT_ROOT');
 if (!$publicRoot) { throw new RuntimeException('PAGECORE_DOCUMENT_ROOT is required.'); }
 
 return array(
+    'development_only' => false,
+    'demo_credentials' => false,
     'session_name' => 'PAGECORE',
     'session_hours' => 8,
     'require_https' => true,

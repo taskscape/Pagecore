@@ -112,16 +112,20 @@ test('failed login budget is shared across browser sessions and returns retry gu
   const editorContext = await browser.newContext();
   try {
     const attackerPage = await attackerContext.newPage();
+    await attackerPage.goto(loginUrl);
+    const attackerToken = await attackerPage.locator('input[name="login_token"]').inputValue();
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const response = await attackerPage.request.post(loginUrl, {
-        form: { username: 'admin', password: `wrong-${attempt}` }
+        form: { username: 'admin', password: `wrong-${attempt}`, login_token: attackerToken }
       });
       expect(response.status()).toBe(200);
     }
 
     const editorPage = await editorContext.newPage();
+    await editorPage.goto(loginUrl);
+    const editorToken = await editorPage.locator('input[name="login_token"]').inputValue();
     const rotatedCookieAttempt = await editorPage.request.post(loginUrl, {
-      form: { username: 'admin', password: 'still-wrong' }
+      form: { username: 'admin', password: 'still-wrong', login_token: editorToken }
     });
     expect(rotatedCookieAttempt.status()).toBe(429);
     expect(Number(rotatedCookieAttempt.headers()['retry-after'])).toBeGreaterThan(0);
@@ -201,6 +205,33 @@ test('post-login redirects stay on unambiguous local application paths', async (
   const valid = await page.request.get(`/cms/login.php?next=${encodeURIComponent(validTarget)}`, { maxRedirects: 0 });
   expect(valid.status()).toBe(302);
   expect(valid.headers().location).toBe(validTarget);
+});
+
+test('login requires its pre-authentication token and rejects cross-site origins', async ({ page }) => {
+  await page.goto('/cms/login.php?next=%2Fsample-site%2F');
+  const token = await page.locator('input[name="login_token"]').inputValue();
+  expect(token).toMatch(/^[a-f0-9]{64}$/);
+
+  const missingToken = await page.request.post('/cms/login.php?next=%2Fsample-site%2F', {
+    form: { username: 'admin', password: 'pagecore-demo' },
+    maxRedirects: 0
+  });
+  expect(missingToken.status()).toBe(403);
+
+  const crossSite = await page.request.post('/cms/login.php?next=%2Fsample-site%2F', {
+    headers: { Origin: 'https://attacker.example' },
+    form: { username: 'admin', password: 'pagecore-demo', login_token: token },
+    maxRedirects: 0
+  });
+  expect(crossSite.status()).toBe(403);
+  const stillLoggedOut = await page.request.get('/cms/api.php?action=version');
+  expect(stillLoggedOut.status()).toBe(401);
+
+  await page.reload();
+  await page.getByLabel('Username').fill('admin');
+  await page.getByLabel('Password').fill('pagecore-demo');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.locator('.cms-toolbar')).toBeVisible();
 });
 
 test('post links expose Facebook-friendly title, summary, canonical URL, and featured image', async ({ page }) => {
@@ -392,14 +423,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.17.0');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.17.1');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.17.0');
+  expect((await version.json()).version).toBe('2.17.1');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.17.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.17.1')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {
