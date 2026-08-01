@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.42.0');
+define('PAGECORE_VERSION', '2.43.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
@@ -36,6 +36,7 @@ require_once __DIR__ . '/modules/TemplateDiscovery.php';
 require_once __DIR__ . '/modules/ContentCache.php';
 require_once __DIR__ . '/modules/OperationalBoundary.php';
 require_once __DIR__ . '/modules/TimePolicy.php';
+require_once __DIR__ . '/modules/SlugPolicy.php';
 list($cmsConfig, $cmsConfigErrors) = cms_validate_config(require $cmsConfigFile, !$cmsDevelopment);
 if ($cmsConfigErrors) {
     error_log('Pagecore configuration invalid: ' . implode('; ', $cmsConfigErrors));
@@ -172,7 +173,7 @@ function cms_region_path($key, $mustExist = false) {
 
 /** Validate a post slug and resolve to content/posts/<slug>.md. */
 function cms_post_path($slug, $mustExist = false) {
-    if (!preg_match('~^[a-z0-9-]+$~', $slug)) { return null; }
+    if (!PagecoreSlugPolicy::isLegacyContentSlug($slug)) { return null; }
     return PagecorePathPolicy::resolveWithin(cms_cfg('content_dir'), 'posts/' . $slug . '.md', $mustExist);
 }
 
@@ -729,13 +730,7 @@ function cms_parse_tags($value) {
 
 /** Slugify a tag label (Polish transliteration; no uniqueness/file check). */
 function cms_tag_slugify($label) {
-    $map = array(
-        'ą'=>'a','ć'=>'c','ę'=>'e','ł'=>'l','ń'=>'n','ó'=>'o','ś'=>'s','ź'=>'z','ż'=>'z',
-        'Ą'=>'a','Ć'=>'c','Ę'=>'e','Ł'=>'l','Ń'=>'n','Ó'=>'o','Ś'=>'s','Ź'=>'z','Ż'=>'z',
-    );
-    $s = strtolower(strtr((string) $label, $map));
-    $s = preg_replace('~[^a-z0-9]+~', '-', $s);
-    return trim($s, '-');
+    return PagecoreSlugPolicy::tagSlug($label);
 }
 
 /**
@@ -1347,15 +1342,7 @@ function cms_content_inventory($postQuery = '', $postCategory = '', $postPage = 
 
 /** Convert a title to the stable Polish-aware base used for post slugs. */
 function cms_post_slug_base($title) {
-    $map = array(
-        'ą'=>'a','ć'=>'c','ę'=>'e','ł'=>'l','ń'=>'n','ó'=>'o','ś'=>'s','ź'=>'z','ż'=>'z',
-        'Ą'=>'a','Ć'=>'c','Ę'=>'e','Ł'=>'l','Ń'=>'n','Ó'=>'o','Ś'=>'s','Ź'=>'z','Ż'=>'z',
-    );
-    $s = strtr((string) $title, $map);
-    $s = strtolower($s);
-    $s = preg_replace('~[^a-z0-9]+~', '-', $s);
-    $s = trim($s, '-');
-    return $s === '' ? 'post' : $s;
+    return PagecoreSlugPolicy::contentSlug($title);
 }
 
 /** Slugify a title (Polish transliteration), ensure uniqueness. */
@@ -1363,7 +1350,7 @@ function cms_slugify($title) {
     $s = cms_post_slug_base($title);
     $slug = $s; $n = 2;
     while (is_file(cms_cfg('content_dir') . '/posts/' . $slug . '.md')) {
-        $slug = $s . '-' . $n; $n++;
+        $slug = PagecoreSlugPolicy::contentCandidate($s, $n); $n++;
     }
     return $slug;
 }
@@ -1377,7 +1364,7 @@ function cms_reserve_post_slug($title, $maxAttempts = 1000) {
     $dir = cms_cfg('content_dir') . '/posts';
     if (!is_dir($dir) && !@mkdir($dir, 0775, true)) { return null; }
     for ($n = 1; $n <= $maxAttempts; $n++) {
-        $slug = $n === 1 ? $base : $base . '-' . $n;
+        $slug = PagecoreSlugPolicy::contentCandidate($base, $n);
         $path = $dir . '/' . $slug . '.md';
         if (is_file($path)) { continue; }
         $lockPath = $path . '.create.lock';

@@ -706,9 +706,7 @@ $actionHandlers = array(
         }
     }
     $base = pathinfo($f['name'], PATHINFO_FILENAME);
-    $base = strtolower(preg_replace('~[^A-Za-z0-9-]+~', '-', $base));
-    $base = trim($base, '-');
-    if ($base === '') { $base = 'file'; }
+    $base = PagecoreSlugPolicy::filenameBase($base);
     $sub = PagecoreTimePolicy::now(cms_cfg('timezone', 'UTC'))->format('Y/m');
     $dir = cms_cfg('uploads_dir') . '/' . $sub;
     $storageLimit = cms_limit('max_upload_storage_bytes', 268435456);

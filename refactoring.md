@@ -417,11 +417,13 @@ This was a source review with targeted local checks, not a production penetratio
   - Resolution: Every admin/editor CSS and JavaScript URL now carries `PAGECORE_VERSION`; Apache serves these URLs with an explicit immutable cache policy. Release builds retain their per-file manifest and now emit a SHA-256 sidecar for the complete versioned archive.
   - Evidence: `npm run quality:version`, `npm run test:admin-view`, the browser version/asset assertion, and `npm run release:test` verify synchronized versions, cache-busting URLs, manifest file hashes, deployment drift, and the archive checksum sidecar.
 
-- [ ] **REF-29 — Consolidate slug/transliteration and URL normalization policies.**
+- [x] **REF-29 — Consolidate slug/transliteration and URL normalization policies.**
   - Explanation: Post slugs, tag slugs, importer slugs, upload names, and menu/internal URLs use separate transliteration and normalization rules. The same Polish map is duplicated, while importer fallback lowercasing can behave differently for multibyte text.
   - Justification: [`cms/engine.php`](cms/engine.php) lines 538-560 and 1151-1171 duplicate slug logic; [`scripts/import-wordpress.php`](scripts/import-wordpress.php) lines 658-684 implements another policy; upload naming uses a fourth rule at `cms/api.php:570-577`.
   - Recommendation: Define separate but shared policies for content slugs, tag slugs, and filenames, with Unicode/transliteration behavior, reserved names, maximum lengths, collision handling, and fixtures. Reuse them in runtime and importer through a small common library.
   - Done when: identical input has documented deterministic output across import and editor creation, legacy slugs remain addressable, and collision/reserved-name tests pass.
+  - Resolution: One shared policy now defines Latin/Polish transliteration, separate content/tag/filename fallbacks and limits, Windows-reserved names, and length-safe collision suffixes. Runtime post creation, tag parsing, media uploads, and WordPress import all delegate to it; existing safe ASCII slugs remain valid for lookup.
+  - Evidence: `npm run test:slug-policy`, importer component contracts, and existing concurrent post-reservation/browser flows cover cross-path parity, Unicode, empty fallbacks, reserved names, maximum lengths, collisions, and legacy addressability.
 
 - [ ] **REF-30 — Make JSON encoding/decoding contracts explicit.**
   - Explanation: JSON is used for API responses, navigation, media metadata, and generated indexes with different flags and inconsistent failure behavior. Invalid UTF-8 may be rejected in some request fields, substituted in indexes, or produce an empty response elsewhere.

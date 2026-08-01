@@ -23,6 +23,7 @@ $tests = @(
     'request-guard.php',
     'routes.php',
     'runtime-policy.php',
+    'slug-policy.php',
     'template-discovery.php',
     'time-policy.php',
     'transport-config.php',

@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__, 2) . '/cms/modules/SlugPolicy.php';
 
 final class PagecoreWordPressImportPolicy {
     public static function decodeSerializedOption($value) {
@@ -42,12 +43,10 @@ final class PagecoreWordPressImportPolicy {
     }
 
     public static function uniqueSlug($slug, array &$seen) {
-        if ($slug === '') { $slug = 'post'; }
-        $base = $slug; $number = 2;
-        while (isset($seen[$slug])) { $slug = $base . '-' . $number; $number++; }
-        $seen[$slug] = true;
-        return $slug;
+        return PagecoreSlugPolicy::uniqueContentSlug($slug, $seen);
     }
+
+    public static function contentSlug($value) { return PagecoreSlugPolicy::contentSlug(rawurldecode((string) $value)); }
 
     public static function frontMatterValue($value) { return str_replace(array("\r", "\n"), ' ', (string) $value); }
 }

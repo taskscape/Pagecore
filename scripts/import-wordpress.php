@@ -423,8 +423,7 @@ foreach ($postRows as $r) {
     $excerpt = sql_val($f[6]);
     $name    = sql_val($f[11]);
 
-    $slug = $name !== '' ? $name : preg_replace('~[^a-z0-9]+~', '-', strtolower($title));
-    $slug = trim(preg_replace('~[^a-z0-9-]+~', '-', $slug), '-');
+    $slug = PagecoreWordPressImportPolicy::contentSlug($name !== '' ? $name : $title);
 
     // rewrite upload URLs across raw content first, then convert
     $content = rewrite_uploads($content);
@@ -477,6 +476,8 @@ foreach ($postRows as $r) {
     $catSlug = '';
     foreach ($cats as $c) {
         list($cname, $cslug) = $c;
+        $cslug = PagecoreSlugPolicy::tagSlug(rawurldecode($cslug !== '' ? $cslug : $cname));
+        if ($cslug === '') { continue; }
         if ($catSlug === '' ) { $catSlug = $cslug; $catName = $cname; }
         if ($cslug !== 'uncategorized') { $catSlug = $cslug; $catName = $cname; break; }
     }
