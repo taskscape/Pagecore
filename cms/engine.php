@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.26.0');
+define('PAGECORE_VERSION', '2.27.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
@@ -30,6 +30,7 @@ require_once __DIR__ . '/modules/PathPolicy.php';
 require_once __DIR__ . '/modules/SessionContext.php';
 require_once __DIR__ . '/modules/ContentPolicy.php';
 require_once __DIR__ . '/modules/FrontMatter.php';
+require_once __DIR__ . '/modules/Routes.php';
 list($cmsConfig, $cmsConfigErrors) = cms_validate_config(require $cmsConfigFile, !$cmsDevelopment);
 if ($cmsConfigErrors) {
     error_log('Pagecore configuration invalid: ' . implode('; ', $cmsConfigErrors));
@@ -177,6 +178,9 @@ function cms_content_revision($path) {
     $hash = hash_file('sha256', $path);
     return $hash === false ? null : $hash;
 }
+
+function cms_site_url($path = '') { return PagecoreRoutes::join(cms_cfg('base_url', '/'), $path); }
+function cms_admin_url($path = '') { return PagecoreRoutes::join(cms_cfg('cms_url', '/cms'), $path); }
 
 /** Run a mutation while holding an advisory lock scoped to one logical resource. */
 function cms_with_resource_lock($resource, callable $callback) {
@@ -402,7 +406,7 @@ function cms_media_rel_from_path($path) {
 }
 
 function cms_media_url($rel) {
-    return '/cms/media-file.php?path=' . rawurlencode(str_replace('\\', '/', $rel));
+    return cms_admin_url('media-file.php') . '?path=' . rawurlencode(str_replace('\\', '/', $rel));
 }
 
 /** Read a positive integer resource limit and fall back safely on invalid configuration. */
@@ -1424,8 +1428,7 @@ function cms_regenerate_indexes() {
     $urls = array_keys(cms_cfg('search_pages', array()));
     foreach ($posts as $p) { $urls[] = $p['url']; }
     foreach (cms_cfg('categories') as $def) { $urls[] = $def[1]; }
-    $urls[] = '/szukaj/';
-    $urls[] = '/kontakt/';
+    foreach (cms_cfg('sitemap_extra_routes', array()) as $route) { $urls[] = $route; }
     $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
          . "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
     foreach (array_unique($urls) as $u) {
@@ -1470,9 +1473,9 @@ function cms_assets() {
     $cats = array();
     foreach (cms_cfg('categories') as $slug => $def) { $cats[] = array($slug, $def[0]); }
     $cfg = json_encode(array(
-        'api'   => '/cms/api.php',
-        'content' => '/cms/content.php',
-        'media' => '/cms/media.php',
+        'api'   => cms_admin_url('api.php'),
+        'content' => cms_admin_url('content.php'),
+        'media' => cms_admin_url('media.php'),
         'token' => cms_csrf_token(),
         'maxUploadMb' => cms_cfg('max_upload_mb'),
         'categories' => $cats,
@@ -1482,7 +1485,7 @@ function cms_assets() {
     return "\n<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n"
          . "<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n"
          . "<link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&display=swap\" rel=\"stylesheet\">\n"
-         . "<link rel=\"stylesheet\" href=\"/cms/assets/editor.css\">\n"
+         . '<link rel="stylesheet" href="' . htmlspecialchars(cms_admin_url('assets/editor.css'), ENT_QUOTES, 'UTF-8') . "\">\n"
          . '<script nonce="' . htmlspecialchars(cms_csp_nonce(), ENT_QUOTES, 'UTF-8') . '">window.CMS_CONFIG = ' . $cfg . ";</script>\n"
-         . "<script src=\"/cms/assets/editor.js\" defer></script>\n";
+         . '<script src="' . htmlspecialchars(cms_admin_url('assets/editor.js'), ENT_QUOTES, 'UTF-8') . "\" defer></script>\n";
 }

@@ -2,9 +2,9 @@
 (function () {
     'use strict';
     var CFG = window.CMS_CONFIG || {};
-    var API = CFG.api || '/cms/api.php';
-    var CONTENT = CFG.content || '/cms/content.php';
-    var MEDIA = CFG.media || '/cms/media.php';
+    var API = CFG.api;
+    var CONTENT = CFG.content;
+    var MEDIA = CFG.media;
     var TOKEN = CFG.token || '';
     var VERSION = CFG.version || '';
 

@@ -2,7 +2,7 @@
 require __DIR__ . '/engine.php';
 require __DIR__ . '/auth.php';
 
-$next = cms_safe_redirect_target(isset($_GET['next']) ? $_GET['next'] : '/');
+$next = cms_safe_redirect_target(isset($_GET['next']) ? $_GET['next'] : cms_site_url());
 $error = '';
 
 if (cms_is_logged_in()) {
@@ -89,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       font-size: 13px;
     }
   </style>
-  <link rel="stylesheet" href="/cms/assets/admin.css">
+  <link rel="stylesheet" href="<?= htmlspecialchars(cms_admin_url('assets/admin.css'), ENT_QUOTES, 'UTF-8') ?>">
 </head>
 <body class="pc-admin pc-login">
   <div class="pc-login-shell">
@@ -112,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php if ($error !== ''): ?>
           <p class="error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></p>
         <?php endif; ?>
-        <form method="post" action="/cms/login.php?next=<?= rawurlencode($next) ?>">
+        <form method="post" action="<?= htmlspecialchars(cms_admin_url('login.php'), ENT_QUOTES, 'UTF-8') ?>?next=<?= rawurlencode($next) ?>">
           <input type="hidden" name="login_token" value="<?= htmlspecialchars(cms_login_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
           <label for="cms-login-username">Username</label>
           <input id="cms-login-username" name="username" autocomplete="username" placeholder="Enter your username" required autofocus>

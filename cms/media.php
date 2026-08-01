@@ -3,8 +3,8 @@ require __DIR__ . '/engine.php';
 require __DIR__ . '/auth.php';
 
 if (!cms_is_logged_in()) {
-    $next = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/cms/media.php';
-    header('Location: /cms/login.php?next=' . rawurlencode($next));
+    $next = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : cms_admin_url('media.php');
+    header('Location: ' . cms_admin_url('login.php') . '?next=' . rawurlencode($next));
     exit;
 }
 
@@ -119,29 +119,29 @@ function cms_media_bytes($bytes) {
     }
   </style>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/cms/assets/admin.css">
+  <link rel="stylesheet" href="<?= cms_media_e(cms_admin_url('assets/admin.css')) ?>">
 </head>
 <body class="pc-admin">
   <div class="pc-app">
     <aside class="pc-sidebar">
-      <a class="pc-brand" href="/" aria-label="Pagecore site home">
+      <a class="pc-brand" href="<?= cms_media_e(cms_site_url()) ?>" aria-label="Pagecore site home">
         <span class="pc-brand-mark"><span class="material-symbols-rounded" aria-hidden="true">check</span></span>
         <span class="pc-brand-copy"><strong>Pagecore</strong><span>Content workspace</span></span>
       </a>
       <div class="pc-nav-group">
         <p class="pc-nav-label">Workspace</p>
         <nav class="pc-nav" aria-label="CMS navigation">
-          <a href="/cms/content.php"><span class="material-symbols-rounded" aria-hidden="true">dashboard</span>Overview</a>
-          <a href="/cms/content.php#posts-title"><span class="material-symbols-rounded" aria-hidden="true">edit_note</span>Posts</a>
-          <a href="/cms/content.php#pages-title"><span class="material-symbols-rounded" aria-hidden="true">article</span>Pages</a>
-          <a href="/cms/media.php" aria-current="page"><span class="material-symbols-rounded" aria-hidden="true">photo_library</span>Media</a>
+          <a href="<?= cms_media_e(cms_admin_url('content.php')) ?>"><span class="material-symbols-rounded" aria-hidden="true">dashboard</span>Overview</a>
+          <a href="<?= cms_media_e(cms_admin_url('content.php')) ?>#posts-title"><span class="material-symbols-rounded" aria-hidden="true">edit_note</span>Posts</a>
+          <a href="<?= cms_media_e(cms_admin_url('content.php')) ?>#pages-title"><span class="material-symbols-rounded" aria-hidden="true">article</span>Pages</a>
+          <a href="<?= cms_media_e(cms_admin_url('media.php')) ?>" aria-current="page"><span class="material-symbols-rounded" aria-hidden="true">photo_library</span>Media</a>
         </nav>
       </div>
       <div class="pc-nav-group">
         <p class="pc-nav-label">Library</p>
         <nav class="pc-nav" aria-label="Media shortcuts">
-          <a href="/cms/media.php"><span class="material-symbols-rounded" aria-hidden="true">grid_view</span>All files</a>
-          <?php if (!$picker): ?><a href="/cms/media.php?picker=1"><span class="material-symbols-rounded" aria-hidden="true">add_photo_alternate</span>Picker mode</a><?php endif; ?>
+          <a href="<?= cms_media_e(cms_admin_url('media.php')) ?>"><span class="material-symbols-rounded" aria-hidden="true">grid_view</span>All files</a>
+          <?php if (!$picker): ?><a href="<?= cms_media_e(cms_admin_url('media.php')) ?>?picker=1"><span class="material-symbols-rounded" aria-hidden="true">add_photo_alternate</span>Picker mode</a><?php endif; ?>
         </nav>
       </div>
       <div class="pc-sidebar-foot">Images and documents</div>
@@ -155,14 +155,14 @@ function cms_media_bytes($bytes) {
         <p class="sub">Browse uploads, reuse assets, edit alt text and captions, and delete files that are not referenced by content.</p>
       </div>
       <nav class="nav pc-page-actions" aria-label="Media navigation">
-        <a href="/"><span class="material-symbols-rounded" aria-hidden="true">open_in_new</span>View site</a>
+        <a href="<?= cms_media_e(cms_site_url()) ?>"><span class="material-symbols-rounded" aria-hidden="true">open_in_new</span>View site</a>
         <input id="media-upload-input" type="file" hidden>
         <button id="media-upload-button" type="button" class="button primary"><span class="material-symbols-rounded" aria-hidden="true">upload</span>Upload media</button>
       </nav>
     </div>
 
     <div class="media-search-row">
-    <form class="search" method="get" action="/cms/media.php">
+    <form class="search" method="get" action="<?= cms_media_e(cms_admin_url('media.php')) ?>">
       <?php if ($picker): ?><input type="hidden" name="picker" value="1"><?php endif; ?>
       <input type="search" name="q" value="<?= cms_media_e($query) ?>" placeholder="Search filename, alt text, or caption" aria-label="Search media">
       <button type="submit">Search</button>
@@ -236,7 +236,8 @@ function cms_media_bytes($bytes) {
 
   <script nonce="<?= cms_media_e(cms_csp_nonce()) ?>">
     window.PAGECORE_MEDIA = {
-      api: '/cms/api.php',
+      api: <?= json_encode(cms_admin_url('api.php'), JSON_UNESCAPED_SLASHES) ?>,
+      media: <?= json_encode(cms_admin_url('media.php'), JSON_UNESCAPED_SLASHES) ?>,
       token: <?= json_encode(cms_csrf_token(), JSON_UNESCAPED_SLASHES) ?>,
       picker: <?= $picker ? 'true' : 'false' ?>
     };
@@ -345,7 +346,7 @@ function cms_media_bytes($bytes) {
         }).then(function (res) {
           return res.json().then(function (json) {
             if (!res.ok || !json.ok) { throw new Error(json.error || 'Upload failed.'); }
-            location.href = '/cms/media.php?q=' + encodeURIComponent(json.asset.rel || file.name);
+            location.href = CFG.media + '?q=' + encodeURIComponent(json.asset.rel || file.name);
           });
         }).catch(function (err) {
           alert(err.message || 'Upload failed.');

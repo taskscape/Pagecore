@@ -28,6 +28,8 @@ return array(
     'site_root' => $root,
     'site_url' => $siteUrl,
     'site_name' => 'Pagecore Sample',
+    'base_url' => '/sample-site',
+    'cms_url' => '/cms',
     'uploads_dir' => $uploads,
     'uploads_url' => '/sample-site/working-uploads',
     'max_upload_mb' => 8,
@@ -66,4 +68,5 @@ return array(
         '/sample-site/showcase/' => array('Showcase', 'Page', 'showcase/intro'),
         '/sample-site/contact.php' => array('Contact', 'Page', 'contact/body'),
     ),
+    'sitemap_extra_routes' => array('/sample-site/search/', '/sample-site/contact.php'),
 );

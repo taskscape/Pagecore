@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/modules/Routes.php';
 
 function cms_config_is_absolute_path($path) {
     return is_string($path) && ($path !== '') && ($path[0] === '/' || preg_match('~^[A-Za-z]:[\\\\/]~', $path));
@@ -9,7 +10,10 @@ function cms_validate_config($config, $production) {
     $errors = array();
     if (!is_array($config)) { return array(null, array('configuration must return an array')); }
 
-    $requiredStrings = array('session_name', 'username', 'password_hash', 'content_dir', 'backup_dir', 'site_root', 'site_url', 'site_name', 'uploads_dir', 'uploads_url', 'post_url');
+    if (!isset($config['base_url'])) { $config['base_url'] = '/'; }
+    if (!isset($config['cms_url'])) { $config['cms_url'] = '/cms'; }
+    if (!isset($config['sitemap_extra_routes'])) { $config['sitemap_extra_routes'] = array(); }
+    $requiredStrings = array('session_name', 'username', 'password_hash', 'content_dir', 'backup_dir', 'site_root', 'site_url', 'site_name', 'uploads_dir', 'uploads_url', 'post_url', 'base_url', 'cms_url');
     foreach ($requiredStrings as $key) {
         if (!isset($config[$key]) || !is_string($config[$key]) || trim($config[$key]) === '') { $errors[] = $key . ' must be a non-empty string'; }
     }
@@ -33,12 +37,25 @@ function cms_validate_config($config, $production) {
     }
     if (isset($config['site_url']) && filter_var($config['site_url'], FILTER_VALIDATE_URL) === false) { $errors[] = 'site_url must be an absolute URL'; }
     if (isset($config['post_url']) && substr_count($config['post_url'], '{slug}') !== 1) { $errors[] = 'post_url must contain {slug} exactly once'; }
+    foreach (array('base_url', 'cms_url') as $key) {
+        if (isset($config[$key])) {
+            $normalized = PagecoreRoutes::normalizePrefix($config[$key]);
+            if ($normalized === null) { $errors[] = $key . ' must be a root-relative URL prefix without traversal, query, or fragment'; }
+            else { $config[$key] = $normalized; }
+        }
+    }
 
     foreach (array('development_only', 'demo_credentials', 'require_https', 'cookie_secure', 'hsts') as $key) {
         if (!array_key_exists($key, $config) || !is_bool($config[$key])) { $errors[] = $key . ' must be boolean'; }
     }
-    foreach (array('categories', 'search_pages', 'allowed_ext', 'trusted_proxies') as $key) {
+    foreach (array('categories', 'search_pages', 'allowed_ext', 'trusted_proxies', 'sitemap_extra_routes') as $key) {
         if (!isset($config[$key]) || !is_array($config[$key])) { $errors[] = $key . ' must be an array'; }
+    }
+    if (isset($config['sitemap_extra_routes']) && is_array($config['sitemap_extra_routes'])) {
+        foreach ($config['sitemap_extra_routes'] as $route) {
+            if (!PagecoreRoutes::isLocalRoute($route)) { $errors[] = 'sitemap_extra_routes contains an invalid local route'; break; }
+        }
+        $config['sitemap_extra_routes'] = array_values(array_unique($config['sitemap_extra_routes']));
     }
     if (isset($config['categories']) && is_array($config['categories'])) {
         foreach ($config['categories'] as $slug => $definition) {

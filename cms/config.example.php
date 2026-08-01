@@ -25,6 +25,8 @@ return array(
     'site_root' => '/var/www/example/public',
     'site_url' => 'https://www.example.com',
     'site_name' => 'Example site',
+    'base_url' => '/',
+    'cms_url' => '/cms',
     'uploads_dir' => $private . '/uploads',
     'uploads_url' => '/cms/media-file.php?path=',
     'max_upload_mb' => 8,
@@ -54,4 +56,5 @@ return array(
     'post_url' => '/post/{slug}/',
     'categories' => array('news' => array('News', '/news/')),
     'search_pages' => array('/' => array('Home', 'Page', 'home/main')),
+    'sitemap_extra_routes' => array('/search/', '/contact/'),
 );

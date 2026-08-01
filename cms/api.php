@@ -92,7 +92,7 @@ function cms_resolve_key($key, $mustExist) {
 }
 
 function cms_preview_url($key) {
-    return '/cms/api.php?action=preview-draft&key=' . rawurlencode($key);
+    return cms_admin_url('api.php') . '?action=preview-draft&key=' . rawurlencode($key);
 }
 
 function cms_editor_payload($kind, $path) {
@@ -736,7 +736,7 @@ $actionHandlers = array(
     'logout' => function () {
     cms_audit_event('auth.logout', 'success');
     cms_logout();
-    header('Location: /');
+    header('Location: ' . cms_site_url());
     exit;
 
     },

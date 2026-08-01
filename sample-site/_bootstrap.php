@@ -34,7 +34,7 @@ function sample_footer() {
 ?>
   <footer class="site-footer">
     <p>Sample site for the Pagecore database-free CMS engine.</p>
-    <a href="/cms/login.php?next=<?= rawurlencode('/sample-site/') ?>">CMS sign in</a>
+    <a href="<?= htmlspecialchars(cms_admin_url('login.php'), ENT_QUOTES, 'UTF-8') ?>?next=<?= rawurlencode(cms_site_url()) ?>">CMS sign in</a>
   </footer>
   <?= cms_assets() ?>
 </body>

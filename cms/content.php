@@ -3,8 +3,8 @@ require __DIR__ . '/engine.php';
 require __DIR__ . '/auth.php';
 
 if (!cms_is_logged_in()) {
-    $next = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/cms/content.php';
-    header('Location: /cms/login.php?next=' . rawurlencode($next));
+    $next = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : cms_admin_url('content.php');
+    header('Location: ' . cms_admin_url('login.php') . '?next=' . rawurlencode($next));
     exit;
 }
 
@@ -33,7 +33,7 @@ function cms_content_posts_url($page, $query, $category) {
     if ($query !== '') { $params['q'] = $query; }
     if ($category !== '') { $params['category'] = $category; }
     if ((int) $page > 1) { $params['page'] = (int) $page; }
-    return '/cms/content.php' . ($params ? '?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986) : '');
+    return cms_admin_url('content.php') . ($params ? '?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986) : '');
 }
 ?><!doctype html>
 <html lang="en">
@@ -154,7 +154,7 @@ function cms_content_posts_url($page, $query, $category) {
     }
   </style>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/cms/assets/admin.css">
+  <link rel="stylesheet" href="<?= cms_content_e(cms_admin_url('assets/admin.css')) ?>">
 </head>
 <body class="pc-admin">
   <div class="pc-app">
@@ -166,10 +166,10 @@ function cms_content_posts_url($page, $query, $category) {
       <div class="pc-nav-group">
         <p class="pc-nav-label">Workspace</p>
         <nav class="pc-nav" aria-label="CMS navigation">
-          <a href="/cms/content.php" aria-current="page"><span class="material-symbols-rounded" aria-hidden="true">dashboard</span>Overview</a>
+          <a href="<?= cms_content_e(cms_admin_url('content.php')) ?>" aria-current="page"><span class="material-symbols-rounded" aria-hidden="true">dashboard</span>Overview</a>
           <a href="#posts-title"><span class="material-symbols-rounded" aria-hidden="true">edit_note</span>Posts</a>
           <a href="#pages-title"><span class="material-symbols-rounded" aria-hidden="true">article</span>Pages</a>
-          <a href="/cms/media.php"><span class="material-symbols-rounded" aria-hidden="true">photo_library</span>Media</a>
+          <a href="<?= cms_content_e(cms_admin_url('media.php')) ?>"><span class="material-symbols-rounded" aria-hidden="true">photo_library</span>Media</a>
         </nav>
       </div>
       <div class="pc-nav-group">
@@ -219,7 +219,7 @@ function cms_content_posts_url($page, $query, $category) {
       <div id="posts-body" data-section-body>
         <div class="post-tools post-section-tools">
           <!-- This GET form keeps filtering server-side so Chrome receives only one page of rows. -->
-          <form class="post-filters" method="get" action="/cms/content.php" aria-label="Filter posts">
+          <form class="post-filters" method="get" action="<?= cms_content_e(cms_admin_url('content.php')) ?>" aria-label="Filter posts">
             <label for="post-search">Search
               <input id="post-search" name="q" type="search" value="<?= cms_content_e($postPagination['query']) ?>" placeholder="Title or slug">
             </label>
@@ -233,7 +233,7 @@ function cms_content_posts_url($page, $query, $category) {
             </label>
             <button type="submit" class="button">Filter</button>
             <?php if ($postPagination['query'] !== '' || $postPagination['category'] !== ''): ?>
-              <a class="button" href="/cms/content.php">Clear</a>
+              <a class="button" href="<?= cms_content_e(cms_admin_url('content.php')) ?>">Clear</a>
             <?php endif; ?>
           </form>
           <!-- A global create action lets editors start a post from the inventory and choose its category explicitly. -->
@@ -440,7 +440,7 @@ function cms_content_posts_url($page, $query, $category) {
 
   <script nonce="<?= cms_content_e(cms_csp_nonce()) ?>">
     window.PAGECORE_CONTENT = {
-      api: '/cms/api.php',
+      api: <?= json_encode(cms_admin_url('api.php'), JSON_UNESCAPED_SLASHES) ?>,
       token: <?= json_encode(cms_csrf_token(), JSON_UNESCAPED_SLASHES) ?>,
       navRevision: <?= json_encode($inventory['nav']['revision'], JSON_UNESCAPED_SLASHES) ?>
     };
