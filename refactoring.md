@@ -351,11 +351,13 @@ This was a source review with targeted local checks, not a production penetratio
   - Resolution: The importer now rejects unknown and unsafe options up front, streams only selected INSERT statements under configurable statement and PHP memory bounds, writes every checked output into unique sibling staging roots, verifies media and a deterministic manifest, and promotes all roots with rollback. `--dry-run=1` discards staging; non-empty targets require `--force=1` and are preserved on any failure.
   - Evidence: `npm run test:import-transaction` covers early option rejection, dry runs, deterministic forced reruns, non-empty safeguards, bounded statements, and an injected write failure with the original target intact. Import status and sanitizer tests remain green.
 
-- [ ] **REF-21 — Extract the WordPress SQL and HTML conversion code into tested components.**
+- [x] **REF-21 — Extract the WordPress SQL and HTML conversion code into tested components.**
   - Explanation: SQL tuple parsing, serialized options, menu reconstruction, HTML-to-Markdown conversion, URL rewriting, content policy, and filesystem orchestration live in one procedural script. The converter preserves unknown active HTML but has no focused fixture suite documenting transformations or loss.
   - Justification: [`scripts/import-wordpress.php`](scripts/import-wordpress.php) is roughly 840 physical lines; `Html2Md` occupies lines 178-380 and SQL parsing lines 109-164. Current browser migration tests cover four public flows, not conversion edge cases.
   - Recommendation: Extract pure dump-row, converter, URL, menu, and import-plan components. Add fixtures for escaping, malformed dumps, multibyte content, tables/lists/code, unsafe URLs, embeds, serialization, duplicate slugs, statuses, and upload traversal. Apply the SEC-02 sanitization policy at a named boundary.
   - Done when: converter behavior is deterministic and fixture-tested, unsafe preserved nodes are reported or transformed explicitly, and orchestration can be tested without a 2,000-post deployment copy.
+  - Resolution: SQL tuple/field/value streaming, HTML-to-Markdown conversion, upload and URL policy, serialization/slug planning, and menu reconstruction now live in standalone importer libraries. The CLI retains narrow compatibility functions while using those components, and the converter records whether each active node was dropped or replaced by a safe link.
+  - Evidence: `npm run test:import-components` exercises escaped/malformed SQL, BOM streaming, multibyte rich HTML, tables/lists/code, active embeds, unsafe URLs, serialized options, upload traversal, duplicate slugs, and menu URL normalization. Transaction, status, sanitizer, and migration suites cover orchestration.
 
 ### Priority 3 — improve operability, testing, and user experience
 

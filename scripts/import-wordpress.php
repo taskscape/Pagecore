@@ -1,5 +1,9 @@
 <?php
 require_once dirname(__DIR__) . '/cms/modules/PathPolicy.php';
+require_once __DIR__ . '/lib/WordPressHtmlConverter.php';
+require_once __DIR__ . '/lib/WordPressSqlDump.php';
+require_once __DIR__ . '/lib/WordPressImportPolicy.php';
+require_once __DIR__ . '/lib/WordPressMenu.php';
 /**
  * One-time WordPress -> Pagecore importer.
  *
@@ -180,15 +184,7 @@ function promote_import_roots(array $pairs, $force, $token) {
  * escape either upload root through traversal, absolute paths, or backslashes.
  */
 function safe_upload_rel_path($path) {
-    $path = rawurldecode((string) $path);
-    if ($path === '' || strpos($path, "\0") !== false) { return null; }
-    $path = str_replace('\\', '/', $path);
-    if ($path[0] === '/' || preg_match('~^[A-Za-z]:~', $path)) { return null; }
-    $parts = explode('/', $path);
-    foreach ($parts as $part) {
-        if ($part === '' || $part === '.' || $part === '..') { return null; }
-    }
-    return implode('/', $parts);
+    return PagecoreWordPressImportPolicy::uploadRelativePath($path);
 }
 
 /** Confirm a resolved filesystem path remains inside its configured root. */
@@ -199,344 +195,31 @@ function path_is_within($path, $root) {
 /* --------------------------------------------------------- SQL value parser */
 /** Extract every row-tuple for a table from all its INSERT statements. */
 function sql_rows($sql, $table) {
-    $rows = array();
-    $needle = "INSERT INTO `$table` VALUES ";
-    $len = strlen($sql);
-    $from = 0;
-    while (($pos = strpos($sql, $needle, $from)) !== false) {
-        $i = $pos + strlen($needle);
-        // parse tuples until the terminating ";\n"
-        $depth = 0; $cur = ''; $inq = false; $esc = false;
-        for (; $i < $len; $i++) {
-            $ch = $sql[$i];
-            if ($esc) { $cur .= $ch; $esc = false; continue; }
-            if ($ch === '\\') { $cur .= $ch; $esc = true; continue; }
-            if ($ch === "'") { $inq = !$inq; $cur .= $ch; continue; }
-            if (!$inq) {
-                if ($ch === '(') { if ($depth === 0) { $cur = ''; } else { $cur .= $ch; } $depth++; continue; }
-                if ($ch === ')') { $depth--; if ($depth === 0) { $rows[] = $cur; $cur = ''; } else { $cur .= $ch; } continue; }
-                if ($ch === ';' && $depth === 0) { break; }
-            }
-            $cur .= $ch;
-        }
-        $from = $i;
-    }
-    return $rows;
+    return PagecoreWordPressSqlDump::rows($sql, $table);
 }
 
 /** Split one row tuple into raw field strings (still quoted/escaped). */
 function sql_fields($row) {
-    $f = array(); $cur = ''; $inq = false; $esc = false;
-    $len = strlen($row);
-    for ($i = 0; $i < $len; $i++) {
-        $ch = $row[$i];
-        if ($esc) { $cur .= $ch; $esc = false; continue; }
-        if ($ch === '\\') { $cur .= $ch; $esc = true; continue; }
-        if ($ch === "'") { $inq = !$inq; $cur .= $ch; continue; }
-        if ($ch === ',' && !$inq) { $f[] = $cur; $cur = ''; continue; }
-        $cur .= $ch;
-    }
-    $f[] = $cur;
-    return $f;
+    return PagecoreWordPressSqlDump::fields($row);
 }
 
 /** Unquote + unescape a single SQL field to its PHP string/NULL. */
 function sql_val($s) {
-    $s = trim($s);
-    if ($s === 'NULL') { return null; }
-    if (strlen($s) >= 2 && $s[0] === "'" && substr($s, -1) === "'") {
-        $s = substr($s, 1, -1);
-    }
-    return strtr($s, array(
-        "\\'" => "'", '\\"' => '"', '\\n' => "\n", '\\r' => "\r",
-        '\\t' => "\t", '\\0' => "\0", '\\Z' => "\x1a", '\\\\' => '\\',
-    ));
+    return PagecoreWordPressSqlDump::value($s);
 }
 
 /* ------------------------------------------------------------- URL rewrite */
 $GLOBALS['REWRITE_UPLOADS_URL'] = $UPLOADS_URL;
 /** Rewrite any WordPress uploads URL (absolute, /blog-prefixed, or relative) to the Pagecore uploads path. */
 function rewrite_uploads($text) {
-    return preg_replace(
-        '~(?:https?://[^\s"\'<>()]*?)?/(?:[a-z0-9_-]+/)?wp-content/uploads/~i',
-        $GLOBALS['REWRITE_UPLOADS_URL'] . '/',
-        (string) $text
-    );
+    return PagecoreWordPressImportPolicy::rewriteUploads($text, $GLOBALS['REWRITE_UPLOADS_URL']);
 }
 
 /* ------------------------------------------------------ HTML -> Markdown */
-class Html2Md {
-    private $doc;
-    /** Convert an HTML fragment to Markdown text. */
-    public function convert($html) {
-        $html = $this->stripGutenberg($html);
-        $html = str_replace(array("\r\n", "\r"), "\n", $html);
-        if (trim($html) === '') { return ''; }
-        $this->doc = new DOMDocument('1.0', 'UTF-8');
-        libxml_use_internal_errors(true);
-        // force UTF-8 without mbstring; NOIMPLIED/NODEFDTD keep our wrapper clean
-        $this->doc->loadHTML(
-            '<?xml encoding="UTF-8"><div id="pc-root">' . $html . '</div>',
-            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOERROR | LIBXML_NOWARNING
-        );
-        libxml_clear_errors();
-        $root = $this->doc->getElementById('pc-root');
-        if (!$root) { return $this->normalize(strip_tags($html)); }
-        return $this->normalize($this->block($root));
-    }
-
-    private function stripGutenberg($html) {
-        // drop <!-- wp:xxx --> and <!-- /wp:xxx --> wrappers; keep inner HTML
-        return preg_replace('~<!--\s*/?wp:[^>]*?-->~s', '', $html);
-    }
-
-    private function normalize($s) {
-        $s = preg_replace("~[ \t]+\n~", "\n", $s);
-        $s = preg_replace("~\n{3,}~", "\n\n", $s);
-        return trim($s) . "\n";
-    }
-
-    private static $ACTIVE_TAGS = array('iframe','script','object','embed','video','audio','source','svg','form',
-        'input','button','textarea','select','option','style','template','math','noscript');
-    private static $BLOCK = array('p','h1','h2','h3','h4','h5','h6','ul','ol','blockquote','figure',
-        'table','pre','hr','div','section','article','header','footer','aside','main','figcaption');
-
-    /** Render block-level children, paragraphs separated by blank lines. */
-    private function block($node) {
-        $out = array();
-        $inline = '';
-        $flush = function () use (&$inline, &$out) {
-            $t = trim($this->collapse($inline));
-            if ($t !== '') { $out[] = $t; }
-            $inline = '';
-        };
-        foreach ($node->childNodes as $child) {
-            if ($child->nodeType === XML_TEXT_NODE) {
-                // blank line in source text = paragraph break
-                $parts = preg_split('~\n[ \t]*\n~', $child->nodeValue);
-                for ($i = 0; $i < count($parts); $i++) {
-                    $inline .= $parts[$i];
-                    if ($i < count($parts) - 1) { $flush(); }
-                }
-                continue;
-            }
-            if ($child->nodeType !== XML_ELEMENT_NODE) { continue; }
-            $tag = strtolower($child->nodeName);
-            if (in_array($tag, self::$ACTIVE_TAGS, true)) {
-                $flush();
-                $replacement = $this->activeElement($child, $tag);
-                if ($replacement !== '') { $out[] = $replacement; }
-                continue;
-            }
-            if (in_array($tag, self::$BLOCK, true)) { $flush(); $b = $this->blockElement($child, $tag); if (trim($b) !== '') { $out[] = trim($b); } continue; }
-            // inline element -> accumulate
-            $inline .= $this->inline($child);
-        }
-        $flush();
-        return implode("\n\n", $out);
-    }
-
-    private function blockElement($node, $tag) {
-        switch ($tag) {
-            case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6':
-                $level = (int) substr($tag, 1);
-                return str_repeat('#', $level) . ' ' . trim($this->collapse($this->inline($node)));
-            case 'p':
-                return trim($this->collapse($this->inline($node)));
-            case 'hr':
-                return '---';
-            case 'br':
-                return '';
-            case 'ul': case 'ol':
-                return $this->list($node, $tag);
-            case 'blockquote':
-                $inner = $this->block($node);
-                $lines = explode("\n", $inner);
-                foreach ($lines as &$l) { $l = ($l === '') ? '>' : '> ' . $l; }
-                return implode("\n", $lines);
-            case 'pre':
-                $code = $node->textContent;
-                return "```\n" . rtrim($code, "\n") . "\n```";
-            case 'table':
-                return $this->table($node);
-            case 'figure':
-                return $this->figure($node);
-            case 'figcaption':
-                $t = trim($this->collapse($this->inline($node)));
-                return $t === '' ? '' : '*' . $t . '*';
-            default: // div/section/article/etc -> unwrap
-                return $this->block($node);
-        }
-    }
-
-    private function figure($node) {
-        // image (or safe embed link) + optional caption
-        $parts = array();
-        foreach ($node->childNodes as $c) {
-            if ($c->nodeType === XML_ELEMENT_NODE) {
-                $t = strtolower($c->nodeName);
-                if ($t === 'figcaption') {
-                    $cap = trim($this->collapse($this->inline($c)));
-                    if ($cap !== '') { $parts[] = '*' . $cap . '*'; }
-                    continue;
-                }
-                if (in_array($t, self::$ACTIVE_TAGS, true)) {
-                    $replacement = $this->activeElement($c, $t);
-                    if ($replacement !== '') { $parts[] = $replacement; }
-                    continue;
-                }
-            }
-            $b = trim($this->collapse($this->inline($c)));
-            if ($b !== '') { $parts[] = $b; }
-        }
-        return implode("\n\n", array_filter($parts, function ($x) { return trim($x) !== ''; }));
-    }
-
-    private function list($node, $tag) {
-        $lines = array(); $n = 1;
-        foreach ($node->childNodes as $li) {
-            if ($li->nodeType !== XML_ELEMENT_NODE || strtolower($li->nodeName) !== 'li') { continue; }
-            $marker = $tag === 'ol' ? ($n++ . '. ') : '- ';
-            $text = trim($this->collapse($this->inline($li)));
-            $text = str_replace("\n", ' ', $text);
-            $lines[] = $marker . $text;
-        }
-        return implode("\n", $lines);
-    }
-
-    private function table($node) {
-        $rows = array();
-        foreach ($node->getElementsByTagName('tr') as $tr) {
-            $cells = array();
-            foreach ($tr->childNodes as $cell) {
-                if ($cell->nodeType === XML_ELEMENT_NODE && in_array(strtolower($cell->nodeName), array('td','th'), true)) {
-                    $cells[] = trim(str_replace('|', '\\|', $this->collapse($this->inline($cell))));
-                }
-            }
-            if ($cells) { $rows[] = $cells; }
-        }
-        if (!$rows) { return ''; }
-        $cols = count($rows[0]);
-        $out = '| ' . implode(' | ', $rows[0]) . ' |';
-        $out .= "\n| " . implode(' | ', array_fill(0, $cols, '---')) . ' |';
-        for ($i = 1; $i < count($rows); $i++) {
-            $r = array_pad($rows[$i], $cols, '');
-            $out .= "\n| " . implode(' | ', array_slice($r, 0, $cols)) . ' |';
-        }
-        return $out;
-    }
-
-    /** Inline rendering -> Markdown inline syntax. */
-    private function inline($node) {
-        if ($node->nodeType === XML_TEXT_NODE) { return $node->nodeValue; }
-        if ($node->nodeType !== XML_ELEMENT_NODE) { return ''; }
-        $tag = strtolower($node->nodeName);
-        if (in_array($tag, self::$ACTIVE_TAGS, true)) { return $this->activeElement($node, $tag); }
-        $inner = '';
-        foreach ($node->childNodes as $c) { $inner .= $this->inline($c); }
-        switch ($tag) {
-            case 'strong': case 'b':
-                return ($t = trim($inner)) === '' ? '' : '**' . $t . '**';
-            case 'em': case 'i':
-                return ($t = trim($inner)) === '' ? '' : '*' . $t . '*';
-            case 'code':
-                return '`' . $inner . '`';
-            case 'br':
-                return "\n";
-            case 'a':
-                $href = $this->safeUrl(rewrite_uploads($node->getAttribute('href')), true);
-                $t = trim($inner);
-                if ($t === '') { $t = $href; }
-                return $href === '' ? $t : '[' . $t . '](' . $this->markdownUrl($href) . ')';
-            case 'img':
-                return $this->image($node);
-            case 'figure': case 'p': case 'div': case 'span': case 'section':
-                return $inner; // unwrap inline-ish
-            default:
-                return $inner;
-        }
-    }
-
-    private function image($node) {
-        $src = $this->safeUrl(rewrite_uploads($node->getAttribute('src')), false);
-        $alt = $node->getAttribute('alt');
-        if ($alt === '') { $alt = $node->getAttribute('title'); }
-        $alt = trim(preg_replace('~\s+~', ' ', $alt));
-        return $src === '' ? $alt : '![' . $alt . '](' . $this->markdownUrl($src) . ')';
-    }
-
-    private function activeElement($node, $tag) {
-        $url = '';
-        $label = 'Open embedded content';
-        if ($tag === 'script') {
-            $url = $this->safeUrl($node->getAttribute('data-publication'), false);
-            $label = 'Open embedded publication';
-            if ($url === '' && preg_match('~calLink\s*:\s*["\']([A-Za-z0-9/_-]+)["\']~', $node->textContent, $match)) {
-                $url = 'https://cal.com/' . ltrim($match[1], '/');
-                $label = 'Book a meeting';
-            }
-        } elseif ($tag === 'object') {
-            $url = $this->safeUrl(rewrite_uploads($node->getAttribute('data')), false);
-            $label = 'Open document';
-        } elseif (in_array($tag, array('iframe','video','audio','source'), true)) {
-            $url = $this->safeUrl(rewrite_uploads($node->getAttribute('src')), false);
-            $label = $tag === 'iframe' ? 'Open embedded content' : 'Open media';
-        }
-        return $url === '' ? '' : '[' . $label . '](' . $this->markdownUrl($url) . ')';
-    }
-
-    private function safeUrl($url, $allowMailto) {
-        $url = html_entity_decode(trim((string) $url), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        if ($url === '' || strpos($url, "\\") !== false || preg_match('~[\x00-\x1F\x7F]~', $url)) { return ''; }
-        if ($url[0] === '/') { return strncmp($url, '//', 2) === 0 ? '' : $url; }
-        if ($url[0] === '#') { return $url; }
-        $parts = parse_url($url);
-        if ($parts === false) { return ''; }
-        if (!isset($parts['scheme'])) {
-            return strpos($url, ':') === false ? $url : '';
-        }
-        $scheme = strtolower($parts['scheme']);
-        if (($scheme === 'http' || $scheme === 'https') && isset($parts['host'])) { return $url; }
-        if ($allowMailto && $scheme === 'mailto' && filter_var(substr($url, 7), FILTER_VALIDATE_EMAIL)) { return $url; }
-        return '';
-    }
-
-    private function markdownUrl($url) {
-        return str_replace(array(' ', '(', ')'), array('%20', '%28', '%29'), $url);
-    }
-
-    private function collapse($s) {
-        // collapse runs of spaces/tabs but keep newlines
-        return preg_replace("~[ \t]+~", ' ', $s);
-    }
-}
 
 /** Stream only requested INSERT statements, bounding any individual statement. */
 function sql_rows_from_file($path, array $tables, $maxStatementBytes) {
-    $result = array_fill_keys($tables, array());
-    $handle = fopen($path, 'rb');
-    if ($handle === false) { throw new RuntimeException('could not open SQL dump'); }
-    $buffer = '';
-    $table = null;
-    try {
-        while (($line = fgets($handle)) !== false) {
-            if ($buffer === '' && preg_match('~^INSERT INTO `([^`]+)` VALUES ~', $line, $match)) {
-                $table = in_array($match[1], $tables, true) ? $match[1] : null;
-            }
-            if ($table !== null) {
-                $buffer .= $line;
-                if (strlen($buffer) > $maxStatementBytes) { throw new RuntimeException('SQL INSERT exceeds --max-statement-bytes for ' . $table); }
-            }
-            if (substr(rtrim($line), -1) === ';') {
-                if ($table !== null) { $result[$table] = array_merge($result[$table], sql_rows($buffer, $table)); }
-                $buffer = '';
-                $table = null;
-            }
-        }
-        if ($buffer !== '') { throw new RuntimeException('unterminated SQL INSERT statement'); }
-        if (!feof($handle)) { throw new RuntimeException('failed while reading SQL dump'); }
-    } finally { fclose($handle); }
-    return $result;
+    return PagecoreWordPressSqlDump::rowsFromFile($path, $tables, $maxStatementBytes);
 }
 if ($opt['self-test-html'] !== '1') {
     foreach ($STATUSES as $requestedStatus) {
@@ -555,7 +238,7 @@ if ($opt['self-test-html'] === '1') {
         . '<object data="/uploads/document.pdf" type="application/pdf"></object>'
         . '<a href="javascript:alert(2)" onclick="alert(3)">unsafe link</a>'
         . '<img src="data:image/svg+xml,evil" onerror="alert(4)" alt="unsafe image">';
-    $rendered = (new Html2Md())->convert($fixture);
+    $rendered = (new PagecoreWordPressHtmlConverter($UPLOADS_URL))->convert($fixture);
     if (preg_match('~<(?:script|iframe|object|embed|svg|form)\b|javascript:|\son(?:load|error|click)\s*=~i', $rendered)) {
         fwrite(STDERR, "FAIL: active HTML survived the importer allowlist\n{$rendered}\n");
         exit(1);
@@ -633,9 +316,7 @@ foreach ($optionRows as $r) {
 
 /** Safely decode a WordPress serialized option, returning null on bad data. */
 function wp_unserialize_option($value) {
-    if (!is_string($value) || $value === '') { return null; }
-    $decoded = @unserialize($value, array('allowed_classes' => false));
-    return $decoded === false && $value !== 'b:0;' ? null : $decoded;
+    return PagecoreWordPressImportPolicy::decodeSerializedOption($value);
 }
 
 /* ---- attachments: attach_id => uploads-relative path ---- */
@@ -687,157 +368,6 @@ function post_tags($pid, $rel, $tt, $terms) {
     return $names;
 }
 
-/** Replace same-site WordPress absolute links with root-relative Pagecore URLs. */
-function menu_internal_url($url, array $siteUrls) {
-    $url = trim((string) $url);
-    if ($url === '') { return '#'; }
-    if ($url[0] === '/') { return preg_replace('~^/blog(?=/|$)~', '', $url); }
-    $parts = @parse_url($url);
-    if (!is_array($parts) || empty($parts['host'])) { return $url; }
-    $host = strtolower($parts['host']);
-    foreach ($siteUrls as $siteUrl) {
-        $site = @parse_url($siteUrl);
-        if (!is_array($site) || empty($site['host']) || strtolower($site['host']) !== $host) { continue; }
-        $path = isset($parts['path']) ? $parts['path'] : '/';
-        $path = preg_replace('~^/blog(?=/|$)~', '', $path);
-        if ($path === '') { $path = '/'; }
-        if (!empty($parts['query'])) { $path .= '?' . $parts['query']; }
-        if (!empty($parts['fragment'])) { $path .= '#' . $parts['fragment']; }
-        return $path;
-    }
-    return $url;
-}
-
-/** Published page/post records used to resolve WordPress menu object links. */
-function menu_content_objects(array $postRows, $postUrl) {
-    $objects = array();
-    foreach ($postRows as $r) {
-        $f = sql_fields($r);
-        if (count($f) < 21) { continue; }
-        $type = sql_val($f[20]);
-        if ($type !== 'post' && $type !== 'page') { continue; }
-        if (sql_val($f[7]) !== 'publish') { continue; }
-        $id = (string) sql_val($f[0]);
-        $slug = trim((string) sql_val($f[11]));
-        if ($slug === '') { continue; }
-        $objects[$id] = array(
-            'title' => (string) sql_val($f[5]),
-            'url' => $type === 'post' ? str_replace('{slug}', $slug, $postUrl) : '/' . $slug . '/',
-        );
-    }
-    return $objects;
-}
-
-/** Find the nav-menu term assigned to the active theme's primary location. */
-function primary_menu_term_id(array $options) {
-    $stylesheet = isset($options['stylesheet']) ? trim((string) $options['stylesheet']) : '';
-    $keys = array();
-    if ($stylesheet !== '') { $keys[] = 'theme_mods_' . $stylesheet; }
-    foreach ($options as $key => $ignore) {
-        if (strpos($key, 'theme_mods_') === 0 && !in_array($key, $keys, true)) { $keys[] = $key; }
-    }
-    foreach ($keys as $key) {
-        if (!isset($options[$key])) { continue; }
-        $mods = wp_unserialize_option($options[$key]);
-        if (!is_array($mods) || empty($mods['nav_menu_locations']) || !is_array($mods['nav_menu_locations'])) { continue; }
-        $locations = $mods['nav_menu_locations'];
-        if (!empty($locations['primary'])) { return (string) $locations['primary']; }
-        foreach ($locations as $termId) { if ((int) $termId > 0) { return (string) $termId; } }
-    }
-    return '';
-}
-
-/** Convert the selected WordPress nav_menu into Pagecore's nested nav.json shape. */
-function imported_nav_items(array $postRows, array $meta, array $rel, array $tt, array $terms,
-                            array $options, $postUrl, &$menuLabel = '') {
-    $menuPosts = array();
-    foreach ($postRows as $r) {
-        $f = sql_fields($r);
-        if (count($f) < 21 || sql_val($f[20]) !== 'nav_menu_item' || sql_val($f[7]) !== 'publish') { continue; }
-        $id = (string) sql_val($f[0]);
-        $menuTermIds = array();
-        foreach (isset($rel[$id]) ? $rel[$id] : array() as $ttid) {
-            if (isset($tt[$ttid]) && $tt[$ttid][1] === 'nav_menu') { $menuTermIds[] = (string) $tt[$ttid][0]; }
-        }
-        if (!$menuTermIds) { continue; }
-        $menuPosts[$id] = array(
-            'id' => $id,
-            'title' => (string) sql_val($f[5]),
-            'order' => (int) sql_val($f[19]),
-            'menu_terms' => $menuTermIds,
-        );
-    }
-    if (!$menuPosts) { return array(); }
-
-    $selected = primary_menu_term_id($options);
-    if ($selected === '') {
-        $counts = array();
-        foreach ($menuPosts as $item) {
-            foreach ($item['menu_terms'] as $termId) { $counts[$termId] = isset($counts[$termId]) ? $counts[$termId] + 1 : 1; }
-        }
-        arsort($counts);
-        $selected = (string) key($counts);
-    }
-    $menuLabel = isset($terms[$selected]) ? $terms[$selected][0] : $selected;
-
-    $objects = menu_content_objects($postRows, $postUrl);
-    $siteUrls = array();
-    foreach (array('home', 'siteurl') as $key) { if (!empty($options[$key])) { $siteUrls[] = $options[$key]; } }
-    $items = array();
-    foreach ($menuPosts as $id => $row) {
-        if (!in_array($selected, $row['menu_terms'], true)) { continue; }
-        $m = isset($meta[$id]) ? $meta[$id] : array();
-        $parent = isset($m['_menu_item_menu_item_parent']) ? (string) $m['_menu_item_menu_item_parent'] : '0';
-        $objectId = isset($m['_menu_item_object_id']) ? (string) $m['_menu_item_object_id'] : '';
-        $object = isset($m['_menu_item_object']) ? (string) $m['_menu_item_object'] : '';
-        $type = isset($m['_menu_item_type']) ? (string) $m['_menu_item_type'] : '';
-        $label = trim($row['title']);
-        $url = '';
-
-        if ($type === 'custom') {
-            $url = isset($m['_menu_item_url']) ? menu_internal_url($m['_menu_item_url'], $siteUrls) : '#';
-        } elseif ($type === 'post_type') {
-            // Never retain menu entries for draft/private content.
-            if (!isset($objects[$objectId])) { continue; }
-            $url = $objects[$objectId]['url'];
-            if ($label === '') { $label = $objects[$objectId]['title']; }
-        } elseif ($type === 'taxonomy' && isset($terms[$objectId])) {
-            $term = $terms[$objectId];
-            $url = $object === 'post_tag' ? '/tag/' . $term[1] . '/' : '/category/' . $term[1] . '/';
-            if ($label === '') { $label = $term[0]; }
-        }
-        if ($url === '' && isset($m['_menu_item_url'])) { $url = menu_internal_url($m['_menu_item_url'], $siteUrls); }
-        if ($label === '') { $label = $object !== '' ? $object : 'Menu'; }
-        if ($url === '') { $url = '#'; }
-        $items[$id] = array('id' => $id, 'parent' => $parent, 'order' => $row['order'],
-            'label' => $label, 'url' => $url, 'children' => array());
-    }
-    if (!$items) { return array(); }
-
-    uasort($items, function ($a, $b) {
-        if ($a['order'] !== $b['order']) { return $a['order'] - $b['order']; }
-        return (int) $a['id'] - (int) $b['id'];
-    });
-    $childrenByParent = array();
-    foreach ($items as $id => $item) {
-        $parent = $item['parent'];
-        if ($parent === $id || !isset($items[$parent])) { $parent = '0'; }
-        $childrenByParent[$parent][] = $id;
-    }
-    $build = function ($parent, array $trail = array()) use (&$build, &$items, &$childrenByParent) {
-        $out = array();
-        foreach (isset($childrenByParent[$parent]) ? $childrenByParent[$parent] : array() as $id) {
-            if (isset($trail[$id])) { continue; }
-            $nextTrail = $trail; $nextTrail[$id] = true;
-            $item = $items[$id];
-            $item['children'] = $build($id, $nextTrail);
-            unset($item['id'], $item['parent'], $item['order']);
-            $out[] = $item;
-        }
-        return $out;
-    };
-    return $build('0');
-}
 
 /* ------------------------------------------------------------- conversion */
 $FINAL_CONTENT = $OUT_CONTENT;
@@ -863,7 +393,7 @@ register_shutdown_function(function () use (&$importStages) {
 ensure_dir($OUT_CONTENT . '/posts');
 ensure_dir($OUT_CONTENT . '/pages');
 
-$conv = new Html2Md();
+$conv = new PagecoreWordPressHtmlConverter($UPLOADS_URL);
 $statusSet = array_flip($STATUSES);
 $referencedUploads = array(); // uploads-relative path => true
 $unsafeUploadRefs = 0;
@@ -873,14 +403,10 @@ $counts = array('post' => 0, 'page' => 0, 'staged_page' => 0, 'skipped_status' =
 $slugSeen = array();
 
 function unique_slug($slug, &$seen) {
-    if ($slug === '') { $slug = 'post'; }
-    $base = $slug; $n = 2;
-    while (isset($seen[$slug])) { $slug = $base . '-' . $n; $n++; }
-    $seen[$slug] = true;
-    return $slug;
+    return PagecoreWordPressImportPolicy::uniqueSlug($slug, $seen);
 }
 
-function fm_escape($v) { return str_replace(array("\r", "\n"), ' ', (string) $v); }
+function fm_escape($v) { return PagecoreWordPressImportPolicy::frontMatterValue($v); }
 
 foreach ($postRows as $r) {
     $f = sql_fields($r);
@@ -984,7 +510,7 @@ say(sprintf('Wrote %d posts (%d tagged), %d public pages, staged %d non-public p
     $counts['post'], isset($counts['tagged']) ? $counts['tagged'] : 0, $counts['page'], $counts['staged_page'], $counts['skipped_status']));
 
 $menuLabel = '';
-$navItems = imported_nav_items($postRows, $meta, $rel, $tt, $terms, $options, $POST_URL, $menuLabel);
+$navItems = \PagecoreWordPressMenu\imported_nav_items($postRows, $meta, $rel, $tt, $terms, $options, $POST_URL, $menuLabel);
 if ($navItems) {
     $navJson = json_encode($navItems, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if ($navJson === false) {
