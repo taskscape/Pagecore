@@ -1,0 +1,11 @@
+{
+  "name": "pagecore/pagecore",
+  "description": "Development-only static analysis dependencies for Pagecore.",
+  "type": "project",
+  "require-dev": {
+    "phpstan/phpstan": "^2.0"
+  },
+  "config": {
+    "sort-packages": true
+  }
+}

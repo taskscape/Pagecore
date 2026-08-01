@@ -22,17 +22,11 @@ jobs:
         shell: powershell
         run: |
           $env:PAGECORE_PHP_EXE = (Get-Command php).Source
-          npm run test:concurrency
-          npm run test:mutation-operation
-          npm run test:config-schema
-          npm run test:modules
-          npm run test:api-registry
-          npm run test:input-validation
-          npm run test:path-policy
-          npm run test:front-matter
+          npm run test:php
           npm run test:e2e
 
   migration-browser-suite:
+    if: ${{ vars.PAGECORE_RUN_MIGRATION == 'true' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

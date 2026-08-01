@@ -1,6 +1,6 @@
 {
   "name": "pagecore",
-  "version": "2.37.0",
+  "version": "2.38.0",
   "private": true,
   "description": "Pagecore CMS sample site and end-to-end tests.",
   "scripts": {
@@ -34,6 +34,12 @@
     "test:admin-view": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-AdminView.ps1",
     "test:editor-state": "node tests/editor-state.js",
     "test:reset-helper": "node tests/reset-sample-site.js",
+    "quality:version": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-VersionSync.ps1",
+    "quality:php-lint": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-PhpLint.ps1",
+    "quality:js": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-JavaScript.ps1",
+    "quality:vendor": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-VendoredDependencies.ps1",
+    "quality:static": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-StaticAnalysis.ps1",
+    "quality": "npm run quality:version && npm run quality:php-lint && npm run quality:js && npm run quality:vendor && npm run quality:static",
     "test:media-references": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-MediaReferences.ps1",
     "test:template-discovery": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-TemplateDiscovery.ps1",
     "test:content-cache": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-ContentCache.ps1",

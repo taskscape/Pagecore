@@ -13,6 +13,8 @@ $RECYCLE.BIN/
 
 ### Node / Playwright
 node_modules/
+vendor/
+.phpstan-cache/
 playwright-report/
 test-results/
 artifacts/

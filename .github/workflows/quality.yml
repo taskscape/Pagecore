@@ -1,0 +1,39 @@
+name: Quality and release gates
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, fileinfo
+          coverage: none
+      - run: npm ci
+      - run: composer install --no-interaction --prefer-dist
+      - name: Version, syntax, and static analysis
+        shell: powershell
+        run: |
+          $env:PAGECORE_PHP_EXE = (Get-Command php).Source
+          npm run quality
+      - name: Fast PHP security contracts
+        shell: powershell
+        run: |
+          $env:PAGECORE_PHP_EXE = (Get-Command php).Source
+          npm run test:php
+      - run: npm audit --audit-level=high
+      - name: Release artifact and hidden hardening files
+        shell: powershell
+        run: npm run release:test

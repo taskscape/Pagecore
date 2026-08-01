@@ -377,11 +377,13 @@ This was a source review with targeted local checks, not a production penetratio
   - Resolution: Every Playwright worker now receives a unique system-temporary content, upload, and generated-artifact root selected by a validated request header. One Node reset helper owns exact-root containment and fixture copying for both Playwright and PowerShell, while the router safely serves worker-local media/index artifacts. The base lane runs fully parallel with four local or two CI workers.
   - Evidence: The base browser suite passes repeatedly with multiple workers; reset-helper contracts reject a sibling-prefix target, and Playwright traces/screenshots remain under the normal failure artifact directory.
 
-- [ ] **REF-24 — Add continuous integration, static checks, and dependency/update gates.**
+- [x] **REF-24 — Add continuous integration, static checks, and dependency/update gates.**
   - Explanation: There is no tracked CI workflow, PHP static analysis, JavaScript linting, dependency update automation, or explicit vendored-library check. The broken start command and cross-discovered tests could therefore reach a release unnoticed.
   - Justification: No tracked `.github`/pipeline file is present. `npm audit` is currently clean, but Parsedown is invisible to npm and Playwright has a newer compatible release.
   - Recommendation: Add gates for version synchronization, PHP lint, unit/security tests, a modest PHPStan/Psalm level, JavaScript lint, npm audit, dependency freshness, Playwright base lane, optional migration lane, and packaging checks for hidden hardening files. Pin or schedule updates with review rather than silently floating production tools.
   - Done when: a clean checkout runs the same named commands locally and in CI, every gate blocks release on failure, and vendored dependencies have an explicit update signal.
+  - Resolution: A blocking quality workflow now runs version synchronization, tracked PHP/JavaScript syntax checks, level-3 PHPStan over extracted components, vendored Parsedown checksum/version validation, the fast PHP security suite, high-severity npm audit, and release artifact verification. Dependabot tracks npm, Composer, and action updates; the private migration lane is explicitly opt-in.
+  - Evidence: `npm run quality`, `npm run test:php`, `npm audit --audit-level=high`, and `npm run release:test` are the local/CI commands. Composer's declared PHPStan range, Parsedown's checksum manifest, npm's lock file, and weekly Dependabot updates provide reviewed dependency signals.
 
 - [ ] **REF-25 — Centralize error handling and remove broad suppression at operational boundaries.**
   - Explanation: `@unlink`, `@scandir`, `@filemtime`, `@fopen`, and similar suppression hide why an operation failed, while client code receives generic or even successful results. Conversely, uncaught warnings/type errors can corrupt JSON responses.
