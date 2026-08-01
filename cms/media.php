@@ -253,14 +253,19 @@ function cms_media_bytes($bytes) {
 
     function remove(card) {
       var rel = card.getAttribute('data-media-rel');
-      if (!confirm('Delete this media file? This is only allowed when content does not reference it.')) { return; }
-      setBusy(card, true);
-      setStatus(card, 'Deleting...');
-      post('delete-media', { rel: rel, revision: card.getAttribute('data-media-revision') }).then(function () {
-        card.remove();
-        if (!document.querySelector('[data-media-card]')) {
-          location.reload();
+      setStatus(card, 'Checking references...');
+      client.get('media-impact', { rel: rel }).then(function (impact) {
+        if (impact.references.length) {
+          setStatus(card, 'Referenced by: ' + impact.references.map(function (item) { return item.source; }).join(', '), true);
+          return;
         }
+        if (!confirm('Delete this media file?')) { setStatus(card, ''); return; }
+        setBusy(card, true);
+        setStatus(card, 'Deleting...');
+        return post('delete-media', { rel: rel, revision: card.getAttribute('data-media-revision') }).then(function () {
+          card.remove();
+          if (!document.querySelector('[data-media-card]')) { location.reload(); }
+        });
       }).catch(function (err) {
         setStatus(card, err.message, true);
         setBusy(card, false);

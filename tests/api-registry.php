@@ -2,7 +2,7 @@
 require dirname(__DIR__) . '/cms/api-registry.php';
 
 $registry = pagecore_api_registry();
-$expected = array('get', 'revisions', 'media-list', 'content-inventory', 'version', 'preview-draft', 'preview', 'save', 'save-draft', 'publish', 'discard-draft', 'restore', 'save-post-meta', 'create-post', 'delete-post', 'save-nav', 'create-region', 'save-media-meta', 'delete-media', 'upload', 'logout');
+$expected = array('get', 'revisions', 'media-list', 'media-impact', 'content-inventory', 'version', 'preview-draft', 'preview', 'save', 'save-draft', 'publish', 'discard-draft', 'restore', 'save-post-meta', 'create-post', 'delete-post', 'save-nav', 'create-region', 'save-media-meta', 'delete-media', 'upload', 'logout');
 sort($expected);
 $actual = array_keys($registry);
 sort($actual);

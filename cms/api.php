@@ -318,6 +318,15 @@ $actionHandlers = array(
     cms_json(array('ok' => true, 'assets' => $media['items'], 'pagination' => array_diff_key($media, array('items' => true))));
 
     },
+    'media-impact' => function () {
+    $rel = isset($_GET['rel']) ? (string) $_GET['rel'] : '';
+    cms_require_size($rel, 'max_identifier_bytes', 512, 'Media identifier');
+    cms_utf8_or_fail($rel);
+    $asset = cms_media_asset($rel);
+    if (!$asset) { cms_fail('File not found.', 404); }
+    cms_json(array('ok' => true, 'references' => cms_media_reference_impacts($asset['url'], $asset['rel'])));
+
+    },
     'content-inventory' => function () {
     $query = isset($_GET['q']) ? (string) $_GET['q'] : '';
     $category = isset($_GET['category']) ? (string) $_GET['category'] : '';
@@ -622,7 +631,7 @@ $actionHandlers = array(
     $path = cms_media_path($rel, true);
     cms_mutate_locked('media:' . $rel, function () use ($asset, $path) {
         cms_require_revision($path);
-        if (cms_media_is_referenced($asset['url'], $asset['rel'])) {
+        if (cms_media_reference_impacts($asset['url'], $asset['rel'])) {
             cms_fail('This file is still referenced by content. Remove references before deleting it.', 409);
         }
         $metaPath = cms_media_meta_path($path);
@@ -707,12 +716,20 @@ $actionHandlers = array(
         cms_fail('Upload period quota has been reached.', 413);
     }
     if (!is_dir($dir) && !mkdir($dir, 0775, true)) { cms_fail('Could not create directory.', 500); }
-    $name = $base . '-' . bin2hex(random_bytes(3)) . '.' . $ext;
-    if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $name)) {
+    $reserved = null;
+    for ($attempt = 0; $attempt < 5 && $reserved === null; $attempt++) {
+        $name = $base . '-' . bin2hex(random_bytes(8)) . '.' . $ext;
+        $candidate = $dir . '/' . $name;
+        $handle = @fopen($candidate, 'x+b');
+        if ($handle !== false) { fclose($handle); $reserved = $candidate; }
+    }
+    if ($reserved === null) { cms_fail('Could not reserve an upload filename.', 500); }
+    if (!move_uploaded_file($f['tmp_name'], $reserved)) {
+        @unlink($reserved);
         cms_fail('Could not save uploaded file.', 500);
     }
     $rel = $sub . '/' . $name;
-    $savedPath = $dir . '/' . $name;
+    $savedPath = $reserved;
     if (!cms_media_write_meta($savedPath, array('alt' => $base, 'caption' => ''))) {
         @unlink($savedPath);
         cms_fail('Could not save file metadata.', 500);

@@ -291,7 +291,7 @@ test('CMS responses enforce security headers without inline-policy exceptions', 
 test('API action table rejects every unintended method and tokenless mutation', async ({ page }) => {
   await login(page);
   const token = await page.evaluate(() => window.CMS_CONFIG && window.CMS_CONFIG.token);
-  const reads = ['get', 'revisions', 'media-list', 'content-inventory', 'version', 'preview-draft'];
+  const reads = ['get', 'revisions', 'media-list', 'media-impact', 'content-inventory', 'version', 'preview-draft'];
   const mutations = [
     'preview', 'save', 'save-draft', 'publish', 'discard-draft', 'restore', 'save-post-meta',
     'create-post', 'delete-post', 'save-nav', 'create-region', 'save-media-meta', 'delete-media',
@@ -451,14 +451,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.30.0');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.31.0');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.30.0');
+  expect((await version.json()).version).toBe('2.31.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.30.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.31.0')).toBeVisible();
 });
 
 test('admin design tokens preserve desktop, focus, disabled, and mobile states', async ({ page }) => {
@@ -502,7 +502,7 @@ test('featured image upload accepts JPEG and PNG, saves drafts, and enforces typ
   await expect(panel.locator('.cms-featured-image-selection')).toContainText('featured-image');
   await expect(panel.locator('.cms-featured-image-preview')).toBeVisible();
   let draft = fs.readFileSync(path.join(workingContent, '.drafts', 'posts', 'launch-notes.md'), 'utf8');
-  expect(draft).toMatch(/image: \/cms\/media-file\.php\?path=\d{4}%2F\d{2}%2Ffeatured-image-[a-f0-9]{6}\.png/);
+  expect(draft).toMatch(/image: \/cms\/media-file\.php\?path=\d{4}%2F\d{2}%2Ffeatured-image-[a-f0-9]{16}\.png/);
 
   await featuredInput.setInputFiles({
     name: 'featured-image.jpeg',
@@ -511,7 +511,7 @@ test('featured image upload accepts JPEG and PNG, saves drafts, and enforces typ
   });
   await expect(panel.locator('.cms-status')).toHaveText('Featured image saved automatically to draft.');
   draft = fs.readFileSync(path.join(workingContent, '.drafts', 'posts', 'launch-notes.md'), 'utf8');
-  expect(draft).toMatch(/image: \/cms\/media-file\.php\?path=\d{4}%2F\d{2}%2Ffeatured-image-[a-f0-9]{6}\.jpeg/);
+  expect(draft).toMatch(/image: \/cms\/media-file\.php\?path=\d{4}%2F\d{2}%2Ffeatured-image-[a-f0-9]{16}\.jpeg/);
 
   // Browser validation gives immediate feedback for invalid types and files over the shared 8 MB cap.
   await featuredInput.setInputFiles({ name: 'not-featured.gif', mimeType: 'image/gif', buffer: Buffer.from('GIF89a') });

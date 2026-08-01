@@ -52,8 +52,15 @@ function cms_validate_config($config, $production) {
     foreach (array('development_only', 'demo_credentials', 'require_https', 'cookie_secure', 'hsts') as $key) {
         if (!array_key_exists($key, $config) || !is_bool($config[$key])) { $errors[] = $key . ' must be boolean'; }
     }
-    foreach (array('categories', 'search_pages', 'allowed_ext', 'trusted_proxies', 'sitemap_extra_routes') as $key) {
+    if (!isset($config['static_media_references'])) { $config['static_media_references'] = array(); }
+    foreach (array('categories', 'search_pages', 'allowed_ext', 'trusted_proxies', 'sitemap_extra_routes', 'static_media_references') as $key) {
         if (!isset($config[$key]) || !is_array($config[$key])) { $errors[] = $key . ' must be an array'; }
+    }
+    if (isset($config['static_media_references']) && is_array($config['static_media_references'])) {
+        foreach ($config['static_media_references'] as $route) {
+            if (!PagecoreRoutes::isLocalRoute($route)) { $errors[] = 'static_media_references contains an invalid local route'; break; }
+        }
+        $config['static_media_references'] = array_values(array_unique($config['static_media_references']));
     }
     if (isset($config['sitemap_extra_routes']) && is_array($config['sitemap_extra_routes'])) {
         foreach ($config['sitemap_extra_routes'] as $route) {

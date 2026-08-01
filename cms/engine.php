@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.30.0');
+define('PAGECORE_VERSION', '2.31.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
@@ -31,6 +31,7 @@ require_once __DIR__ . '/modules/SessionContext.php';
 require_once __DIR__ . '/modules/ContentPolicy.php';
 require_once __DIR__ . '/modules/FrontMatter.php';
 require_once __DIR__ . '/modules/Routes.php';
+require_once __DIR__ . '/modules/MediaReferences.php';
 list($cmsConfig, $cmsConfigErrors) = cms_validate_config(require $cmsConfigFile, !$cmsDevelopment);
 if ($cmsConfigErrors) {
     error_log('Pagecore configuration invalid: ' . implode('; ', $cmsConfigErrors));
@@ -549,10 +550,14 @@ function cms_media_assets($query = '') {
     return $result['items'];
 }
 
-function cms_media_is_referenced($url, $rel = '') {
+function cms_media_reference_impacts($url, $rel = '') {
     $needles = array($url);
     if ($rel !== '' && cms_cfg('uploads_url', '') !== '') {
         $needles[] = rtrim(cms_cfg('uploads_url'), '/') . '/' . str_replace('%2F', '/', rawurlencode(str_replace('\\', '/', $rel)));
+    }
+    $impacts = array();
+    foreach (cms_cfg('static_media_references', array()) as $reference) {
+        if (in_array($reference, $needles, true)) { $impacts[] = array('type' => 'static', 'source' => 'configuration'); }
     }
     $roots = array(
         cms_cfg('content_dir') . '/pages',
@@ -565,12 +570,17 @@ function cms_media_is_referenced($url, $rel = '') {
         foreach ($it as $file) {
             if (!$file->isFile() || strtolower($file->getExtension()) !== 'md') { continue; }
             $markdown = (string) file_get_contents($file->getPathname());
-            foreach ($needles as $needle) {
-                if ($needle !== '' && strpos($markdown, $needle) !== false) { return true; }
+            if (PagecoreMediaReferences::matches($markdown, $needles)) {
+                $relative = PagecorePathPolicy::relativeTo($file->getPathname(), cms_cfg('content_dir'));
+                $impacts[] = array('type' => 'content', 'source' => $relative !== null ? $relative : $file->getFilename());
             }
         }
     }
-    return false;
+    return $impacts;
+}
+
+function cms_media_is_referenced($url, $rel = '') {
+    return cms_media_reference_impacts($url, $rel) !== array();
 }
 
 /* ------------------------------------------------------------ front matter */

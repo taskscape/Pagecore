@@ -57,4 +57,5 @@ return array(
     'categories' => array('news' => array('News', '/news/')),
     'search_pages' => array('/' => array('Home', 'Page', 'home/main')),
     'sitemap_extra_routes' => array('/search/', '/contact/'),
+    'static_media_references' => array('/assets/site-logo.png'),
 );

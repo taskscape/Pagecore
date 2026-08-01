@@ -69,4 +69,5 @@ return array(
         '/sample-site/contact.php' => array('Contact', 'Page', 'contact/body'),
     ),
     'sitemap_extra_routes' => array('/sample-site/search/', '/sample-site/contact.php'),
+    'static_media_references' => array('/sample-site/assets/sample-diagram.svg'),
 );
