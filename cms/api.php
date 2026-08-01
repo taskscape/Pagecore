@@ -174,7 +174,7 @@ function cms_preview_page($key, $kind, array $payload) {
     // Keep authenticated draft previews typographically consistent with CMS administration pages.
     echo '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>';
     echo '<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">';
-    echo '<style>body{margin:0;background:#faf8f3;color:#2b2620;font:16px/1.6 "Open Sans",-apple-system,"Segoe UI",Roboto,Arial,sans-serif}'
+    echo '<style nonce="' . htmlspecialchars(cms_csp_nonce(), ENT_QUOTES, 'UTF-8') . '">body{margin:0;background:#faf8f3;color:#2b2620;font:16px/1.6 "Open Sans",-apple-system,"Segoe UI",Roboto,Arial,sans-serif}'
        . 'main{max-width:860px;margin:0 auto;padding:40px 24px 64px}.cms-preview-note{margin:0 0 24px;color:#8a8072;font-size:13px}'
        . 'h1{font-size:32px;line-height:1.2;margin:0 0 12px}.cms-preview-meta{color:#8a8072;margin:0 0 28px}'
        . 'img{max-width:100%;height:auto}.cms-table{border-collapse:collapse;width:100%;margin:16px 0}'

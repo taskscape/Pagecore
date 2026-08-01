@@ -159,6 +159,36 @@ test('post links expose Facebook-friendly title, summary, canonical URL, and fea
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${baseUrl}/sample-site/post/launch-notes/`);
 });
 
+test('CMS responses enforce security headers without inline-policy exceptions', async ({ page }) => {
+  const violations = [];
+  page.on('console', message => {
+    if (/content security policy|refused to (?:execute|apply|load)/i.test(message.text())) {
+      violations.push(message.text());
+    }
+  });
+
+  const response = await page.goto(`/cms/login.php?next=${encodeURIComponent('/cms/content.php')}`);
+  const headers = response.headers();
+  expect(headers['content-security-policy']).toContain("default-src 'self'");
+  expect(headers['content-security-policy']).toContain("frame-ancestors 'none'");
+  expect(headers['content-security-policy']).toContain("script-src-attr 'none'");
+  expect(headers['content-security-policy']).toContain("style-src-attr 'none'");
+  expect(headers['content-security-policy']).not.toContain("'unsafe-inline'");
+  expect(headers['content-security-policy']).not.toContain("'unsafe-eval'");
+  expect(headers['x-content-type-options']).toBe('nosniff');
+  expect(headers['x-frame-options']).toBe('DENY');
+  expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+  expect(headers['permissions-policy']).toContain('camera=()');
+
+  await page.getByLabel('Username').fill('admin');
+  await page.getByLabel('Password').fill('pagecore-demo');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('heading', { name: 'Content inventory' })).toBeVisible();
+  await page.goto('/cms/media.php');
+  await expect(page.getByRole('heading', { name: 'Media library' })).toBeVisible();
+  expect(violations).toEqual([]);
+});
+
 test('social summary falls back to post body when no excerpt is authored', async ({ page }) => {
   const postPath = path.join(workingContent, 'posts', 'summer-maintenance.md');
   const withoutExcerpt = fs.readFileSync(postPath, 'utf8').replace(/^excerpt:.*\r?\n/m, '');
@@ -254,14 +284,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.14.0');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.15.0');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.14.0');
+  expect((await version.json()).version).toBe('2.15.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.14.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.15.0')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {

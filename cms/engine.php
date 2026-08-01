@@ -20,7 +20,7 @@ if (defined('CMS_LOADED')) { return; }
 define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
-define('PAGECORE_VERSION', '2.14.0');
+define('PAGECORE_VERSION', '2.15.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
@@ -80,6 +80,40 @@ if (PHP_SAPI !== 'cli' && $cmsTransport['hsts']) {
     if ($cmsTransport['hsts_include_subdomains']) { $hsts .= '; includeSubDomains'; }
     header('Strict-Transport-Security: ' . $hsts);
 }
+
+function cms_csp_nonce() {
+    if (empty($GLOBALS['CMS_CSP_NONCE'])) {
+        $GLOBALS['CMS_CSP_NONCE'] = rtrim(strtr(base64_encode(random_bytes(18)), '+/', '-_'), '=');
+    }
+    return $GLOBALS['CMS_CSP_NONCE'];
+}
+
+function cms_send_security_headers() {
+    if (PHP_SAPI === 'cli' || headers_sent()) { return; }
+    $nonce = cms_csp_nonce();
+    $policy = array(
+        "default-src 'self'",
+        "base-uri 'self'",
+        "connect-src 'self'",
+        "font-src 'self' https://fonts.gstatic.com data:",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+        "frame-src 'none'",
+        "img-src 'self' data: blob: https:",
+        "object-src 'none'",
+        "script-src 'self' 'nonce-$nonce'",
+        "script-src-attr 'none'",
+        "style-src 'self' https://fonts.googleapis.com 'nonce-$nonce'",
+        "style-src-attr 'none'",
+    );
+    header('Content-Security-Policy: ' . implode('; ', $policy));
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+}
+
+cms_send_security_headers();
 
 /* ---------------------------------------------------------------- session */
 if (session_status() === PHP_SESSION_NONE && PHP_SAPI !== 'cli') {
@@ -1362,6 +1396,6 @@ function cms_assets() {
          . "<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n"
          . "<link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&display=swap\" rel=\"stylesheet\">\n"
          . "<link rel=\"stylesheet\" href=\"/cms/assets/editor.css\">\n"
-         . "<script>window.CMS_CONFIG = $cfg;</script>\n"
+         . '<script nonce="' . htmlspecialchars(cms_csp_nonce(), ENT_QUOTES, 'UTF-8') . '">window.CMS_CONFIG = ' . $cfg . ";</script>\n"
          . "<script src=\"/cms/assets/editor.js\" defer></script>\n";
 }

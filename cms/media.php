@@ -32,7 +32,7 @@ function cms_media_bytes($bytes) {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <style>
+  <style nonce="<?= cms_media_e(cms_csp_nonce()) ?>">
     * { box-sizing: border-box; }
     body {
       margin: 0; background: #f7f5ef; color: #2b2620;
@@ -217,14 +217,14 @@ function cms_media_bytes($bytes) {
     </div>
   </div>
 
-  <script>
+  <script nonce="<?= cms_media_e(cms_csp_nonce()) ?>">
     window.PAGECORE_MEDIA = {
       api: '/cms/api.php',
       token: <?= json_encode(cms_csrf_token(), JSON_UNESCAPED_SLASHES) ?>,
       picker: <?= $picker ? 'true' : 'false' ?>
     };
   </script>
-  <script>
+  <script nonce="<?= cms_media_e(cms_csp_nonce()) ?>">
   (function () {
     'use strict';
     var cfg = window.PAGECORE_MEDIA || {};
