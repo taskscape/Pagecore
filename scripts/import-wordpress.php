@@ -39,13 +39,24 @@ $opt = array(
     'post-url' => '/post/{slug}/',
     'uploads-url' => '/uploads',
     'copy-uploads' => '1',
+    'dry-run' => '0',
+    'force' => '0',
+    'max-memory-mb' => '256',
+    'max-statement-bytes' => '16777216',
     'self-test-html' => '0',
     'help' => '0',
 );
+$knownOptions = array_fill_keys(array_keys($opt), true);
 foreach (array_slice($argv, 1) as $arg) {
     if ($arg === '--help' || $arg === '-h') { $opt['help'] = '1'; continue; }
     if ($arg === '--self-test-html') { $opt['self-test-html'] = '1'; continue; }
-    if (preg_match('~^--([a-z-]+)=(.*)$~s', $arg, $m)) { $opt[$m[1]] = $m[2]; }
+    if (preg_match('~^--([a-z-]+)=(.*)$~s', $arg, $m)) {
+        if (!isset($knownOptions[$m[1]])) { fwrite(STDERR, "Unknown option: --{$m[1]}\n"); exit(2); }
+        $opt[$m[1]] = $m[2];
+        continue;
+    }
+    fwrite(STDERR, "Unknown argument: $arg\n");
+    exit(2);
 }
 if ($opt['help'] === '1' || ($opt['sql'] === '' && $opt['self-test-html'] !== '1')) {
     fwrite(STDOUT, "WordPress -> Pagecore importer\n\n"
@@ -61,6 +72,10 @@ if ($opt['help'] === '1' || ($opt['sql'] === '' && $opt['self-test-html'] !== '1
         . "  --post-url=PATTERN     post URL pattern with {slug} (default /post/{slug}/)\n"
         . "  --uploads-url=PATH     public uploads base (default /uploads)\n"
         . "  --copy-uploads=0|1     copy referenced media files (default 1)\n"
+        . "  --dry-run=0|1          validate and build staging output without promotion\n"
+        . "  --force=0|1            replace a non-empty target after successful staging\n"
+        . "  --max-memory-mb=N      importer PHP memory limit (default 256)\n"
+        . "  --max-statement-bytes=N maximum accepted SQL INSERT statement (default 16777216)\n"
         . "  --self-test-html       run the HTML allowlist regression and exit\n");
     exit($opt['help'] === '1' ? 0 : 1);
 }
@@ -73,16 +88,92 @@ $UPLOADS_SRC = rtrim(str_replace('\\', '/', $opt['uploads-src']), '/');
 $UPLOADS_URL = rtrim($opt['uploads-url'], '/');
 $POST_URL = $opt['post-url'];
 $COPY = $opt['copy-uploads'] === '1' && $UPLOADS_SRC !== '' && $OUT_UPLOADS !== '';
+$DRY_RUN = $opt['dry-run'] === '1';
+$FORCE = $opt['force'] === '1';
+$MAX_STATEMENT_BYTES = (int) $opt['max-statement-bytes'];
 
 if ($opt['self-test-html'] !== '1' && $OUT_CONTENT === '') { fwrite(STDERR, "--out-content is required\n"); exit(1); }
 if ($opt['self-test-html'] !== '1' && !is_file($opt['sql'])) { fwrite(STDERR, "SQL file not found: {$opt['sql']}\n"); exit(1); }
+if ($opt['self-test-html'] !== '1') {
+    foreach (array('out-content' => $OUT_CONTENT, 'out-uploads' => $OUT_UPLOADS) as $pathOption => $pathValue) {
+        if ($pathValue === '' && $pathOption === 'out-uploads') { continue; }
+        if (!preg_match('~^(?:[A-Za-z]:/|/)~', $pathValue)) { fwrite(STDERR, "--$pathOption must be an absolute path\n"); exit(2); }
+    }
+}
 if ($opt['self-test-html'] !== '1' && strpos($POST_URL, '{slug}') === false) {
     fwrite(STDERR, "--post-url must contain the literal {slug} placeholder; quote this argument in PowerShell.\n");
     exit(1);
 }
+foreach (array('copy-uploads', 'include-non-public', 'dry-run', 'force') as $booleanOption) {
+    if (!in_array($opt[$booleanOption], array('0', '1'), true)) { fwrite(STDERR, "--$booleanOption must be 0 or 1\n"); exit(2); }
+}
+if (!preg_match('~^[A-Za-z0-9_]+$~', $PREFIX)) { fwrite(STDERR, "--table-prefix contains unsupported characters\n"); exit(2); }
+if (!preg_match('#^/[A-Za-z0-9._~!$&\'()*+,;=:@%/{\}-]*$#', $POST_URL) || substr_count($POST_URL, '{slug}') !== 1) {
+    fwrite(STDERR, "--post-url must be a root-relative URL with exactly one {slug} placeholder\n"); exit(2);
+}
+if (!preg_match('#^/(?!/)(?!.*(?:^|/)\.\.?/)[A-Za-z0-9._~!$&\'()*+,;=:@%/-]*$#', $UPLOADS_URL)) {
+    fwrite(STDERR, "--uploads-url must be a traversal-free root-relative URL\n"); exit(2);
+}
+$allowedStatuses = array('publish', 'private', 'draft', 'pending', 'future');
+if (!$STATUSES || array_diff($STATUSES, $allowedStatuses)) { fwrite(STDERR, "--status contains an unsupported WordPress status\n"); exit(2); }
+if (!ctype_digit($opt['max-memory-mb']) || (int) $opt['max-memory-mb'] < 64 || (int) $opt['max-memory-mb'] > 2048) {
+    fwrite(STDERR, "--max-memory-mb must be between 64 and 2048\n"); exit(2);
+}
+if (!ctype_digit($opt['max-statement-bytes']) || $MAX_STATEMENT_BYTES < 1024 || $MAX_STATEMENT_BYTES > 268435456) {
+    fwrite(STDERR, "--max-statement-bytes must be between 1024 and 268435456\n"); exit(2);
+}
+ini_set('memory_limit', $opt['max-memory-mb'] . 'M');
 
 function say($s) { fwrite(STDOUT, $s . "\n"); }
-function ensure_dir($d) { if (!is_dir($d) && !mkdir($d, 0775, true)) { fwrite(STDERR, "mkdir failed: $d\n"); exit(1); } }
+set_exception_handler(function ($error) { fwrite(STDERR, 'Import failed: ' . $error->getMessage() . "\n"); exit(1); });
+function ensure_dir($d) { if (!is_dir($d) && !mkdir($d, 0775, true)) { throw new RuntimeException("mkdir failed: $d"); } }
+function write_import_file($path, $data) {
+    ensure_dir(dirname($path));
+    if (getenv('PAGECORE_IMPORT_FAIL_BASENAME') === basename($path)) { throw new RuntimeException('injected write failure: ' . $path); }
+    $bytes = file_put_contents($path, $data, LOCK_EX);
+    if ($bytes === false || $bytes !== strlen($data)) { throw new RuntimeException('write failed: ' . $path); }
+}
+function import_directory_empty($path) {
+    if (!is_dir($path)) { return true; }
+    $items = scandir($path);
+    if ($items === false) { throw new RuntimeException('cannot inspect target: ' . $path); }
+    return count(array_diff($items, array('.', '..'))) === 0;
+}
+function remove_import_tree($path) {
+    if (!file_exists($path)) { return; }
+    if (is_link($path) || is_file($path)) { if (!unlink($path)) { throw new RuntimeException('cleanup failed: ' . $path); } return; }
+    $items = scandir($path);
+    if ($items === false) { throw new RuntimeException('cleanup failed: ' . $path); }
+    foreach (array_diff($items, array('.', '..')) as $item) { remove_import_tree($path . DIRECTORY_SEPARATOR . $item); }
+    if (!rmdir($path)) { throw new RuntimeException('cleanup failed: ' . $path); }
+}
+
+/** Promote all staged roots together, restoring every original root if any rename fails. */
+function promote_import_roots(array $pairs, $force, $token) {
+    $backups = array();
+    $promoted = array();
+    try {
+        foreach ($pairs as $pair) {
+            list($stage, $target) = $pair;
+            if (file_exists($target)) {
+                if (!import_directory_empty($target) && !$force) { throw new RuntimeException('target is not empty; rerun with --force=1: ' . $target); }
+                $backup = $target . '.pagecore-backup-' . $token;
+                if (!rename($target, $backup)) { throw new RuntimeException('could not reserve target: ' . $target); }
+                $backups[$target] = $backup;
+            }
+        }
+        foreach ($pairs as $pair) {
+            list($stage, $target) = $pair;
+            if (!rename($stage, $target)) { throw new RuntimeException('could not promote staged import: ' . $target); }
+            $promoted[$target] = $stage;
+        }
+    } catch (Throwable $error) {
+        foreach (array_reverse($promoted, true) as $target => $stage) { if (file_exists($target)) { rename($target, $stage); } }
+        foreach ($backups as $target => $backup) { if (file_exists($backup)) { rename($backup, $target); } }
+        throw $error;
+    }
+    foreach ($backups as $backup) { remove_import_tree($backup); }
+}
 
 /**
  * Keep migration-provided upload paths relative so imported content cannot
@@ -419,6 +510,34 @@ class Html2Md {
         return preg_replace("~[ \t]+~", ' ', $s);
     }
 }
+
+/** Stream only requested INSERT statements, bounding any individual statement. */
+function sql_rows_from_file($path, array $tables, $maxStatementBytes) {
+    $result = array_fill_keys($tables, array());
+    $handle = fopen($path, 'rb');
+    if ($handle === false) { throw new RuntimeException('could not open SQL dump'); }
+    $buffer = '';
+    $table = null;
+    try {
+        while (($line = fgets($handle)) !== false) {
+            if ($buffer === '' && preg_match('~^INSERT INTO `([^`]+)` VALUES ~', $line, $match)) {
+                $table = in_array($match[1], $tables, true) ? $match[1] : null;
+            }
+            if ($table !== null) {
+                $buffer .= $line;
+                if (strlen($buffer) > $maxStatementBytes) { throw new RuntimeException('SQL INSERT exceeds --max-statement-bytes for ' . $table); }
+            }
+            if (substr(rtrim($line), -1) === ';') {
+                if ($table !== null) { $result[$table] = array_merge($result[$table], sql_rows($buffer, $table)); }
+                $buffer = '';
+                $table = null;
+            }
+        }
+        if ($buffer !== '') { throw new RuntimeException('unterminated SQL INSERT statement'); }
+        if (!feof($handle)) { throw new RuntimeException('failed while reading SQL dump'); }
+    } finally { fclose($handle); }
+    return $result;
+}
 if ($opt['self-test-html'] !== '1') {
     foreach ($STATUSES as $requestedStatus) {
         if ($requestedStatus !== 'publish' && $opt['include-non-public'] !== '1') {
@@ -453,16 +572,19 @@ if ($opt['self-test-html'] === '1') {
 
 /* ------------------------------------------------------------------- load */
 say('Reading SQL: ' . $opt['sql']);
-$sql = file_get_contents($opt['sql']);
-say('  ' . number_format(strlen($sql)) . ' bytes');
+$tables = array($PREFIX . 'posts', $PREFIX . 'postmeta', $PREFIX . 'term_relationships',
+    $PREFIX . 'term_taxonomy', $PREFIX . 'terms', $PREFIX . 'options', $PREFIX . 'yoast_primary_term');
+$streamedRows = sql_rows_from_file($opt['sql'], $tables, $MAX_STATEMENT_BYTES);
+say('  ' . number_format(filesize($opt['sql'])) . ' bytes streamed (memory limit ' . $opt['max-memory-mb'] . ' MiB)');
 
-$postRows = sql_rows($sql, $PREFIX . 'posts');
-$metaRows = sql_rows($sql, $PREFIX . 'postmeta');
-$relRows  = sql_rows($sql, $PREFIX . 'term_relationships');
-$ttRows   = sql_rows($sql, $PREFIX . 'term_taxonomy');
-$termRows = sql_rows($sql, $PREFIX . 'terms');
-$optionRows = sql_rows($sql, $PREFIX . 'options');
-$primaryRows = sql_rows($sql, $PREFIX . 'yoast_primary_term');
+$postRows = $streamedRows[$PREFIX . 'posts'];
+$metaRows = $streamedRows[$PREFIX . 'postmeta'];
+$relRows  = $streamedRows[$PREFIX . 'term_relationships'];
+$ttRows   = $streamedRows[$PREFIX . 'term_taxonomy'];
+$termRows = $streamedRows[$PREFIX . 'terms'];
+$optionRows = $streamedRows[$PREFIX . 'options'];
+$primaryRows = $streamedRows[$PREFIX . 'yoast_primary_term'];
+unset($streamedRows);
 say(sprintf('Rows: posts=%d meta=%d rel=%d term_tax=%d terms=%d options=%d yoast_primary=%d',
     count($postRows), count($metaRows), count($relRows), count($ttRows), count($termRows),
     count($optionRows), count($primaryRows)));
@@ -718,6 +840,26 @@ function imported_nav_items(array $postRows, array $meta, array $rel, array $tt,
 }
 
 /* ------------------------------------------------------------- conversion */
+$FINAL_CONTENT = $OUT_CONTENT;
+$FINAL_UPLOADS = $OUT_UPLOADS;
+$importToken = bin2hex(random_bytes(8));
+$OUT_CONTENT = dirname($FINAL_CONTENT) . DIRECTORY_SEPARATOR . '.pagecore-import-' . $importToken . '-content';
+$OUT_UPLOADS = $FINAL_UPLOADS !== '' ? dirname($FINAL_UPLOADS) . DIRECTORY_SEPARATOR . '.pagecore-import-' . $importToken . '-uploads' : '';
+$importStages = array($OUT_CONTENT);
+if ($COPY) { $importStages[] = $OUT_UPLOADS; }
+foreach (array($FINAL_CONTENT, $COPY ? $FINAL_UPLOADS : '') as $target) {
+    if ($target !== '' && file_exists($target) && !import_directory_empty($target) && !$FORCE) {
+        throw new RuntimeException('target is not empty; rerun with --force=1: ' . $target);
+    }
+}
+register_shutdown_function(function () use (&$importStages) {
+    foreach ($importStages as $stage) {
+        if (file_exists($stage)) {
+            try { remove_import_tree($stage); }
+            catch (Throwable $cleanupError) { fwrite(STDERR, 'staging cleanup failed: ' . $cleanupError->getMessage() . "\n"); }
+        }
+    }
+});
 ensure_dir($OUT_CONTENT . '/posts');
 ensure_dir($OUT_CONTENT . '/pages');
 
@@ -791,14 +933,14 @@ foreach ($postRows as $r) {
         if ($status !== 'publish') {
             $reviewDir = $OUT_CONTENT . '/.drafts/imported-pages/' . $slug;
             ensure_dir($reviewDir);
-            file_put_contents($reviewDir . '/body.md', $bodyMd);
-            file_put_contents($reviewDir . '/status.txt', fm_escape($status) . "\n");
+            write_import_file($reviewDir . '/body.md', $bodyMd);
+            write_import_file($reviewDir . '/status.txt', fm_escape($status) . "\n");
             $counts['staged_page']++;
             continue;
         }
         $regionDir = $OUT_CONTENT . '/pages/' . $slug;
         ensure_dir($regionDir);
-        file_put_contents($regionDir . '/body.md', $bodyMd);
+        write_import_file($regionDir . '/body.md', $bodyMd);
         $pagesForSearch['/' . $slug . '/'] = array($title !== '' ? $title : $slug, 'Page', $slug . '/body');
         $counts['page']++;
         continue;
@@ -833,7 +975,7 @@ foreach ($postRows as $r) {
     if ($status !== 'publish') { $fm .= 'status: ' . fm_escape($status) . "\n"; }
     $fm .= "---\n";
 
-    file_put_contents($OUT_CONTENT . '/posts/' . $slug . '.md', $fm . $bodyMd);
+    write_import_file($OUT_CONTENT . '/posts/' . $slug . '.md', $fm . $bodyMd);
     $counts['post']++;
     if ($counts['post'] % 250 === 0) { say('  ...' . $counts['post'] . ' posts'); }
 }
@@ -849,7 +991,7 @@ if ($navItems) {
         fwrite(STDERR, "Could not encode imported navigation as JSON\n");
         exit(1);
     }
-    file_put_contents($OUT_CONTENT . '/nav.json', $navJson . "\n");
+    write_import_file($OUT_CONTENT . '/nav.json', $navJson . "\n");
     say(sprintf('Wrote navigation: %s (%d top-level items)', $menuLabel, count($navItems)));
 } else {
     say('No published WordPress navigation menu found; nav.json not written.');
@@ -887,8 +1029,10 @@ if ($COPY) {
             $rejected++;
             continue;
         }
-        if (copy($srcReal, $dst)) { $copied++; }
+        if (getenv('PAGECORE_IMPORT_FAIL_COPY') === $safePath || !copy($srcReal, $dst)) { throw new RuntimeException('copy failed: ' . $safePath); }
+        $copied++;
     }
+    if ($missing > 0 || $rejected > 0) { throw new RuntimeException("upload verification failed: missing $missing, rejected $rejected"); }
     say("  copied $copied, missing $missing, rejected unsafe paths $rejected");
 } else {
     say('Skipping upload copy (referenced files: ' . count($referencedUploads) . ')');
@@ -912,12 +1056,38 @@ foreach ($pagesForSearch as $url => $def) {
 }
 $searchPhp .= "    ),\n";
 
-$fragment = "<?php\n// Generated by import-wordpress.php on " . date('c') . "\n"
+$sourceHash = hash_file('sha256', $opt['sql']);
+if ($sourceHash === false) { throw new RuntimeException('could not hash SQL source'); }
+$fragment = "<?php\n// Generated by import-wordpress.php from sha256:" . $sourceHash . "\n"
     . "// Merge these keys into cms/config.php.\n"
     . "return array(\n" . $catPhp . $searchPhp
     . "    'post_url' => " . var_export($POST_URL, true) . ",\n"
     . ");\n";
-file_put_contents($OUT_CONTENT . '/imported-config-fragment.php', $fragment);
-say('Wrote config fragment: ' . $OUT_CONTENT . '/imported-config-fragment.php');
+write_import_file($OUT_CONTENT . '/imported-config-fragment.php', $fragment);
+$manifest = array(
+    'format' => 1,
+    'source_sha256' => $sourceHash,
+    'table_prefix' => $PREFIX,
+    'statuses' => array_values($STATUSES),
+    'post_url' => $POST_URL,
+    'uploads_url' => $UPLOADS_URL,
+    'counts' => $counts,
+    'referenced_uploads' => count($referencedUploads),
+);
+$manifestJson = json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+if ($manifestJson === false) { throw new RuntimeException('could not encode import manifest'); }
+write_import_file($OUT_CONTENT . '/import-manifest.json', $manifestJson . "\n");
+say('Wrote config fragment and import manifest in staging.');
 say('Categories used: ' . count($categoriesUsed) . ' | Pages: ' . count($pagesForSearch));
+if ($DRY_RUN) {
+    foreach ($importStages as $stage) { remove_import_tree($stage); }
+    $importStages = array();
+    say('Dry run complete; targets were not changed.');
+    exit(0);
+}
+$promotionPairs = array(array($OUT_CONTENT, $FINAL_CONTENT));
+if ($COPY) { $promotionPairs[] = array($OUT_UPLOADS, $FINAL_UPLOADS); }
+promote_import_roots($promotionPairs, $FORCE, $importToken);
+$importStages = array();
+say('Promoted verified import atomically.');
 say('Done.');

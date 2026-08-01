@@ -1,6 +1,6 @@
 {
   "name": "pagecore",
-  "version": "2.33.0",
+  "version": "2.34.0",
   "private": true,
   "description": "Pagecore CMS sample site and end-to-end tests.",
   "scripts": {
@@ -12,6 +12,7 @@
     "test:parsedown": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-Parsedown.ps1",
     "test:import-sanitizer": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-ImporterSanitizer.ps1",
     "test:import-status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-ImporterStatus.ps1",
+    "test:import-transaction": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-ImporterTransaction.ps1",
     "test:private-storage": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-PrivateStorage.ps1",
     "test:request-guard": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-RequestGuard.ps1",
     "test:login-redirect": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-LoginRedirect.ps1",
