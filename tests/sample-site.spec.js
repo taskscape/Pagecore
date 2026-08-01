@@ -436,15 +436,15 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.44.0');
-  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.44.0"]')).toHaveCount(1);
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.44.1');
+  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.44.1"]')).toHaveCount(1);
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.44.0');
+  expect((await version.json()).version).toBe('2.44.1');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.44.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.44.1')).toBeVisible();
 });
 
 test('admin design tokens preserve desktop, focus, disabled, and mobile states', async ({ page }) => {
@@ -764,8 +764,9 @@ test('editor saves a draft, previews it, publishes, and restores a backup', asyn
   panel = await openEditor(page, 'home/hero');
   page.once('dialog', dialog => dialog.accept());
   await panel.locator('.cms-revision-restore').first().click();
-  await expect(page.locator('main').getByRole('heading', { name: 'Pagecore sample site' })).toBeVisible();
-  await expect(page.locator('main').getByRole('heading', { name: 'Draft-only headline' })).toHaveCount(0);
+  // The open modal correctly removes `main` from the accessibility tree, so inspect its visible DOM update directly.
+  await expect(page.locator('main h1')).toHaveText('Pagecore sample site');
+  await expect(page.locator('main h1')).not.toHaveText('Draft-only headline');
 });
 
 test('editor creates a post, publishes body changes, uploads media, and regenerates search and sitemap', async ({ page }) => {
