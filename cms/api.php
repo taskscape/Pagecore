@@ -58,7 +58,11 @@ function cms_json($data, $code = 200) {
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
-function cms_fail($msg, $code = 400) { cms_json(array('ok' => false, 'error' => $msg), $code); }
+function cms_fail($msg, $code = 400) {
+    $auditAction = isset($_GET['action']) ? preg_replace('/[^a-z0-9-]/', '_', strtolower((string) $_GET['action'])) : 'unknown';
+    cms_audit_event('api.' . $auditAction, 'failure', array('status' => $code, 'reason' => 'request_rejected'));
+    cms_json(array('ok' => false, 'error' => $msg), $code);
+}
 
 /** Reject oversized scalar input before parsing, rendering, or writing it. */
 function cms_require_size($value, $configKey, $default, $label) {
@@ -377,6 +381,7 @@ case 'publish':
     }
     $payload = cms_write_editor_content($kind, $id, $path, $md, $meta);
     $payload['ok'] = true;
+    cms_audit_event('content.publish', 'success', array('kind' => $kind));
     cms_json($payload);
 
 case 'discard-draft':
@@ -412,6 +417,7 @@ case 'restore':
     cms_regenerate_indexes();
     $payload = cms_editor_payload($kind, $path);
     $payload['ok'] = true;
+    cms_audit_event('content.restore', 'success', array('kind' => $kind));
     cms_json($payload);
 
 case 'save-post-meta':
@@ -471,6 +477,7 @@ case 'delete-post':
     // A deleted post must not retain a draft that could later reintroduce stale content.
     cms_clear_draft('post', $slug);
     cms_regenerate_indexes();
+    cms_audit_event('content.delete', 'success', array('kind' => 'post'));
     cms_json(array('ok' => true, 'slug' => $slug));
 
 case 'save-nav':
@@ -563,6 +570,7 @@ case 'delete-media':
     $path = cms_media_path($rel, true);
     if (!$path || !@unlink($path)) { cms_fail('Could not delete file.', 500); }  // Suppress error if file is locked
     @unlink(cms_media_meta_path($path));  // Suppress error if meta file is already deleted
+    cms_audit_event('media.delete', 'success', array('kind' => $asset['kind']));
     cms_json(array('ok' => true));
 
 case 'upload':
@@ -649,6 +657,7 @@ case 'upload':
         @unlink(cms_media_meta_path($savedPath));
         cms_fail('Could not read saved file.', 500);
     }
+    cms_audit_event('media.upload', 'success', array('kind' => $asset['kind'], 'bytes' => (int) $asset['size']));
     cms_json(array(
         'ok' => true,
         'url' => $asset['url'],
@@ -658,6 +667,7 @@ case 'upload':
     ));
 
 case 'logout':
+    cms_audit_event('auth.logout', 'success');
     cms_logout();
     header('Location: /');
     exit;

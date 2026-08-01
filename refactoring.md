@@ -167,12 +167,14 @@ This was a source review with targeted local checks, not a production penetratio
 
 ### Lower priority / defense in depth
 
-- [ ] **SEC-15 — Add security-relevant audit logging without leaking secrets or content.**
+- [x] **SEC-15 — Add security-relevant audit logging without leaking secrets or content.**
   - Severity: Low; detection and response gap.
   - Explanation: Login successes/failures, throttling, logout, publish, restore, delete, upload rejection, and configuration/index failures are not recorded consistently. The few `error_log()` calls are free-form and omit event context.
   - Justification: [`cms/auth.php`](cms/auth.php) has no logging; [`cms/api.php`](cms/api.php) logs only selected write failures; many filesystem failures are suppressed with `@`. OWASP authentication guidance recommends logging and monitoring failures and lockouts.
   - Recommendation: Introduce a small structured audit logger with event name, outcome, timestamp, correlation ID, authenticated account identifier, and privacy-safe source context. Never log passwords, CSRF/session tokens, full Markdown, or sensitive absolute paths. Document retention and alert thresholds.
   - Done when: security events are queryable, failed actions retain useful server-side causes, sensitive values are redacted, and tests assert representative events.
+  - Resolution: 2026-08-01 — Added a locked, append-only JSON-lines audit boundary with UTC timestamps, request correlation IDs, keyed account/source hashes, bounded safe context, restrictive file permissions, and size rotation. Wired login success/failure/throttling, authentication/CSRF failures, logout, rejected API mutations, publish/restore/delete/upload outcomes, and configuration/index failures. Documented collection, retention, and alert expectations; synchronized the local Zagozda logger and authentication failures.
+  - Evidence: All tracked and local audit/auth/API files passed PHP lint. A browser test generated login success, rejected upload, and logout records, correlated the API response header to its audit entry, validated 64-character identity hashes, and proved the password, CSRF token, filename, and absolute content path were absent; it passed 1/1 on port 18809. The isolated staged checkout passed the full base suite 24/24 on port 18810.
 
 - [ ] **SEC-16 — Protect the login endpoint from login CSRF and make demo credentials impossible to mistake for production.**
   - Severity: Low; defense in depth and deployment safety.

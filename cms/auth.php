@@ -138,11 +138,15 @@ function cms_login_retry_after() {
 function cms_login($user, $pass) {
     $state = cms_login_throttle_evaluate($user);
     $GLOBALS['CMS_LOGIN_THROTTLE'] = $state;
-    if ($state['locked']) { return false; }
+    if ($state['locked']) {
+        cms_audit_event('auth.login', 'failure', array('account' => $user, 'reason' => 'throttled', 'retry_after' => $state['retry_after']));
+        return false;
+    }
     $ok = hash_equals(cms_cfg('username'), (string) $user)
         && password_verify((string) $pass, cms_cfg('password_hash'));
     if (!$ok) {
         $GLOBALS['CMS_LOGIN_THROTTLE'] = cms_login_throttle_evaluate($user, null, null, true);
+        cms_audit_event('auth.login', 'failure', array('account' => $user, 'reason' => 'credentials'));
         return false;
     }
     cms_clear_login_throttle($user);
@@ -150,6 +154,7 @@ function cms_login($user, $pass) {
     $_SESSION['cms_auth']    = true;
     $_SESSION['cms_auth_at'] = time();
     $_SESSION['cms_csrf']    = bin2hex(random_bytes(32));
+    cms_audit_event('auth.login', 'success', array('account' => $user));
     return true;
 }
 
@@ -166,6 +171,7 @@ function cms_logout() {
 /** API guard: valid session + CSRF header, else JSON error + exit. */
 function cms_require_auth() {
     if (!cms_is_logged_in()) {
+        cms_audit_event('auth.api', 'failure', array('reason' => 'unauthenticated', 'status' => 401));
         http_response_code(401);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(array('ok' => false, 'error' => 'Authentication is required.'));
@@ -174,6 +180,7 @@ function cms_require_auth() {
     $sent = isset($_SERVER['HTTP_X_CMS_TOKEN']) ? $_SERVER['HTTP_X_CMS_TOKEN'] : '';
     if ($_SERVER['REQUEST_METHOD'] !== 'GET'
         && (!$sent || !hash_equals(cms_csrf_token(), $sent))) {
+        cms_audit_event('auth.csrf', 'failure', array('reason' => 'invalid_token', 'status' => 403));
         http_response_code(403);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(array('ok' => false, 'error' => 'Invalid security token.'));

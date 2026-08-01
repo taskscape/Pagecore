@@ -133,6 +133,40 @@ test('failed login budget is shared across browser sessions and returns retry gu
   }
 });
 
+test('security audit log records outcomes with correlation and hashed identities only', async ({ page }) => {
+  await login(page);
+  const token = await page.evaluate(() => window.CMS_CONFIG && window.CMS_CONFIG.token);
+  const rejectedUpload = await page.request.post('/cms/api.php?action=upload', {
+    headers: { 'X-CMS-Token': token },
+    multipart: { file: { name: 'private-filename.gif', mimeType: 'image/gif', buffer: Buffer.from('GIF89a') } }
+  });
+  expect(rejectedUpload.status()).toBe(400);
+  const rejectedRequestId = rejectedUpload.headers()['x-request-id'];
+
+  const logout = await page.request.post('/cms/api.php?action=logout', {
+    headers: { 'X-CMS-Token': token },
+    maxRedirects: 0
+  });
+  expect(logout.status()).toBe(302);
+
+  const auditPath = path.join(workingContent, '.state', 'audit.jsonl');
+  const rawAudit = fs.readFileSync(auditPath, 'utf8');
+  const events = rawAudit.trim().split(/\r?\n/).map(line => JSON.parse(line));
+  expect(events.map(event => `${event.event}:${event.outcome}`)).toEqual(expect.arrayContaining([
+    'auth.login:success',
+    'api.upload:failure',
+    'auth.logout:success'
+  ]));
+  const uploadEvent = events.find(event => event.event === 'api.upload');
+  expect(uploadEvent.correlation_id).toBe(rejectedRequestId);
+  expect(uploadEvent.account_hash).toMatch(/^[a-f0-9]{64}$/);
+  expect(uploadEvent.source_hash).toMatch(/^[a-f0-9]{64}$/);
+  expect(rawAudit).not.toContain('pagecore-demo');
+  expect(rawAudit).not.toContain(token);
+  expect(rawAudit).not.toContain('private-filename');
+  expect(rawAudit).not.toContain(path.resolve(workingContent));
+});
+
 test('showcase demonstrates file-based featured images', async ({ page }) => {
   await page.goto('/sample-site/showcase/');
 
@@ -358,14 +392,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.16.2');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.17.0');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.16.2');
+  expect((await version.json()).version).toBe('2.17.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.16.2')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.17.0')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {

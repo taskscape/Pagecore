@@ -21,10 +21,11 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.16.2');
+define('PAGECORE_VERSION', '2.17.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
+require_once __DIR__ . '/audit.php';
 require_once __DIR__ . '/transport.php';
 
 /** True when a path is the root itself or is nested below it. */
@@ -65,6 +66,7 @@ if (PHP_SAPI !== 'cli' && !$cmsDevelopment) {
         $cmsConfigFile
     );
     if ($storageViolations) {
+        cms_audit_event('config.private_storage', 'failure', array('reason' => 'document_root_overlap'));
         throw new RuntimeException('Pagecore private storage must be outside DOCUMENT_ROOT: ' . implode(', ', $storageViolations));
     }
 }
@@ -112,6 +114,7 @@ function cms_send_security_headers() {
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: strict-origin-when-cross-origin');
     header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+    header('X-Request-ID: ' . cms_correlation_id());
 }
 
 cms_send_security_headers();
@@ -792,6 +795,7 @@ function cms_write_posts_index($list = null) {
     if ($json !== false) {
         cms_atomic_write(cms_posts_index_path(), $json);
     } else {
+        cms_audit_event('index.posts', 'failure', array('reason' => 'json_encode'));
         error_log('CMS: posts index json_encode failed — index left unchanged');
     }
     return $list;
@@ -1408,6 +1412,7 @@ function cms_regenerate_indexes() {
     if ($json !== false) {
         cms_atomic_write($root . '/search-index.json', $json);
     } else {
+        cms_audit_event('index.search', 'failure', array('reason' => 'json_encode'));
         error_log('CMS: search index json_encode failed — index left unchanged');
     }
 

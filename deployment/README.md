@@ -46,3 +46,12 @@ twice yearly against PHP's official support calendar and must be raised before
 that branch reaches end of security support. The runtime guard fails startup
 on older branches, while CI runs lint, policy, and browser lanes on every
 declared supported branch.
+
+Security audit events are appended as JSON lines to `audit_log_path`. They
+contain event/outcome names, UTC timestamps, correlation IDs, and keyed hashes
+of the account and request source—never credentials, session/CSRF tokens,
+Markdown, filenames, or absolute paths. Ship the file to restricted log
+storage, retain it according to local incident-response policy, and alert on
+repeated `auth.login`, `auth.csrf`, and rejected mutation events. The local
+file rotates at `audit_max_bytes`; external collection is the authoritative
+retention mechanism.
