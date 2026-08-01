@@ -20,6 +20,8 @@ return array(
     'audit_log_path' => $private . '/state/audit.jsonl',
     'audit_max_bytes' => 5242880,
     'content_dir' => $private . '/content',
+    'external_edit_validation' => true,
+    'rendered_content_cache' => true,
     'backup_dir' => $private . '/backups',
     'backup_keep' => 20,
     'site_root' => '/var/www/example/public',

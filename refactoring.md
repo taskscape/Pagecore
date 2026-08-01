@@ -335,11 +335,13 @@ This was a source review with targeted local checks, not a production penetratio
   - Resolution: Template discovery now accepts explicit relative file/directory roots, enforces a configured PHP-file cap, skips links, catches traversal failures, and caches each file's discovered keys by relative path, mtime, and size. Inventory continues to calculate category/filter summaries from the bounded full set before slicing the requested page.
   - Evidence: `npm run test:template-discovery`, `npm run test:config-schema`, and the content-inventory browser scenario cover cache stability/invalidation, bounded large fixtures, diagnostics, missing-region discovery, and paged summaries.
 
-- [ ] **REF-19 — Make index freshness correct for external edits and add an optional rendered-content cache.**
+- [x] **REF-19 — Make index freshness correct for external edits and add an optional rendered-content cache.**
   - Explanation: Posts-index freshness checks only the posts directory mtime; editing an existing file over FTP/SSH may not update that directory, so stale metadata/search persists until manual reindex. Every public request also re-renders Markdown, increasing cost and exposure to parser worst cases.
   - Justification: [`cms/engine.php`](cms/engine.php) lines 651-665 documents the limitation, and lines 675-686 trusts the cache. `cms_post()` at lines 784-807 parses/render every request.
   - Recommendation: Store a manifest of file mtimes/sizes or a content revision updated by all writers; offer a cheap validation/maintenance mode for external edits; optionally cache sanitized rendered HTML keyed by renderer version, safety policy, and content hash.
   - Done when: modifying an existing Markdown file is detected without operator guesswork, renderer upgrades invalidate cached HTML, and public output remains identical under cache on/off tests.
+  - Resolution: The post index now carries a private, stat-only file manifest and treats additions, removals, and changed path/mtime/size signatures as stale, including edits made outside Pagecore. Public post rendering can use an optional atomic HTML cache keyed by content, Pagecore and Parsedown renderer versions, and the named safe-mode policy.
+  - Evidence: `npm run test:content-cache` covers external in-place edits, additions/removals, stable cache hits, identical cache-on/off output, and renderer/policy invalidation. Existing post browser flows exercise the enabled sample-site cache.
 
 - [ ] **REF-20 — Make WordPress import streaming, transactional, repeatable, and fail-fast.**
   - Explanation: The importer loads the entire SQL dump and all extracted tuples into memory, writes directly over target files, accepts unknown options silently, and ignores most `file_put_contents()` results. A typo, disk-full event, or large dump can produce partial output with a success-looking tail.

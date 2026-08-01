@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.32.0');
+define('PAGECORE_VERSION', '2.33.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
@@ -33,6 +33,7 @@ require_once __DIR__ . '/modules/FrontMatter.php';
 require_once __DIR__ . '/modules/Routes.php';
 require_once __DIR__ . '/modules/MediaReferences.php';
 require_once __DIR__ . '/modules/TemplateDiscovery.php';
+require_once __DIR__ . '/modules/ContentCache.php';
 list($cmsConfig, $cmsConfigErrors) = cms_validate_config(require $cmsConfigFile, !$cmsDevelopment);
 if ($cmsConfigErrors) {
     error_log('Pagecore configuration invalid: ' . implode('; ', $cmsConfigErrors));
@@ -701,6 +702,10 @@ function cms_posts_index_path() {
     return cms_cfg('content_dir') . '/posts-index.json';
 }
 
+function cms_posts_manifest_path() {
+    return cms_cfg('content_dir') . '/.state/posts-manifest.json';
+}
+
 /**
  * Parse a front-matter `tags` value ("A, B, C") into a de-duplicated list of
  * array('slug' => ..., 'label' => ...). Labels are kept as authored; slugs are
@@ -816,7 +821,11 @@ function cms_write_posts_index($list = null) {
     if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) { $flags |= JSON_INVALID_UTF8_SUBSTITUTE; }
     $json = json_encode($list, $flags);
     if ($json !== false && cms_atomic_write(cms_posts_index_path(), $json)) {
-        return $list;
+        $manifest = PagecoreContentCache::manifestJson(cms_cfg('content_dir') . '/posts');
+        if ($manifest !== false && cms_atomic_write(cms_posts_manifest_path(), $manifest . "\n")) { return $list; }
+        cms_audit_event('index.posts', 'failure', array('reason' => 'manifest_write_failed'));
+        error_log('CMS: posts manifest write_failed — index will be treated as stale');
+        return false;
     } else {
         $reason = $json === false ? 'json_encode' : 'write_failed';
         cms_audit_event('index.posts', 'failure', array('reason' => $reason));
@@ -826,17 +835,19 @@ function cms_write_posts_index($list = null) {
 }
 
 /**
- * Is the cached index fresh? It is stale when missing, or when the posts
- * directory has changed (a file added or removed) more recently than the
- * index was written. In-place edits through the editor rebuild the index
- * explicitly via cms_regenerate_indexes(), so this cheap one-stat check is
- * enough for the normal workflow. (Direct FTP edits of an existing file can
- * be picked up with a manual rebuild — see scripts/reindex.php.)
+ * Is the cached index fresh? By default a stat-only manifest detects added,
+ * removed, and externally edited Markdown without reading post bodies.
  */
 function cms_posts_index_fresh() {
     $index = cms_posts_index_path();
     if (!is_file($index)) { return false; }
     $postsDir = cms_cfg('content_dir') . '/posts';
+    if (cms_cfg('external_edit_validation', true)) {
+        $manifestPath = cms_posts_manifest_path();
+        if (!is_file($manifestPath)) { return false; }
+        $manifest = file_get_contents($manifestPath);
+        return $manifest !== false && PagecoreContentCache::manifestMatches($manifest, $postsDir);
+    }
     if (is_dir($postsDir) && @filemtime($postsDir) > @filemtime($index)) { return false; }
     return true;
 }
@@ -986,9 +997,24 @@ function cms_post($slug, $includeNonPublic = false) {
         'mins'           => cms_reading_minutes($body),
         'tags'           => cms_parse_tags(isset($meta['tags']) ? $meta['tags'] : ''),
         'body_md'        => $body,
-        'body_html'      => cms_render_markdown($body),
+        'body_html'      => cms_render_markdown_cached($body),
         'url'            => cms_post_url($slug),
         'status'         => $status,
+    );
+}
+
+/** Render public post HTML through an optional versioned, sanitized cache. */
+function cms_render_markdown_cached($markdown) {
+    cms_parsedown();
+    $rendererIdentity = PAGECORE_VERSION . ':parsedown-' . Parsedown::version;
+    return PagecoreContentCache::rendered(
+        $markdown,
+        cms_cfg('rendered_content_cache', false),
+        cms_cfg('content_dir') . '/.state/rendered',
+        $rendererIdentity,
+        'safe-mode:v1',
+        function ($value) { return cms_render_markdown($value); },
+        function ($path, $html) { return cms_atomic_write($path, $html); }
     );
 }
 
