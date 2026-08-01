@@ -29,6 +29,7 @@
  */
 require __DIR__ . '/engine.php';
 require __DIR__ . '/auth.php';
+require __DIR__ . '/api-registry.php';
 
 header('Cache-Control: no-store');
 
@@ -253,31 +254,9 @@ function cms_preview_page($key, $kind, array $payload) {
 }
 
 $action = isset($_GET['action']) ? $_GET['action'] : '';
-$actionMethods = array(
-    'get' => 'GET',
-    'revisions' => 'GET',
-    'media-list' => 'GET',
-    'content-inventory' => 'GET',
-    'version' => 'GET',
-    'preview-draft' => 'GET',
-    'preview' => 'POST',
-    'save' => 'POST',
-    'save-draft' => 'POST',
-    'publish' => 'POST',
-    'discard-draft' => 'POST',
-    'restore' => 'POST',
-    'save-post-meta' => 'POST',
-    'create-post' => 'POST',
-    'delete-post' => 'POST',
-    'save-nav' => 'POST',
-    'create-region' => 'POST',
-    'save-media-meta' => 'POST',
-    'delete-media' => 'POST',
-    'upload' => 'POST',
-    'logout' => 'POST',
-);
-if (isset($actionMethods[$action]) && $_SERVER['REQUEST_METHOD'] !== $actionMethods[$action]) {
-    header('Allow: ' . $actionMethods[$action]);
+$actionRegistry = pagecore_api_registry();
+if (isset($actionRegistry[$action]) && $_SERVER['REQUEST_METHOD'] !== $actionRegistry[$action]['method']) {
+    header('Allow: ' . $actionRegistry[$action]['method']);
     cms_fail('Method not allowed.', 405);
 }
 
@@ -289,9 +268,9 @@ if ($contentLength > $requestLimit) {
 
 cms_require_auth();
 
-switch ($action) {
+$actionHandlers = array(
 
-case 'get':
+    'get' => function () {
     $key = isset($_GET['key']) ? $_GET['key'] : '';
     cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
     $t = cms_resolve_key($key, false);
@@ -311,7 +290,8 @@ case 'get':
     if ($draft) { $payload['draft'] = $draft; }
     cms_json($payload);
 
-case 'revisions':
+    },
+    'revisions' => function () {
     $key = isset($_GET['key']) ? $_GET['key'] : '';
     cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
     $t = cms_resolve_key($key, false);
@@ -320,7 +300,8 @@ case 'revisions':
     $id = $kind === 'post' ? $slug : $key;
     cms_json(array('ok' => true, 'revisions' => cms_revisions(cms_target_rel_key($kind, $id))));
 
-case 'media-list':
+    },
+    'media-list' => function () {
     $query = isset($_GET['q']) ? (string) $_GET['q'] : '';
     $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
     cms_require_size($query, 'max_query_bytes', 256, 'Search query');
@@ -328,7 +309,8 @@ case 'media-list':
     $media = cms_media_assets_page($query, $page);
     cms_json(array('ok' => true, 'assets' => $media['items'], 'pagination' => array_diff_key($media, array('items' => true))));
 
-case 'content-inventory':
+    },
+    'content-inventory' => function () {
     $query = isset($_GET['q']) ? (string) $_GET['q'] : '';
     $category = isset($_GET['category']) ? (string) $_GET['category'] : '';
     $page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
@@ -338,10 +320,12 @@ case 'content-inventory':
     cms_utf8_or_fail($query, $category);
     cms_json(array('ok' => true, 'inventory' => cms_content_inventory($query, $category, $page, 100)));
 
-case 'version':
+    },
+    'version' => function () {
     cms_json(array('ok' => true, 'version' => cms_version()));
 
-case 'preview-draft':
+    },
+    'preview-draft' => function () {
     $key = isset($_GET['key']) ? $_GET['key'] : '';
     cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
     $t = cms_resolve_key($key, false);
@@ -352,12 +336,14 @@ case 'preview-draft':
     if (!$draftPath) { cms_fail('Draft not found.', 404); }
     cms_preview_page($key, $kind, cms_editor_payload($kind, $draftPath));
 
-case 'preview':
+    },
+    'preview' => function () {
     $md = isset($_POST['markdown']) ? (string) $_POST['markdown'] : '';
     cms_require_size($md, 'max_content_bytes', 1048576, 'Markdown');
     cms_json(array('ok' => true, 'html' => cms_render_markdown($md)));
 
-case 'save':
+    },
+    'save' => function () {
     $key = isset($_POST['key']) ? $_POST['key'] : '';
     $md  = isset($_POST['markdown']) ? (string) $_POST['markdown'] : '';
     cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
@@ -390,7 +376,8 @@ case 'save':
     });
     cms_json($payload);
 
-case 'save-draft':
+    },
+    'save-draft' => function () {
     $key = isset($_POST['key']) ? $_POST['key'] : '';
     $md  = isset($_POST['markdown']) ? (string) $_POST['markdown'] : '';
     cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
@@ -417,7 +404,8 @@ case 'save-draft':
     });
     cms_json(array('ok' => true, 'draft' => $draft));
 
-case 'publish':
+    },
+    'publish' => function () {
     $key = isset($_POST['key']) ? $_POST['key'] : '';
     $md  = isset($_POST['markdown']) ? (string) $_POST['markdown'] : '';
     cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
@@ -437,7 +425,8 @@ case 'publish':
     cms_audit_event('content.publish', 'success', array('kind' => $kind));
     cms_json($payload);
 
-case 'discard-draft':
+    },
+    'discard-draft' => function () {
     $key = isset($_POST['key']) ? $_POST['key'] : '';
     cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
     $t = cms_resolve_key($key, false);
@@ -453,7 +442,8 @@ case 'discard-draft':
     $payload['ok'] = true;
     cms_json($payload);
 
-case 'restore':
+    },
+    'restore' => function () {
     $key = isset($_POST['key']) ? $_POST['key'] : '';
     $revision = isset($_POST['revision']) ? (string) $_POST['revision'] : '';
     cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
@@ -481,7 +471,8 @@ case 'restore':
     cms_audit_event('content.restore', 'success', array('kind' => $kind));
     cms_json($payload);
 
-case 'save-post-meta':
+    },
+    'save-post-meta' => function () {
     $slug = isset($_POST['slug']) ? $_POST['slug'] : '';
     cms_require_size($slug, 'max_identifier_bytes', 512, 'Post identifier');
     foreach (array('title', 'date', 'category', 'excerpt', 'image', 'tags', 'status') as $field) {
@@ -501,7 +492,8 @@ case 'save-post-meta':
     });
     cms_json($result);
 
-case 'create-post':
+    },
+    'create-post' => function () {
     $title = trim(isset($_POST['title']) ? (string) $_POST['title'] : '');
     $cat   = trim(isset($_POST['category']) ? (string) $_POST['category'] : '');
     cms_require_size($title, 'max_title_bytes', 255, 'Title');
@@ -530,7 +522,8 @@ case 'create-post':
     });
     cms_json($created);
 
-case 'delete-post':
+    },
+    'delete-post' => function () {
     $slug = trim(isset($_POST['slug']) ? (string) $_POST['slug'] : '');
     cms_require_size($slug, 'max_identifier_bytes', 512, 'Post identifier');
     cms_utf8_or_fail($slug);
@@ -547,7 +540,8 @@ case 'delete-post':
     cms_audit_event('content.delete', 'success', array('kind' => 'post'));
     cms_json(array('ok' => true, 'slug' => $slug));
 
-case 'save-nav':
+    },
+    'save-nav' => function () {
     $raw = isset($_POST['json']) ? (string) $_POST['json'] : '';
     cms_require_size($raw, 'max_nav_bytes', 65536, 'Navigation JSON');
     cms_utf8_or_fail($raw);
@@ -560,7 +554,8 @@ case 'save-nav':
     });
     cms_json($result);
 
-case 'create-region':
+    },
+    'create-region' => function () {
     $key = trim(isset($_POST['key']) ? (string) $_POST['key'] : '');
     $markdown = isset($_POST['markdown']) ? (string) $_POST['markdown'] : '';
     cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
@@ -601,7 +596,8 @@ case 'create-region':
     });
     cms_json($result);
 
-case 'save-media-meta':
+    },
+    'save-media-meta' => function () {
     $rel = isset($_POST['rel']) ? (string) $_POST['rel'] : '';
     $alt = trim(isset($_POST['alt']) ? (string) $_POST['alt'] : '');
     $caption = trim(isset($_POST['caption']) ? (string) $_POST['caption'] : '');
@@ -636,7 +632,8 @@ case 'save-media-meta':
     });
     cms_json(array('ok' => true, 'asset' => $asset));
 
-case 'delete-media':
+    },
+    'delete-media' => function () {
     $rel = isset($_POST['rel']) ? (string) $_POST['rel'] : '';
     cms_require_size($rel, 'max_identifier_bytes', 512, 'Media identifier');
     cms_utf8_or_fail($rel);
@@ -661,7 +658,8 @@ case 'delete-media':
     cms_audit_event('media.delete', 'success', array('kind' => $asset['kind']));
     cms_json(array('ok' => true));
 
-case 'upload':
+    },
+    'upload' => function () {
     // A feature flag keeps post-image restrictions in the shared secure upload pipeline.
     $featuredImageOnly = !empty($_POST['featured_image']);
     if (empty($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
@@ -754,12 +752,16 @@ case 'upload':
         'asset' => $asset,
     ));
 
-case 'logout':
+    },
+    'logout' => function () {
     cms_audit_event('auth.logout', 'success');
     cms_logout();
     header('Location: /');
     exit;
 
-default:
-    cms_fail('Unknown action.', 400);
-}
+    },
+);
+
+if (!isset($actionRegistry[$action], $actionHandlers[$action])) { cms_fail('Unknown action.', 400); }
+$actionRegistry[$action]['handler'] = $actionHandlers[$action];
+$actionRegistry[$action]['handler']();
