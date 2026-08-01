@@ -111,6 +111,30 @@ test('showcase demonstrates file-based featured images', async ({ page }) => {
   await expect(page.locator('.article-image[alt="Launch notes for the sample site"]')).toBeVisible();
 });
 
+test('post-login redirects stay on unambiguous local application paths', async ({ page }) => {
+  await login(page);
+  const invalidTargets = [
+    '//evil.example/path',
+    '/\\evil.example/path',
+    '/%5cevil.example/path',
+    '/%255cevil.example/path',
+    '/%2fevil.example/path',
+    '/%252fevil.example/path',
+    'https://evil.example/path',
+    '/safe%0d%0aLocation:%20https://evil.example/'
+  ];
+  for (const target of invalidTargets) {
+    const response = await page.request.get(`/cms/login.php?next=${encodeURIComponent(target)}`, { maxRedirects: 0 });
+    expect(response.status()).toBe(302);
+    expect(response.headers().location, target).toBe('/');
+  }
+
+  const validTarget = '/cms/content.php?page=2&q=launch%20notes#posts';
+  const valid = await page.request.get(`/cms/login.php?next=${encodeURIComponent(validTarget)}`, { maxRedirects: 0 });
+  expect(valid.status()).toBe(302);
+  expect(valid.headers().location).toBe(validTarget);
+});
+
 test('post links expose Facebook-friendly title, summary, canonical URL, and featured image', async ({ page }) => {
   const samplePort = process.env.PAGECORE_SAMPLE_PORT || '8765';
   const baseUrl = process.env.PAGECORE_BASE_URL || `http://127.0.0.1:${samplePort}`;
@@ -230,14 +254,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.12.0');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.12.1');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.12.0');
+  expect((await version.json()).version).toBe('2.12.1');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.12.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.12.1')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {

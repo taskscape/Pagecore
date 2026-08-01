@@ -1,4 +1,31 @@
 <?php
+
+/** Accept only unambiguous root-relative redirects and preserve the original URL. */
+function cms_safe_redirect_target($candidate, $fallback = '/') {
+    $candidate = (string) $candidate;
+    if ($candidate === '') { return $fallback; }
+
+    $inspected = $candidate;
+    for ($i = 0; $i < 3; $i++) {
+        if (strpos($inspected, '\\') !== false || preg_match('/[\x00-\x1f\x7f]/', $inspected)) {
+            return $fallback;
+        }
+        $parts = parse_url($inspected);
+        if ($parts === false
+            || isset($parts['scheme']) || isset($parts['host'])
+            || isset($parts['user']) || isset($parts['pass'])
+            || !isset($parts['path']) || $parts['path'] === ''
+            || $parts['path'][0] !== '/' || strpos($parts['path'], '//') === 0) {
+            return $fallback;
+        }
+        $decoded = rawurldecode($inspected);
+        if ($decoded === $inspected) { break; }
+        $inspected = $decoded;
+    }
+
+    if (preg_match('/%(?:00|0a|0d|2f|5c)/i', $inspected)) { return $fallback; }
+    return $candidate;
+}
 /**
  * Authentication: login/logout, CSRF issuance, session-scoped login throttling.
  * Requires engine.php to be loaded first.

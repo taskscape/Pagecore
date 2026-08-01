@@ -2,14 +2,7 @@
 require __DIR__ . '/engine.php';
 require __DIR__ . '/auth.php';
 
-function cms_login_next_url() {
-    $next = isset($_GET['next']) ? (string) $_GET['next'] : '/';
-    if ($next === '' || $next[0] !== '/' || strpos($next, '//') === 0) { return '/'; }
-    if (preg_match("~[\r\n]~", $next)) { return '/'; }
-    return $next;
-}
-
-$next = cms_login_next_url();
+$next = cms_safe_redirect_target(isset($_GET['next']) ? $_GET['next'] : '/');
 $error = '';
 
 if (cms_is_logged_in()) {

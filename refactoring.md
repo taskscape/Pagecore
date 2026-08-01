@@ -93,12 +93,14 @@ This was a source review with targeted local checks, not a production penetratio
 
 ### Medium priority
 
-- [ ] **SEC-07 — Close the post-login open redirect.**
+- [x] **SEC-07 — Close the post-login open redirect.**
   - Severity: Medium; confirmed.
   - Explanation: The `next` validator rejects a leading `//` but accepts backslashes. Browsers normalize `/\\evil.example/path` into a scheme-relative external URL, allowing a trusted Pagecore login link to redirect to a phishing domain after login.
   - Justification: [`cms/login.php`](cms/login.php) lines 5-9 perform only first-character, `//`, and CR/LF checks, then lines 15-25 use the value in `Location`. The same implementation exists in `zagozda/cms/login.php`. The behavior was reproduced with the current function and standard URL resolution. See OWASP's [Unvalidated Redirects and Forwards Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html).
   - Recommendation: Accept only a parsed, root-relative application path: reject backslashes, control characters, scheme/host/userinfo, and all values beginning with more than one slash; normalize once; or use an allowlisted route identifier rather than a URL. Add encoded and mixed-separator regression cases.
   - Done when: all `//`, `\\`, encoded, mixed-separator, scheme, and control-character payloads fall back to a local safe route, while valid path/query/fragment destinations still work.
+  - Resolution: 2026-08-01 — Centralized post-login destination validation in the authentication boundary. It preserves valid root-relative paths, queries, and fragments, while repeatedly inspecting encoded input and falling back to `/` for scheme/host/userinfo, multiple leading slashes, backslashes, control characters, and encoded or mixed separator variants. Synchronized the local Zagozda copy.
+  - Evidence: The standalone validator matrix passed direct, encoded, and double-encoded slash/backslash payloads, absolute schemes, CR/LF injection, and valid local destinations. A real authenticated browser context then exercised the same eight malicious query values through `/cms/login.php`, received local `/` redirects for each, and preserved a valid path/query/fragment destination; the focused Playwright test passed 1/1 on port 18790. PHP lint and `git diff --check` passed, and an isolated staged checkout passed the validator plus the full base suite 19/19 on port 18791.
 
 - [ ] **SEC-08 — Replace session-scoped login throttling with shared anti-automation controls.**
   - Severity: Medium; confirmed bypass.
