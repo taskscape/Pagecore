@@ -51,6 +51,15 @@ try {
     } finally { Remove-Item Env:PAGECORE_IMPORT_FAIL_BASENAME -ErrorAction SilentlyContinue }
     if ((Get-TreeDigest $target) -ne $firstDigest) { throw 'Injected failure changed the promoted target.' }
 
+    # A release installs `Require all denied` guards into content/ and uploads/.
+    # Promotion swaps whole directories, so they must be carried forward or a
+    # re-import would quietly expose private content over HTTP.
+    $guardPath = Join-Path $target '.htaccess'
+    Set-Content -LiteralPath $guardPath -Encoding ASCII -Value 'Require all denied'
+    if ((Invoke-Import ($common + '--force=1')) -ne 0) { throw 'Forced rerun over a guarded target failed.' }
+    if (-not (Test-Path -LiteralPath $guardPath)) { throw 'Import discarded the deployment .htaccess guard.' }
+    if ((Get-Content -LiteralPath $guardPath -Raw).Trim() -ne 'Require all denied') { throw 'Import altered the deployment guard.' }
+
     $largeSql = Join-Path $testRoot 'large-statement.sql'
     $padding = 'x' * 2048
     Set-Content -LiteralPath $largeSql -Encoding ASCII -NoNewline -Value "INSERT INTO ``wp_posts`` VALUES (1,1,'2026-01-01','2026-01-01','$padding','Title','','publish','','','','slug','','','2026-01-01','2026-01-01','',0,'',0,'post','',0);"

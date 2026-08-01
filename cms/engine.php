@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.44.1');
+define('PAGECORE_VERSION', '2.46.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
@@ -683,9 +683,9 @@ function cms_editable($key, $tag = 'div') {
 }
 
 /* ------------------------------------------------------------------ posts */
-/** English month names for the site's "j F Y" date format. */
+/** Long-form post date; localized when the site configures `date_months`. */
 function cms_date_display($iso) {
-    return PagecoreTimePolicy::displayDate($iso, cms_cfg('timezone', 'UTC'));
+    return PagecoreTimePolicy::displayDate($iso, cms_cfg('timezone', 'UTC'), cms_cfg('date_months', null));
 }
 
 /** Estimated reading time in whole minutes (~250 words/min, min 1). */

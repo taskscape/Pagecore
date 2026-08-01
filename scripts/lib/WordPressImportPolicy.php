@@ -10,7 +10,11 @@ final class PagecoreWordPressImportPolicy {
     }
 
     public static function uploadRelativePath($path) {
-        $path = rawurldecode((string) $path);
+        // A URL's query/fragment starts at the first literal `?`/`#`, before any
+        // percent-decoding, so cut there first: page builders append asset ids
+        // (…/photo.jpg?id=949) that are not part of the filename on disk.
+        $path = (string) $path;
+        $path = rawurldecode(substr($path, 0, strcspn($path, '?#')));
         if ($path === '' || strpos($path, "\0") !== false) { return null; }
         $path = str_replace('\\', '/', $path);
         if ($path[0] === '/' || preg_match('~^[A-Za-z]:~', $path)) { return null; }
@@ -19,8 +23,29 @@ final class PagecoreWordPressImportPolicy {
     }
 
     public static function rewriteUploads($text, $uploadsUrl) {
-        return preg_replace('~(?:https?://[^\s"\'<>()]*?)?/(?:[a-z0-9_-]+/)?wp-content/uploads/~i',
-            rtrim((string) $uploadsUrl, '/') . '/', (string) $text);
+        $base = rtrim((string) $uploadsUrl, '/');
+        $text = preg_replace('~(?:https?://[^\s"\'<>()]*?)?/(?:[a-z0-9_-]+/)?wp-content/uploads/~i',
+            $base . '/', (string) $text);
+        // Drop page-builder query strings so the emitted link addresses the file
+        // that was actually copied (…/photo.jpg?id=949 -> …/photo.jpg).
+        return preg_replace('~(' . preg_quote($base, '~') . '/[^\s"\'<>()\]]+?)\?[^\s"\'<>()\]]*~', '$1', $text);
+    }
+
+    /**
+     * Turn the site's own absolute URLs into root-relative ones so migrated
+     * content keeps working without resolving through the old WordPress host.
+     */
+    public static function rewriteInternalUrls($text, array $siteUrls) {
+        $text = (string) $text;
+        foreach ($siteUrls as $siteUrl) {
+            $parts = parse_url((string) $siteUrl);
+            if (!is_array($parts) || empty($parts['host'])) { continue; }
+            $origin = '~https?://(?:www\.)?' . preg_quote(preg_replace('~^www\.~i', '', $parts['host']), '~')
+                . preg_quote(isset($parts['path']) ? rtrim($parts['path'], '/') : '', '~');
+            $text = preg_replace($origin . '(?=/)~i', '', $text);
+            $text = preg_replace($origin . '(?![A-Za-z0-9./?#-])~i', '/', $text);
+        }
+        return $text;
     }
 
     public static function internalUrl($url, array $siteUrls) {

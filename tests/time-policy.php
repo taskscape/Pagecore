@@ -14,6 +14,15 @@ time_check(PagecoreTimePolicy::formatEpoch(1774744200, 'Y-m-d H:i T', 'UTC') ===
 time_check(PagecoreTimePolicy::formatEpoch(1774744200, 'Y-m-d H:i T', 'Europe/Warsaw') === '2026-03-29 01:30 CET', 'Pre-DST Warsaw formatting changed.');
 time_check(PagecoreTimePolicy::formatEpoch(1774747800, 'Y-m-d H:i T', 'Europe/Warsaw') === '2026-03-29 03:30 CEST', 'DST transition formatting changed.');
 time_check(PagecoreTimePolicy::displayDate('2026-08-01', 'Europe/Warsaw') === '1 August 2026', 'Compatible post display date changed.');
+$polishMonths = array('stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca',
+    'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia');
+time_check(PagecoreTimePolicy::displayDate('2026-08-01', 'Europe/Warsaw', $polishMonths) === '1 sierpnia 2026', 'Localized display date changed.');
+time_check(PagecoreTimePolicy::displayDate('2026-01-15', 'Europe/Warsaw', $polishMonths) === '15 stycznia 2026', 'Localized January date changed.');
+foreach (array(array('a'), array_fill(0, 12, ''), 'stycznia', array_fill(0, 11, 'x')) as $badMonths) {
+    time_check(PagecoreTimePolicy::displayDate('2026-08-01', 'Europe/Warsaw', $badMonths) === '1 August 2026',
+        'Malformed month list did not fall back to the compatible format.');
+}
+time_check(PagecoreTimePolicy::displayDate('nonsense', 'Europe/Warsaw', $polishMonths) === 'nonsense', 'Unparsable date stopped passing through.');
 
 if ($failures) { fwrite(STDERR, implode(PHP_EOL, $failures) . PHP_EOL); exit(1); }
 echo "Time policy checks passed.\n";

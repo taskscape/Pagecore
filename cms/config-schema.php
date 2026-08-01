@@ -93,6 +93,17 @@ function cms_validate_config($config, $production) {
             }
         }
     }
+    if (isset($config['date_months'])) {
+        $months = $config['date_months'];
+        $valid = is_array($months) && count($months) === 12;
+        if ($valid) {
+            foreach ($months as $month) {
+                if (!is_string($month) || trim($month) === '') { $valid = false; break; }
+            }
+        }
+        if (!$valid) { $errors[] = 'date_months must be a list of 12 non-empty strings'; }
+        else { $config['date_months'] = array_values($months); }
+    }
     if (isset($config['allowed_ext']) && is_array($config['allowed_ext'])) {
         $extensions = array_values(array_unique(array_map('strtolower', $config['allowed_ext'])));
         if (!$extensions || array_diff($extensions, array('jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'))) { $errors[] = 'allowed_ext contains an unsafe or unsupported extension'; }

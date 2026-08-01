@@ -26,5 +26,6 @@ sample-site/search-index.json
 sample-site/sitemap.xml
 php
 zagozda
+terapiawypalenia
 playwright.zagozda.config.js
 tests/zagozda.spec.js

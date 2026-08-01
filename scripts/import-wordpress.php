@@ -1,6 +1,7 @@
 <?php
 require_once dirname(__DIR__) . '/cms/modules/PathPolicy.php';
 require_once __DIR__ . '/lib/WordPressHtmlConverter.php';
+require_once __DIR__ . '/lib/WordPressShortcodes.php';
 require_once __DIR__ . '/lib/WordPressSqlDump.php';
 require_once __DIR__ . '/lib/WordPressImportPolicy.php';
 require_once __DIR__ . '/lib/WordPressMenu.php';
@@ -152,8 +153,43 @@ function remove_import_tree($path) {
     if (!rmdir($path)) { throw new RuntimeException('cleanup failed: ' . $path); }
 }
 
+/**
+ * Rename with a bounded retry.
+ *
+ * On Windows a directory that was just written can still be held briefly by an
+ * indexer or on-access scanner, which surfaces as ERROR_ACCESS_DENIED. Retrying
+ * keeps promotion atomic instead of failing a fully staged, verified import.
+ */
+function rename_import_path($from, $to, $attempts = 20) {
+    for ($attempt = 1; ; $attempt++) {
+        if (@rename($from, $to)) { return true; }
+        if ($attempt >= $attempts) { return false; }
+        usleep(100000);
+    }
+}
+
+/**
+ * Copy a target root's server-configuration files into the staged replacement.
+ *
+ * Promotion swaps whole directories, so without this an import would silently
+ * discard the `Require all denied` guards a Pagecore release installs into
+ * content/ and uploads/ — leaving private content and media HTTP-reachable.
+ */
+function carry_forward_guard_files($stage, $target) {
+    foreach (array('.htaccess', '.htpasswd', 'web.config') as $guard) {
+        $source = $target . DIRECTORY_SEPARATOR . $guard;
+        $destination = $stage . DIRECTORY_SEPARATOR . $guard;
+        if (!is_file($source) || file_exists($destination)) { continue; }
+        if (!copy($source, $destination)) { throw new RuntimeException('could not preserve ' . $guard . ' for ' . $target); }
+    }
+}
+
 /** Promote all staged roots together, restoring every original root if any rename fails. */
 function promote_import_roots(array $pairs, $force, $token) {
+    foreach ($pairs as $pair) {
+        list($stage, $target) = $pair;
+        if (is_dir($target)) { carry_forward_guard_files($stage, $target); }
+    }
     $backups = array();
     $promoted = array();
     try {
@@ -162,18 +198,18 @@ function promote_import_roots(array $pairs, $force, $token) {
             if (file_exists($target)) {
                 if (!import_directory_empty($target) && !$force) { throw new RuntimeException('target is not empty; rerun with --force=1: ' . $target); }
                 $backup = $target . '.pagecore-backup-' . $token;
-                if (!rename($target, $backup)) { throw new RuntimeException('could not reserve target: ' . $target); }
+                if (!rename_import_path($target, $backup)) { throw new RuntimeException('could not reserve target: ' . $target); }
                 $backups[$target] = $backup;
             }
         }
         foreach ($pairs as $pair) {
             list($stage, $target) = $pair;
-            if (!rename($stage, $target)) { throw new RuntimeException('could not promote staged import: ' . $target); }
+            if (!rename_import_path($stage, $target)) { throw new RuntimeException('could not promote staged import: ' . $target); }
             $promoted[$target] = $stage;
         }
     } catch (Throwable $error) {
-        foreach (array_reverse($promoted, true) as $target => $stage) { if (file_exists($target)) { rename($target, $stage); } }
-        foreach ($backups as $target => $backup) { if (file_exists($backup)) { rename($backup, $target); } }
+        foreach (array_reverse($promoted, true) as $target => $stage) { if (file_exists($target)) { rename_import_path($target, $stage); } }
+        foreach ($backups as $target => $backup) { if (file_exists($backup)) { rename_import_path($backup, $target); } }
         throw $error;
     }
     foreach ($backups as $backup) { remove_import_tree($backup); }
@@ -218,8 +254,8 @@ function rewrite_uploads($text) {
 /* ------------------------------------------------------ HTML -> Markdown */
 
 /** Stream only requested INSERT statements, bounding any individual statement. */
-function sql_rows_from_file($path, array $tables, $maxStatementBytes) {
-    return PagecoreWordPressSqlDump::rowsFromFile($path, $tables, $maxStatementBytes);
+function sql_rows_from_file($path, array $tables, $maxStatementBytes, array $schemas = array()) {
+    return PagecoreWordPressSqlDump::rowsFromFile($path, $tables, $maxStatementBytes, $schemas);
 }
 if ($opt['self-test-html'] !== '1') {
     foreach ($STATUSES as $requestedStatus) {
@@ -257,7 +293,8 @@ if ($opt['self-test-html'] === '1') {
 say('Reading SQL: ' . $opt['sql']);
 $tables = array($PREFIX . 'posts', $PREFIX . 'postmeta', $PREFIX . 'term_relationships',
     $PREFIX . 'term_taxonomy', $PREFIX . 'terms', $PREFIX . 'options', $PREFIX . 'yoast_primary_term');
-$streamedRows = sql_rows_from_file($opt['sql'], $tables, $MAX_STATEMENT_BYTES);
+$streamedRows = sql_rows_from_file($opt['sql'], $tables, $MAX_STATEMENT_BYTES,
+    PagecoreWordPressSqlDump::wordPressSchemas($PREFIX));
 say('  ' . number_format(filesize($opt['sql'])) . ' bytes streamed (memory limit ' . $opt['max-memory-mb'] . ' MiB)');
 
 $postRows = $streamedRows[$PREFIX . 'posts'];
@@ -393,7 +430,15 @@ register_shutdown_function(function () use (&$importStages) {
 ensure_dir($OUT_CONTENT . '/posts');
 ensure_dir($OUT_CONTENT . '/pages');
 
+$siteUrls = array();
+foreach (array('home', 'siteurl') as $siteUrlOption) {
+    if (!empty($options[$siteUrlOption])) { $siteUrls[] = $options[$siteUrlOption]; }
+}
+
 $conv = new PagecoreWordPressHtmlConverter($UPLOADS_URL);
+// Page-builder shortcodes are expanded to HTML first; $conv then applies the
+// same allowlist it uses for ordinary WordPress content.
+$shortcodes = new PagecoreWordPressShortcodes($UPLOADS_URL, $attachPath);
 $statusSet = array_flip($STATUSES);
 $referencedUploads = array(); // uploads-relative path => true
 $unsafeUploadRefs = 0;
@@ -427,6 +472,8 @@ foreach ($postRows as $r) {
 
     // rewrite upload URLs across raw content first, then convert
     $content = rewrite_uploads($content);
+    $content = PagecoreWordPressImportPolicy::rewriteInternalUrls($content, $siteUrls);
+    $content = $shortcodes->toHtml($content);
     $bodyMd = $conv->convert($content);
 
     // collect referenced uploads from the converted markdown

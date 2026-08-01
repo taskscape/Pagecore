@@ -481,15 +481,15 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.44.1');
-  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.44.1"]')).toHaveCount(1);
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.46.0');
+  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.46.0"]')).toHaveCount(1);
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.44.1');
+  expect((await version.json()).version).toBe('2.46.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.44.1')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.46.0')).toBeVisible();
 });
 
 test('admin design tokens preserve desktop, focus, disabled, and mobile states', async ({ page }) => {

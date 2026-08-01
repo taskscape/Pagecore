@@ -117,7 +117,9 @@ extras:
   download link.
 - Standalone images are wrapped in `<figure>` for styling.
 - Tables get a `cms-table` class hook.
-- Dates display in Polish long form (e.g. *15 czerwca 2026*).
+- Dates display in long form (*15 June 2026*). Set `date_months` to twelve
+  localized month names for a non-English site — in Polish, the genitive forms
+  render *15 czerwca 2026*.
 
 ### Media library
 
