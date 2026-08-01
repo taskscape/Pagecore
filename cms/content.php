@@ -1,6 +1,7 @@
 <?php
 require __DIR__ . '/engine.php';
 require __DIR__ . '/auth.php';
+require __DIR__ . '/admin-view.php';
 
 if (!cms_is_logged_in()) {
     $next = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : cms_admin_url('content.php');
@@ -16,7 +17,7 @@ $inventory = cms_content_inventory($contentPostQuery, $contentPostCategory, $con
 $postPagination = $inventory['post_pagination'];
 
 function cms_content_e($value) {
-    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+    return cms_admin_e($value);
 }
 
 function cms_content_date($ts) {
@@ -41,10 +42,7 @@ function cms_content_posts_url($page, $query, $category) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Content - Pagecore CMS</title>
-  <!-- Open Sans keeps the inventory aligned with the CMS administration typography. -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <?= cms_admin_head_assets() ?>
   <style nonce="<?= cms_content_e(cms_csp_nonce()) ?>">
     * { box-sizing: border-box; }
     body {
@@ -153,34 +151,10 @@ function cms_content_posts_url($page, $query, $category) {
       .section-head { align-items: flex-start; }
     }
   </style>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="<?= cms_content_e(cms_admin_url('assets/admin.css')) ?>">
 </head>
 <body class="pc-admin">
   <div class="pc-app">
-    <aside class="pc-sidebar">
-      <a class="pc-brand" href="/" aria-label="Pagecore site home">
-        <span class="pc-brand-mark"><span class="material-symbols-rounded" aria-hidden="true">check</span></span>
-        <span class="pc-brand-copy"><strong>Pagecore</strong><span>Content workspace</span></span>
-      </a>
-      <div class="pc-nav-group">
-        <p class="pc-nav-label">Workspace</p>
-        <nav class="pc-nav" aria-label="CMS navigation">
-          <a href="<?= cms_content_e(cms_admin_url('content.php')) ?>" aria-current="page"><span class="material-symbols-rounded" aria-hidden="true">dashboard</span>Overview</a>
-          <a href="#posts-title"><span class="material-symbols-rounded" aria-hidden="true">edit_note</span>Posts</a>
-          <a href="#pages-title"><span class="material-symbols-rounded" aria-hidden="true">article</span>Pages</a>
-          <a href="<?= cms_content_e(cms_admin_url('media.php')) ?>"><span class="material-symbols-rounded" aria-hidden="true">photo_library</span>Media</a>
-        </nav>
-      </div>
-      <div class="pc-nav-group">
-        <p class="pc-nav-label">Structure</p>
-        <nav class="pc-nav" aria-label="Structure navigation">
-          <a href="#regions-title"><span class="material-symbols-rounded" aria-hidden="true">dashboard_customize</span>Regions</a>
-          <a href="#nav-title"><span class="material-symbols-rounded" aria-hidden="true">account_tree</span>Navigation</a>
-        </nav>
-      </div>
-      <div class="pc-sidebar-foot">Version <?= cms_content_e(cms_version()) ?></div>
-    </aside>
+    <?= cms_admin_sidebar('content') ?>
     <div class="pc-main">
   <main class="shell">
     <div class="top pc-page-head">
@@ -438,31 +412,15 @@ function cms_content_posts_url($page, $query, $category) {
     </div>
   </div>
 
-  <script nonce="<?= cms_content_e(cms_csp_nonce()) ?>">
-    window.PAGECORE_CONTENT = {
-      api: <?= json_encode(cms_admin_url('api.php'), JSON_UNESCAPED_SLASHES) ?>,
-      token: <?= json_encode(cms_csrf_token(), JSON_UNESCAPED_SLASHES) ?>,
-      navRevision: <?= json_encode($inventory['nav']['revision'], JSON_UNESCAPED_SLASHES) ?>
-    };
-  </script>
+  <?= cms_admin_client_assets('PAGECORE_CONTENT', array('api' => cms_admin_url('api.php'), 'login' => cms_admin_url('login.php'), 'token' => cms_csrf_token(), 'navRevision' => $inventory['nav']['revision'])) ?>
   <script nonce="<?= cms_content_e(cms_csp_nonce()) ?>">
   (function () {
     'use strict';
     var cfg = window.PAGECORE_CONTENT || {};
+    var client = window.PagecoreAdminClient.create(cfg);
 
     function post(action, data) {
-      var body = new URLSearchParams();
-      Object.keys(data || {}).forEach(function (key) { body.append(key, data[key]); });
-      return fetch(cfg.api + '?action=' + encodeURIComponent(action), {
-        method: 'POST',
-        headers: { 'X-CMS-Token': cfg.token || '' },
-        body: body
-      }).then(function (res) {
-        return res.json().then(function (json) {
-          if (!res.ok || !json.ok) { throw new Error(json.error || 'Request failed.'); }
-          return json;
-        });
-      });
+      return client.post(action, data);
     }
 
     function setStatus(el, text, error) {

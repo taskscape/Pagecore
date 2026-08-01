@@ -1,6 +1,7 @@
 <?php
 require __DIR__ . '/engine.php';
 require __DIR__ . '/auth.php';
+require __DIR__ . '/admin-view.php';
 
 if (!cms_is_logged_in()) {
     $next = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : cms_admin_url('media.php');
@@ -15,7 +16,7 @@ $mediaPage = cms_media_assets_page($query, $page);
 $assets = $mediaPage['items'];
 
 function cms_media_e($value) {
-    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+    return cms_admin_e($value);
 }
 
 function cms_media_bytes($bytes) {
@@ -30,10 +31,7 @@ function cms_media_bytes($bytes) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Media library - Pagecore CMS</title>
-  <!-- Open Sans gives the media library the same default typography as the other CMS administration pages. -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <?= cms_admin_head_assets() ?>
   <style nonce="<?= cms_media_e(cms_csp_nonce()) ?>">
     * { box-sizing: border-box; }
     body {
@@ -118,34 +116,10 @@ function cms_media_bytes($bytes) {
       .search { grid-template-columns: 1fr; }
     }
   </style>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="<?= cms_media_e(cms_admin_url('assets/admin.css')) ?>">
 </head>
 <body class="pc-admin">
   <div class="pc-app">
-    <aside class="pc-sidebar">
-      <a class="pc-brand" href="<?= cms_media_e(cms_site_url()) ?>" aria-label="Pagecore site home">
-        <span class="pc-brand-mark"><span class="material-symbols-rounded" aria-hidden="true">check</span></span>
-        <span class="pc-brand-copy"><strong>Pagecore</strong><span>Content workspace</span></span>
-      </a>
-      <div class="pc-nav-group">
-        <p class="pc-nav-label">Workspace</p>
-        <nav class="pc-nav" aria-label="CMS navigation">
-          <a href="<?= cms_media_e(cms_admin_url('content.php')) ?>"><span class="material-symbols-rounded" aria-hidden="true">dashboard</span>Overview</a>
-          <a href="<?= cms_media_e(cms_admin_url('content.php')) ?>#posts-title"><span class="material-symbols-rounded" aria-hidden="true">edit_note</span>Posts</a>
-          <a href="<?= cms_media_e(cms_admin_url('content.php')) ?>#pages-title"><span class="material-symbols-rounded" aria-hidden="true">article</span>Pages</a>
-          <a href="<?= cms_media_e(cms_admin_url('media.php')) ?>" aria-current="page"><span class="material-symbols-rounded" aria-hidden="true">photo_library</span>Media</a>
-        </nav>
-      </div>
-      <div class="pc-nav-group">
-        <p class="pc-nav-label">Library</p>
-        <nav class="pc-nav" aria-label="Media shortcuts">
-          <a href="<?= cms_media_e(cms_admin_url('media.php')) ?>"><span class="material-symbols-rounded" aria-hidden="true">grid_view</span>All files</a>
-          <?php if (!$picker): ?><a href="<?= cms_media_e(cms_admin_url('media.php')) ?>?picker=1"><span class="material-symbols-rounded" aria-hidden="true">add_photo_alternate</span>Picker mode</a><?php endif; ?>
-        </nav>
-      </div>
-      <div class="pc-sidebar-foot">Images and documents</div>
-    </aside>
+    <?= cms_admin_sidebar('media', $picker) ?>
     <div class="pc-main">
   <main class="shell">
     <div class="top pc-page-head">
@@ -234,32 +208,15 @@ function cms_media_bytes($bytes) {
     </div>
   </div>
 
-  <script nonce="<?= cms_media_e(cms_csp_nonce()) ?>">
-    window.PAGECORE_MEDIA = {
-      api: <?= json_encode(cms_admin_url('api.php'), JSON_UNESCAPED_SLASHES) ?>,
-      media: <?= json_encode(cms_admin_url('media.php'), JSON_UNESCAPED_SLASHES) ?>,
-      token: <?= json_encode(cms_csrf_token(), JSON_UNESCAPED_SLASHES) ?>,
-      picker: <?= $picker ? 'true' : 'false' ?>
-    };
-  </script>
+  <?= cms_admin_client_assets('PAGECORE_MEDIA', array('api' => cms_admin_url('api.php'), 'login' => cms_admin_url('login.php'), 'media' => cms_admin_url('media.php'), 'token' => cms_csrf_token(), 'picker' => $picker)) ?>
   <script nonce="<?= cms_media_e(cms_csp_nonce()) ?>">
   (function () {
     'use strict';
     var cfg = window.PAGECORE_MEDIA || {};
+    var client = window.PagecoreAdminClient.create(cfg);
 
     function post(action, data) {
-      var body = new URLSearchParams();
-      Object.keys(data || {}).forEach(function (key) { body.append(key, data[key]); });
-      return fetch(cfg.api + '?action=' + encodeURIComponent(action), {
-        method: 'POST',
-        headers: { 'X-CMS-Token': cfg.token || '' },
-        body: body
-      }).then(function (res) {
-        return res.json().then(function (json) {
-          if (!res.ok || !json.ok) { throw new Error(json.error || 'Request failed.'); }
-          return json;
-        });
-      });
+      return client.post(action, data);
     }
 
     function setStatus(card, text, error) {
@@ -339,15 +296,8 @@ function cms_media_bytes($bytes) {
         form.append('file', file);
         uploadButton.disabled = true;
         uploadButton.lastChild.textContent = ' Uploading…';
-        fetch(cfg.api + '?action=upload', {
-          method: 'POST',
-          headers: { 'X-CMS-Token': cfg.token || '' },
-          body: form
-        }).then(function (res) {
-          return res.json().then(function (json) {
-            if (!res.ok || !json.ok) { throw new Error(json.error || 'Upload failed.'); }
-            location.href = CFG.media + '?q=' + encodeURIComponent(json.asset.rel || file.name);
-          });
+        client.upload('upload', form).then(function (json) {
+            location.href = cfg.media + '?q=' + encodeURIComponent(json.asset.rel || file.name);
         }).catch(function (err) {
           alert(err.message || 'Upload failed.');
           uploadButton.disabled = false;

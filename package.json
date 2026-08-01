@@ -1,6 +1,6 @@
 {
   "name": "pagecore",
-  "version": "2.27.1",
+  "version": "2.28.0",
   "private": true,
   "description": "Pagecore CMS sample site and end-to-end tests.",
   "scripts": {
@@ -28,6 +28,7 @@
     "test:path-policy": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-PathPolicy.ps1",
     "test:front-matter": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-FrontMatter.ps1",
     "test:routes": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-Routes.ps1",
+    "test:admin-view": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-AdminView.ps1",
     "release:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Build-PagecoreRelease.ps1",
     "release:test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-ReleaseArtifact.ps1"
   },

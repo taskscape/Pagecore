@@ -7,6 +7,7 @@
     var MEDIA = CFG.media;
     var TOKEN = CFG.token || '';
     var VERSION = CFG.version || '';
+    var CLIENT = window.PagecoreAdminClient.create(CFG);
 
     /* ---------------------------------------------------------- helpers */
     function h(tag, cls, text) {
@@ -21,26 +22,13 @@
         return el;
     }
     function api(action, data, isForm) {
-        var opts = { method: 'POST', headers: { 'X-CMS-Token': TOKEN } };
-        if (isForm) {
-            opts.body = data;
-        } else {
-            var body = new URLSearchParams();
-            Object.keys(data || {}).forEach(function (k) { body.append(k, data[k]); });
-            opts.body = body;
-        }
-        return fetch(API + '?action=' + encodeURIComponent(action), opts)
-            .then(function (r) { return r.json(); });
+        return isForm ? CLIENT.upload(action, data) : CLIENT.post(action, data);
     }
     function apiGet(key) {
-        return fetch(API + '?action=get&key=' + encodeURIComponent(key), {
-            headers: { 'X-CMS-Token': TOKEN }
-        }).then(function (r) { return r.json(); });
+        return CLIENT.get('get', { key: key });
     }
     function apiGetAction(action, key) {
-        return fetch(API + '?action=' + encodeURIComponent(action) + '&key=' + encodeURIComponent(key), {
-            headers: { 'X-CMS-Token': TOKEN }
-        }).then(function (r) { return r.json(); });
+        return CLIENT.get(action, { key: key });
     }
     function insertAtCaret(ta, text) {
         var s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
@@ -77,8 +65,7 @@
         var out = h('a', null, 'Log out');
         out.prepend(icon('logout'));
         out.addEventListener('click', function () {
-            fetch(API + '?action=logout', { method: 'POST', headers: { 'X-CMS-Token': TOKEN } })
-                .then(function () { location.href = '/'; });
+            CLIENT.post('logout').then(function () { location.href = CFG.site; });
         });
         bar.appendChild(out);
         document.body.appendChild(bar);

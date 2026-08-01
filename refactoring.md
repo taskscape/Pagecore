@@ -295,11 +295,13 @@ This was a source review with targeted local checks, not a production penetratio
   - Resolution: 2026-08-01 — Post creation now calls `cms_post_url()` like every other runtime consumer. Configuration validation repairs a legacy pattern missing `{slug}`, and the canonical route policy safely substitutes the encoded slug for creation, cached indexes, listings, sitemap entries, social metadata, and direct post lookup.
   - Evidence: `npm run test:routes` covers both explicit and missing-placeholder patterns plus schema normalization; source-contract search confirms the API no longer performs its own `{slug}` replacement. Existing browser creation, listing, sitemap, metadata, and navigation scenarios exercise the shared helper end to end.
 
-- [ ] **REF-14 — Share the admin shell, escaping, assets, and browser API client.**
+- [x] **REF-14 — Share the admin shell, escaping, assets, and browser API client.**
   - Explanation: Login, content inventory, and media pages duplicate HTML head/font/sidebar patterns, escape helpers, button/status styles, CSRF bootstrap, POST wrappers, and error parsing. Duplication has already produced visual and behavior drift and blocks a strict CSP.
   - Justification: [`cms/login.php`](cms/login.php), [`cms/content.php`](cms/content.php), and [`cms/media.php`](cms/media.php) each contain large inline style blocks and repeated Google Font links. `content.php:442-603` and `media.php:220-350` contain near-duplicate API/status code.
   - Recommendation: Extract a small PHP admin layout/view helper, one escape helper, external page-specific CSS/JS files, and a shared fetch client that handles HTTP status, JSON failures, authentication expiry, and CSRF consistently.
   - Done when: admin pages share one shell and client, inline application code is removed, existing routes/labels remain stable, and visual/browser tests pass.
+  - Resolution: 2026-08-01 — Added one administration view boundary for escaping, font/stylesheet assets, route-aware sidebar navigation, and safe client bootstrapping. Content and media now render the same shell, while login uses the same head assets. A shared browser client owns CSRF headers, URL encoding, HTTP/JSON failures, authentication expiry, form uploads, and POST/GET handling for the editor, inventory, and media library.
+  - Evidence: `npm run test:admin-view` checks escaping and stable shell/client routes. Request-guard coverage includes the new client asset; staged browser coverage exercises sign-in, editor fetches, content navigation, media metadata/upload calls, and error-aware JSON handling without changing established labels or endpoints.
 
 - [ ] **REF-15 — Consolidate conflicting CSS generations and establish a small design-token layer.**
   - Explanation: New visual rules have been appended over older rules rather than replacing them. The same selectors have conflicting definitions, so ordering determines behavior and future edits are risky.

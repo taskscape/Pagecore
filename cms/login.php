@@ -1,6 +1,7 @@
 <?php
 require __DIR__ . '/engine.php';
 require __DIR__ . '/auth.php';
+require __DIR__ . '/admin-view.php';
 
 $next = cms_safe_redirect_target(isset($_GET['next']) ? $_GET['next'] : cms_site_url());
 $error = '';
@@ -35,11 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pagecore CMS sign in</title>
-  <!-- Open Sans establishes the shared default font before an editor enters the CMS. -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&display=swap" rel="stylesheet">
+  <?= cms_admin_head_assets() ?>
   <style nonce="<?= htmlspecialchars(cms_csp_nonce(), ENT_QUOTES, 'UTF-8') ?>">
     body {
       margin: 0;
@@ -89,7 +86,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       font-size: 13px;
     }
   </style>
-  <link rel="stylesheet" href="<?= htmlspecialchars(cms_admin_url('assets/admin.css'), ENT_QUOTES, 'UTF-8') ?>">
 </head>
 <body class="pc-admin pc-login">
   <div class="pc-login-shell">
