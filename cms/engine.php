@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.39.0');
+define('PAGECORE_VERSION', '2.40.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
@@ -35,6 +35,7 @@ require_once __DIR__ . '/modules/MediaReferences.php';
 require_once __DIR__ . '/modules/TemplateDiscovery.php';
 require_once __DIR__ . '/modules/ContentCache.php';
 require_once __DIR__ . '/modules/OperationalBoundary.php';
+require_once __DIR__ . '/modules/TimePolicy.php';
 list($cmsConfig, $cmsConfigErrors) = cms_validate_config(require $cmsConfigFile, !$cmsDevelopment);
 if ($cmsConfigErrors) {
     error_log('Pagecore configuration invalid: ' . implode('; ', $cmsConfigErrors));
@@ -285,7 +286,7 @@ function cms_backup($relKey, $path) {
     if (!is_dir($bdir)) {
         if (!mkdir($bdir, 0775, true)) { return; }
     }
-    $name = basename($relKey) . '.' . date('Ymd-His') . '.' . substr(bin2hex(random_bytes(2)), 0, 4) . '.md';
+    $name = basename($relKey) . '.' . PagecoreTimePolicy::now(cms_cfg('timezone', 'UTC'))->format('Ymd-His') . '.' . substr(bin2hex(random_bytes(2)), 0, 4) . '.md';
     if (!copy($path, $bdir . '/' . $name)) { return; }
     // prune to the newest N
     $keep = (int) cms_cfg('backup_keep', 20);
@@ -363,7 +364,7 @@ function cms_revision_label($file, $relKey) {
     if (preg_match($pattern, $name, $m)) {
         return $m[1] . '-' . $m[2] . '-' . $m[3] . ' ' . $m[4] . ':' . $m[5] . ':' . $m[6];
     }
-    return date('Y-m-d H:i:s', filemtime($file));
+    return PagecoreTimePolicy::formatEpoch(filemtime($file), 'Y-m-d H:i:s', cms_cfg('timezone', 'UTC'));
 }
 
 function cms_revisions($relKey) {
@@ -677,10 +678,7 @@ function cms_editable($key, $tag = 'div') {
 /* ------------------------------------------------------------------ posts */
 /** English month names for the site's "j F Y" date format. */
 function cms_date_display($iso) {
-    static $months = array('', 'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December');
-    if (!preg_match('~^(\d{4})-(\d{2})-(\d{2})~', (string) $iso, $m)) { return (string) $iso; }
-    return ((int) $m[3]) . ' ' . $months[(int) $m[2]] . ' ' . $m[1];
+    return PagecoreTimePolicy::displayDate($iso, cms_cfg('timezone', 'UTC'));
 }
 
 /** Estimated reading time in whole minutes (~250 words/min, min 1). */

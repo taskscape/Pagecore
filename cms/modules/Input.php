@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/TimePolicy.php';
 
 final class PagecoreInput {
     public static function scalarMapError(array $values) {
@@ -19,11 +20,7 @@ final class PagecoreInput {
     }
 
     public static function date($value) {
-        foreach (array('Y-m-d', 'Y-m-d H:i', 'Y-m-d H:i:s') as $format) {
-            $date = DateTimeImmutable::createFromFormat('!' . $format, (string) $value);
-            $errors = DateTimeImmutable::getLastErrors();
-            if ($date && ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0)) && $date->format($format) === $value) { return $value; }
-        }
+        if (PagecoreTimePolicy::parsePostDate($value, 'UTC') !== null) { return $value; }
         throw new InvalidArgumentException('Date must be a real calendar date in YYYY-MM-DD format (with optional time).');
     }
 }

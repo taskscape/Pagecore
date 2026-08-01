@@ -28,6 +28,7 @@ return array(
     'generated_dir' => '/var/www/example/public',
     'site_url' => 'https://www.example.com',
     'site_name' => 'Example site',
+    'timezone' => 'UTC',
     'base_url' => '/',
     'cms_url' => '/cms',
     'uploads_dir' => $private . '/uploads',

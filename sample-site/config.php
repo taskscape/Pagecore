@@ -41,6 +41,7 @@ return array(
     'site_root' => $root,
     'site_url' => $siteUrl,
     'site_name' => 'Pagecore Sample',
+    'timezone' => 'Europe/Warsaw',
     'base_url' => '/sample-site',
     'cms_url' => '/cms',
     'uploads_dir' => $uploads,

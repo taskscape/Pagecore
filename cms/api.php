@@ -163,7 +163,7 @@ function cms_draft_payload($kind, $id, $key) {
     $path = cms_draft_path($kind, $id, true);
     if (!$path) { return null; }
     $payload = cms_editor_payload($kind, $path);
-    $payload['updated'] = date('Y-m-d H:i:s', filemtime($path));
+    $payload['updated'] = PagecoreTimePolicy::formatEpoch(filemtime($path), 'Y-m-d H:i:s', cms_cfg('timezone', 'UTC'));
     $payload['preview_url'] = cms_preview_url($key);
     return $payload;
 }
@@ -533,7 +533,7 @@ $actionHandlers = array(
         $path = $reservation['path'];
         $snapshot = cms_mutation_snapshot(array($path));
         $data = cms_build_front_matter(array(
-            'title' => $title, 'date' => date('Y-m-d H:i:s'), 'category' => $cat,
+            'title' => $title, 'date' => PagecoreTimePolicy::now(cms_cfg('timezone', 'UTC'))->format('Y-m-d H:i:s'), 'category' => $cat,
         ), "Post content…\n");
         if (!cms_atomic_write($path, $data)) {
             cms_release_post_slug_reservation($reservation);
@@ -709,7 +709,7 @@ $actionHandlers = array(
     $base = strtolower(preg_replace('~[^A-Za-z0-9-]+~', '-', $base));
     $base = trim($base, '-');
     if ($base === '') { $base = 'file'; }
-    $sub = date('Y/m');
+    $sub = PagecoreTimePolicy::now(cms_cfg('timezone', 'UTC'))->format('Y/m');
     $dir = cms_cfg('uploads_dir') . '/' . $sub;
     $storageLimit = cms_limit('max_upload_storage_bytes', 268435456);
     $fileLimit = cms_limit('max_upload_files', 2000);

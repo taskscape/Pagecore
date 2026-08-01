@@ -24,6 +24,7 @@ $tests = @(
     'routes.php',
     'runtime-policy.php',
     'template-discovery.php',
+    'time-policy.php',
     'transport-config.php',
     'transport.php',
     'wordpress-import-components.php'

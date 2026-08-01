@@ -393,11 +393,13 @@ This was a source review with targeted local checks, not a production penetratio
   - Resolution: API handlers now execute behind one warning/throwable boundary with correlation-aware structured logging and a stable generic 500 response. A typed operational boundary captures and logs filesystem warnings for reservations, deletion, directory cleanup, mtimes, rollback, and upload/post mutations; response encoding has a valid-JSON fallback for invalid UTF-8 or excessive depth.
   - Evidence: `npm run test:operational-boundary`, `npm run test:mutation-operation`, and API browser failure scenarios cover typed filesystem failures, exclusive collisions, missing targets, invalid/deep JSON values, rollback, warnings, and valid client-safe responses.
 
-- [ ] **REF-26 — Normalize time, calendar dates, and timezone configuration.**
+- [x] **REF-26 — Normalize time, calendar dates, and timezone configuration.**
   - Explanation: File labels, post creation, import timestamps, and display rely on process-local `date()` while metadata accepts impossible calendar values. Deployments in different timezones can produce inconsistent ordering/labels.
   - Justification: [`cms/engine.php`](cms/engine.php) lines 138, 227-234, and 506-510 and [`cms/api.php`](cms/api.php) lines 117-119 and 381-385 use ad-hoc date strings; the importer uses `date('c')` for its manifest comment.
   - Recommendation: Add a validated site timezone, use `DateTimeImmutable`, parse and round-trip dates strictly, keep machine timestamps in UTC where practical, and format display dates at the edge.
   - Done when: invalid dates are rejected, timezone behavior is deterministic in tests, and existing valid post ordering/display remains compatible.
+  - Resolution: Configuration now requires a valid IANA timezone (default UTC). One `DateTimeImmutable` policy owns strict post-date round trips, current local timestamps, file labels, upload periods, editor modification labels, and display dates; audit timestamps remain explicitly UTC.
+  - Evidence: `npm run test:time-policy`, front-matter/input contracts, and browser post flows cover impossible dates, leap days, the Europe/Warsaw DST transition, UTC/local formatting, and compatible ordering/display.
 
 - [ ] **REF-27 — Add correct dialog/panel semantics, focus management, and keyboard lifecycle.**
   - Explanation: The content and add-post modals and editor panel lack a complete focus trap, focus restoration, background inertness, and consistent Escape behavior. The editor panel is visually modal but is not exposed as a dialog to assistive technology.

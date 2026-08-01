@@ -14,7 +14,8 @@ function cms_validate_config($config, $production) {
     if (!isset($config['cms_url'])) { $config['cms_url'] = '/cms'; }
     if (!isset($config['sitemap_extra_routes'])) { $config['sitemap_extra_routes'] = array(); }
     if (!isset($config['generated_dir']) && isset($config['site_root'])) { $config['generated_dir'] = $config['site_root']; }
-    $requiredStrings = array('session_name', 'username', 'password_hash', 'content_dir', 'backup_dir', 'site_root', 'site_url', 'site_name', 'uploads_dir', 'uploads_url', 'post_url', 'base_url', 'cms_url');
+    if (!isset($config['timezone'])) { $config['timezone'] = 'UTC'; }
+    $requiredStrings = array('session_name', 'username', 'password_hash', 'content_dir', 'backup_dir', 'site_root', 'site_url', 'site_name', 'timezone', 'uploads_dir', 'uploads_url', 'post_url', 'base_url', 'cms_url');
     foreach ($requiredStrings as $key) {
         if (!isset($config[$key]) || !is_string($config[$key]) || trim($config[$key]) === '') { $errors[] = $key . ' must be a non-empty string'; }
     }
@@ -37,6 +38,10 @@ function cms_validate_config($config, $production) {
         $errors[] = 'password_hash is not a supported password hash';
     }
     if (isset($config['site_url']) && filter_var($config['site_url'], FILTER_VALIDATE_URL) === false) { $errors[] = 'site_url must be an absolute URL'; }
+    if (isset($config['timezone'])) {
+        try { new DateTimeZone($config['timezone']); }
+        catch (Throwable $error) { $errors[] = 'timezone must be a valid IANA timezone'; }
+    }
     if (isset($config['post_url'])) {
         $placeholders = substr_count($config['post_url'], '{slug}');
         if ($placeholders > 1) { $errors[] = 'post_url must contain {slug} at most once'; }

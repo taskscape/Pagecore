@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/TimePolicy.php';
 
 final class PagecoreFrontMatter {
     private const ORDER = array('title', 'date', 'category', 'status', 'excerpt', 'image', 'tags');
@@ -44,12 +45,7 @@ final class PagecoreFrontMatter {
     }
 
     private static function validDate($value) {
-        foreach (array('Y-m-d', 'Y-m-d H:i', 'Y-m-d H:i:s') as $format) {
-            $date = DateTimeImmutable::createFromFormat('!' . $format, $value);
-            $errors = DateTimeImmutable::getLastErrors();
-            if ($date && ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0)) && $date->format($format) === $value) { return true; }
-        }
-        return false;
+        return PagecoreTimePolicy::parsePostDate($value, 'UTC') !== null;
     }
 
     private static function quote($value) {
