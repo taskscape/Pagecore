@@ -10,6 +10,12 @@ if (!$publicRoot) { throw new RuntimeException('PAGECORE_DOCUMENT_ROOT is requir
 return array(
     'session_name' => 'PAGECORE',
     'session_hours' => 8,
+    'require_https' => true,
+    'cookie_secure' => true,
+    'hsts' => true,
+    'hsts_max_age' => 31536000,
+    'hsts_include_subdomains' => false,
+    'trusted_proxies' => array(), // exact IPs or CIDRs; forwarded headers are ignored otherwise
     'username' => 'admin',
     'password_hash' => 'REPLACE_WITH_PASSWORD_HASH',
     'login_rate_limit_dir' => $privateRoot . '/state',

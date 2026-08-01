@@ -7,6 +7,10 @@ $siteUrl = getenv('PAGECORE_SITE_URL') ?: 'http://127.0.0.1:8765';
 return array(
     'session_name' => 'PAGECORE_SAMPLE',
     'session_hours' => 8,
+    'require_https' => false,
+    'cookie_secure' => false,
+    'hsts' => false,
+    'trusted_proxies' => array(),
     'username' => 'admin',
     'password_hash' => '$2y$12$oWLexpCUtOum0KYLB0Ms/ukXgxPm0XepSJNAY8j.oZ8qldfdxpl9W',
     'login_rate_limit_dir' => $content . '/.state',

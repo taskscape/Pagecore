@@ -148,3 +148,7 @@ they are not. The bundled PHP router is a loopback-only development facility,
 started through the repository script so its explicit development opt-in and
 denial policy are applied. Its `-HostAddress` option is an explicit override
 for controlled network testing, not a production deployment mode.
+Production rejects HTTP by default and uses Secure, HttpOnly, SameSite=Lax
+session cookies. Configure only known proxy addresses in `trusted_proxies` when
+TLS is terminated upstream; client-supplied forwarding headers are otherwise
+ignored.

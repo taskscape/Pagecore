@@ -20,10 +20,11 @@ if (defined('CMS_LOADED')) { return; }
 define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
-define('PAGECORE_VERSION', '2.13.0');
+define('PAGECORE_VERSION', '2.14.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
+require_once __DIR__ . '/transport.php';
 
 /** True when a path is the root itself or is nested below it. */
 function cms_path_within_root($path, $root) {
@@ -56,7 +57,8 @@ function cms_private_storage_violations($documentRoot, $configFile) {
 
 // Demo/local servers opt in explicitly. Production fails closed until secrets,
 // source Markdown, drafts, backups, and uploads are outside the public root.
-if (PHP_SAPI !== 'cli' && getenv('PAGECORE_DEVELOPMENT') !== '1') {
+$cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
+if (PHP_SAPI !== 'cli' && !$cmsDevelopment) {
     $storageViolations = cms_private_storage_violations(
         isset($_SERVER['DOCUMENT_ROOT']) ? $_SERVER['DOCUMENT_ROOT'] : '',
         $cmsConfigFile
@@ -66,18 +68,32 @@ if (PHP_SAPI !== 'cli' && getenv('PAGECORE_DEVELOPMENT') !== '1') {
     }
 }
 
+$cmsTransport = cms_transport_policy($_SERVER, $GLOBALS['CMS_CONFIG'], $cmsDevelopment);
+if (PHP_SAPI !== 'cli' && $cmsTransport['reject']) {
+    http_response_code(400);
+    header('Cache-Control: no-store');
+    echo 'HTTPS is required.';
+    exit;
+}
+if (PHP_SAPI !== 'cli' && $cmsTransport['hsts']) {
+    $hsts = 'max-age=' . $cmsTransport['hsts_max_age'];
+    if ($cmsTransport['hsts_include_subdomains']) { $hsts .= '; includeSubDomains'; }
+    header('Strict-Transport-Security: ' . $hsts);
+}
+
 /* ---------------------------------------------------------------- session */
 if (session_status() === PHP_SESSION_NONE && PHP_SAPI !== 'cli') {
-    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
     session_name(cms_cfg('session_name'));
     session_set_cookie_params(array(
         'lifetime' => 0,
         'path'     => '/',
-        'secure'   => $secure,
+        'secure'   => $cmsTransport['cookie_secure'],
         'httponly' => true,
         'samesite' => 'Lax',
     ));
     ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
+    ini_set('session.use_trans_sid', '0');
     session_start();
 
     // absolute session lifetime

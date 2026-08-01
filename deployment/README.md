@@ -22,6 +22,12 @@ directories and to the generated public `search-index.json` and `sitemap.xml`.
 The private state directory also stores the shared account/source login attempt
 budget; all PHP workers for an installation must see the same filesystem path.
 
+Production defaults require HTTPS, mark the session cookie `Secure`, and emit
+HSTS on secure responses. When TLS terminates at a reverse proxy, list only its
+exact addresses or CIDRs in `trusted_proxies`; forwarding headers from every
+other source are ignored. Enable `hsts_include_subdomains` only when every
+subdomain is permanently HTTPS-capable.
+
 The browser never reads Markdown or upload files directly. `/cms/media-file.php`
 validates the requested relative media path and supplies a fixed MIME policy;
 PDFs are attachments and raster images may render inline. Do not set
