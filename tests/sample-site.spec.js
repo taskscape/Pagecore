@@ -324,14 +324,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.15.1');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.16.0');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.15.1');
+  expect((await version.json()).version).toBe('2.16.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.15.1')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.16.0')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {
@@ -399,8 +399,99 @@ test('featured image upload accepts JPEG and PNG, saves drafts, and enforces typ
       file: { name: 'bypass.png', mimeType: 'image/png', buffer: Buffer.alloc(8 * 1024 * 1024 + 1) }
     }
   });
-  expect(oversizedUpload.status()).toBe(400);
+  expect(oversizedUpload.status()).toBe(413);
   expect((await oversizedUpload.json()).error).toContain('8 MB');
+});
+
+test('application resource limits reject oversized work before writes and paginate inventories', async ({ page }) => {
+  await login(page);
+  const token = await page.evaluate(() => window.CMS_CONFIG && window.CMS_CONFIG.token);
+  const post = (action, form) => page.request.post(`/cms/api.php?action=${action}`, {
+    headers: { 'X-CMS-Token': token },
+    form
+  });
+
+  const originalRegion = fs.readFileSync(path.join(workingContent, 'pages', 'home', 'hero.md'), 'utf8');
+  const oversizedMarkdown = await post('save', { key: 'home/hero', markdown: 'x'.repeat(262145) });
+  expect(oversizedMarkdown.status()).toBe(413);
+  expect(fs.readFileSync(path.join(workingContent, 'pages', 'home', 'hero.md'), 'utf8')).toBe(originalRegion);
+
+  const oversizedNavigation = await post('save-nav', { json: 'x'.repeat(32769) });
+  expect(oversizedNavigation.status()).toBe(413);
+  const oversizedTitle = await post('create-post', { title: 'x'.repeat(256), category: 'news' });
+  expect(oversizedTitle.status()).toBe(413);
+  const oversizedQuery = await page.request.get(`/cms/api.php?action=media-list&q=${'x'.repeat(257)}`);
+  expect(oversizedQuery.status()).toBe(413);
+
+  const mediaList = await page.request.get('/cms/api.php?action=media-list');
+  const existingAsset = (await mediaList.json()).assets[0];
+  const oversizedMetadata = await post('save-media-meta', {
+    rel: existingAsset.rel,
+    alt: 'x'.repeat(4097),
+    caption: ''
+  });
+  expect(oversizedMetadata.status()).toBe(413);
+
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+    'base64'
+  );
+  const oversizedDimensions = Buffer.from(png);
+  oversizedDimensions.writeUInt32BE(4097, 16);
+  const imageResponse = await page.request.post('/cms/api.php?action=upload', {
+    headers: { 'X-CMS-Token': token },
+    multipart: { file: { name: 'wide.png', mimeType: 'image/png', buffer: oversizedDimensions } }
+  });
+  expect(imageResponse.status()).toBe(413);
+  expect((await imageResponse.json()).error).toContain('dimensions');
+
+  const quotaFile = path.join(workingUploads, 'quota-fill.bin');
+  fs.writeFileSync(quotaFile, Buffer.alloc(1));
+  fs.truncateSync(quotaFile, 16 * 1024 * 1024);
+  const beforeQuotaUpload = fs.readdirSync(workingUploads, { recursive: true }).length;
+  const storageResponse = await page.request.post('/cms/api.php?action=upload', {
+    headers: { 'X-CMS-Token': token },
+    multipart: { file: { name: 'quota.png', mimeType: 'image/png', buffer: png } }
+  });
+  expect(storageResponse.status()).toBe(413);
+  expect((await storageResponse.json()).error).toContain('storage quota');
+  expect(fs.readdirSync(workingUploads, { recursive: true })).toHaveLength(beforeQuotaUpload);
+  fs.rmSync(quotaFile);
+
+  const now = new Date();
+  const periodDir = path.join(workingUploads, String(now.getFullYear()), String(now.getMonth() + 1).padStart(2, '0'));
+  fs.mkdirSync(periodDir, { recursive: true });
+  for (let index = 0; index < 40; index += 1) {
+    fs.writeFileSync(path.join(periodDir, `period-${index}.dat`), 'x');
+  }
+  const beforePeriodUpload = fs.readdirSync(periodDir).length;
+  const periodResponse = await page.request.post('/cms/api.php?action=upload', {
+    headers: { 'X-CMS-Token': token },
+    multipart: { file: { name: 'period.png', mimeType: 'image/png', buffer: png } }
+  });
+  expect(periodResponse.status()).toBe(413);
+  expect((await periodResponse.json()).error).toContain('period quota');
+  expect(fs.readdirSync(periodDir)).toHaveLength(beforePeriodUpload);
+  fs.rmSync(periodDir, { recursive: true, force: true });
+
+  for (let index = 0; index < 151; index += 1) {
+    fs.writeFileSync(path.join(workingUploads, `inventory-${String(index).padStart(3, '0')}.png`), png);
+  }
+  const boundedMedia = await page.request.get('/cms/api.php?action=media-list');
+  const boundedMediaJson = await boundedMedia.json();
+  expect(boundedMediaJson.assets).toHaveLength(24);
+  expect(boundedMediaJson.pagination.total).toBe(150);
+  expect(boundedMediaJson.pagination.truncated).toBe(true);
+
+  const postsDir = path.join(workingContent, 'posts');
+  for (let index = 0; index < 151; index += 1) {
+    fs.writeFileSync(path.join(postsDir, `limit-${String(index).padStart(3, '0')}.md`), [
+      '---', `title: Limit ${index}`, 'date: 2026-08-01', 'category: news', 'status: publish', '---', '', 'Body.'
+    ].join('\n'));
+  }
+  fs.rmSync(path.join(workingContent, 'posts-index.json'), { force: true });
+  const boundedInventory = await page.request.get('/cms/api.php?action=content-inventory');
+  expect((await boundedInventory.json()).inventory.posts_total).toBe(150);
 });
 
 test('reusable content and uploads directories ship Apache hardening', () => {

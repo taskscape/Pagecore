@@ -20,7 +20,7 @@ if (defined('CMS_LOADED')) { return; }
 define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
-define('PAGECORE_VERSION', '2.15.1');
+define('PAGECORE_VERSION', '2.16.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $GLOBALS['CMS_CONFIG'] = require $cmsConfigFile;
@@ -386,6 +386,32 @@ function cms_media_url($rel) {
     return '/cms/media-file.php?path=' . rawurlencode(str_replace('\\', '/', $rel));
 }
 
+/** Read a positive integer resource limit and fall back safely on invalid configuration. */
+function cms_limit($key, $default) {
+    $value = (int) cms_cfg($key, $default);
+    return $value > 0 ? $value : (int) $default;
+}
+
+/** Measure a directory without following symlinks, stopping once either quota is exceeded. */
+function cms_directory_usage($root, $byteLimit = PHP_INT_MAX, $fileLimit = PHP_INT_MAX) {
+    $usage = array('bytes' => 0, 'files' => 0, 'exceeded' => false);
+    if (!is_dir($root)) { return $usage; }
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::LEAVES_ONLY
+    );
+    foreach ($it as $file) {
+        if (!$file->isFile() || $file->isLink()) { continue; }
+        $usage['files']++;
+        $usage['bytes'] += max(0, (int) $file->getSize());
+        if ($usage['bytes'] > $byteLimit || $usage['files'] > $fileLimit) {
+            $usage['exceeded'] = true;
+            break;
+        }
+    }
+    return $usage;
+}
+
 function cms_media_kind($rel) {
     return strtolower(pathinfo($rel, PATHINFO_EXTENSION)) === 'pdf' ? 'pdf' : 'image';
 }
@@ -450,16 +476,25 @@ function cms_media_asset($rel) {
     return $asset;
 }
 
-function cms_media_assets($query = '') {
+function cms_media_assets_page($query = '', $page = 1, $perPage = null) {
     $base = cms_cfg('uploads_dir');
-    if (!is_dir($base)) { return array(); }
+    $perPage = max(1, min(cms_limit('max_media_page_size', 50), (int) ($perPage ?: cms_limit('media_page_size', 24))));
+    $page = max(1, (int) $page);
+    if (!is_dir($base)) {
+        return array('items' => array(), 'page' => 1, 'per_page' => $perPage, 'total' => 0, 'pages' => 1, 'truncated' => false);
+    }
     $query = strtolower(trim((string) $query));
     $files = array();
+    $scanLimit = cms_limit('max_inventory_items', 5000);
+    $seen = 0;
+    $truncated = false;
     $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($base, FilesystemIterator::SKIP_DOTS));
     foreach ($it as $file) {
         if (!$file->isFile()) { continue; }
         $rel = cms_media_rel_from_path($file->getPathname());
         if ($rel === null || !cms_media_is_valid_rel($rel)) { continue; }
+        $seen++;
+        if ($seen > $scanLimit) { $truncated = true; break; }
         $asset = cms_media_asset($rel);
         if (!$asset) { continue; }
         $haystack = strtolower($asset['rel'] . ' ' . $asset['meta']['alt'] . ' ' . $asset['meta']['caption']);
@@ -470,7 +505,23 @@ function cms_media_assets($query = '') {
         $c = $b['modified'] - $a['modified'];
         return $c !== 0 ? $c : strcmp($a['rel'], $b['rel']);
     });
-    return $files;
+    $total = count($files);
+    $pages = max(1, (int) ceil($total / $perPage));
+    if ($page > $pages) { $page = $pages; }
+    return array(
+        'items' => array_slice($files, ($page - 1) * $perPage, $perPage),
+        'page' => $page,
+        'per_page' => $perPage,
+        'total' => $total,
+        'pages' => $pages,
+        'truncated' => $truncated,
+    );
+}
+
+/** Compatibility facade for callers that only need the first bounded media page. */
+function cms_media_assets($query = '') {
+    $result = cms_media_assets_page($query, 1);
+    return $result['items'];
 }
 
 function cms_media_is_referenced($url, $rel = '') {
@@ -1081,13 +1132,17 @@ function cms_region_files() {
     $base = cms_cfg('content_dir') . '/pages';
     if (!is_dir($base)) { return array(); }
     $out = array();
+    $limit = cms_limit('max_inventory_items', 5000);
     $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($base, FilesystemIterator::SKIP_DOTS));
     foreach ($it as $file) {
         if (!$file->isFile() || strtolower($file->getExtension()) !== 'md') { continue; }
         $rel = cms_content_rel_path($file->getPathname(), $base);
         if ($rel === null) { continue; }
         $key = preg_replace('~\.md$~i', '', str_replace('\\', '/', $rel));
-        if (cms_region_path($key, true)) { $out[] = $key; }
+        if (cms_region_path($key, true)) {
+            $out[] = $key;
+            if (count($out) >= $limit) { break; }
+        }
     }
     sort($out, SORT_STRING);
     return $out;
@@ -1110,6 +1165,7 @@ function cms_template_region_keys() {
         'test-results' => true,
     );
     $keys = array();
+    $limit = cms_limit('max_inventory_items', 5000);
     $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
     foreach ($it as $file) {
         if (!$file->isFile() || strtolower($file->getExtension()) !== 'php') { continue; }
@@ -1124,6 +1180,7 @@ function cms_template_region_keys() {
         if (preg_match_all('~data-cms-key\s*=\s*[\'"]([a-z0-9-]+(?:/[a-z0-9-]+){0,2})[\'"]~', $src, $m)) {
             foreach ($m[1] as $key) { $keys[$key] = true; }
         }
+        if (count($keys) >= $limit) { break; }
     }
     $out = array_keys($keys);
     sort($out, SORT_STRING);
@@ -1146,7 +1203,8 @@ function cms_content_search_fold($value) {
  * Keeping the page size capped prevents the browser from laying out every post at once.
  */
 function cms_content_inventory($postQuery = '', $postCategory = '', $postPage = 1, $postsPerPage = 100) {
-    $searchPages = cms_cfg('search_pages', array());
+    $inventoryLimit = cms_limit('max_inventory_items', 5000);
+    $searchPages = array_slice(cms_cfg('search_pages', array()), 0, $inventoryLimit, true);
     $pages = array();
     $regionSources = array();
     $regionUrls = array();
@@ -1198,10 +1256,10 @@ function cms_content_inventory($postQuery = '', $postCategory = '', $postPage = 
         if (!$item['exists']) { $missing[] = $item; }
     }
 
-    $allPosts = cms_posts();
+    $allPosts = array_slice(cms_posts(), 0, $inventoryLimit);
     $postQuery = trim((string) $postQuery);
     $postCategory = trim((string) $postCategory);
-    $postsPerPage = max(1, min(100, (int) $postsPerPage));
+    $postsPerPage = max(1, min(cms_limit('max_inventory_page_size', 100), (int) $postsPerPage));
     $postPage = max(1, (int) $postPage);
     $queryNeedle = cms_content_search_fold($postQuery);
     $filteredPosts = array();

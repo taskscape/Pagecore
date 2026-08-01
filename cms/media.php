@@ -10,7 +10,9 @@ if (!cms_is_logged_in()) {
 
 $query = trim(isset($_GET['q']) ? (string) $_GET['q'] : '');
 $picker = isset($_GET['picker']);
-$assets = cms_media_assets($query);
+$page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+$mediaPage = cms_media_assets_page($query, $page);
+$assets = $mediaPage['items'];
 
 function cms_media_e($value) {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
@@ -109,6 +111,7 @@ function cms_media_bytes($bytes) {
       padding: 28px; border: 1px dashed #cfc8b9; background: #fff; color: #71675d;
       text-align: center;
     }
+    .pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 18px; }
     @media (max-width: 700px) {
       .top { display: block; }
       .nav { margin-top: 14px; }
@@ -211,6 +214,18 @@ function cms_media_bytes($bytes) {
           </article>
         <?php endforeach; ?>
       </section>
+      <?php if ($mediaPage['pages'] > 1): ?>
+        <nav class="pagination" aria-label="Media pages">
+          <?php if ($mediaPage['page'] > 1): ?>
+            <a class="button" href="?q=<?= rawurlencode($query) ?>&amp;page=<?= $mediaPage['page'] - 1 ?><?= $picker ? '&amp;picker=1' : '' ?>">Previous</a>
+          <?php endif; ?>
+          <span>Page <?= (int) $mediaPage['page'] ?> of <?= (int) $mediaPage['pages'] ?></span>
+          <?php if ($mediaPage['page'] < $mediaPage['pages']): ?>
+            <a class="button" href="?q=<?= rawurlencode($query) ?>&amp;page=<?= $mediaPage['page'] + 1 ?><?= $picker ? '&amp;picker=1' : '' ?>">Next</a>
+          <?php endif; ?>
+        </nav>
+      <?php endif; ?>
+      <?php if ($mediaPage['truncated']): ?><p class="status">Results were capped by the configured inventory limit.</p><?php endif; ?>
     <?php endif; ?>
     </div>
   </main>

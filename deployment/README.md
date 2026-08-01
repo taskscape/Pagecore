@@ -34,3 +34,9 @@ PDFs are attachments and raster images may render inline. Do not set
 `PAGECORE_DEVELOPMENT=1` in production. That opt-in exists only for the bundled
 sample and private local migration fixture, whose routers enforce explicit
 HTTP denials.
+
+Keep the fronting server's body limit aligned with `max_request_bytes`. The
+bundled Apache `.htaccess` uses `LimitRequestBody 8912896`; an equivalent Nginx
+deployment should set `client_max_body_size 8704k`. Pagecore repeats the limit
+in the API and independently caps content, navigation, metadata, image
+dimensions, aggregate storage, upload frequency, and inventory/page sizes.

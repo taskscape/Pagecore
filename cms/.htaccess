@@ -3,3 +3,6 @@
     Require all denied
 </FilesMatch>
 RedirectMatch 404 ^/cms/(lib|tools)/
+
+# Match the default application request cap (8 MiB upload plus multipart overhead).
+LimitRequestBody 8912896

@@ -60,6 +60,14 @@ function cms_json($data, $code = 200) {
 }
 function cms_fail($msg, $code = 400) { cms_json(array('ok' => false, 'error' => $msg), $code); }
 
+/** Reject oversized scalar input before parsing, rendering, or writing it. */
+function cms_require_size($value, $configKey, $default, $label) {
+    $limit = cms_limit($configKey, $default);
+    if (strlen((string) $value) > $limit) {
+        cms_fail($label . ' exceeds the configured limit.', 413);
+    }
+}
+
 /** Resolve an editor key to array(kind, path, slug|null). */
 function cms_resolve_key($key, $mustExist) {
     if (strncmp($key, 'post:', 5) === 0) {
@@ -107,6 +115,10 @@ function cms_post_meta_from_request(array $meta, $strict) {
     $exc   = trim(isset($_POST['excerpt']) ? (string) $_POST['excerpt'] : (isset($meta['excerpt']) ? $meta['excerpt'] : ''));
     $img   = trim(isset($_POST['image']) ? (string) $_POST['image'] : (isset($meta['image']) ? $meta['image'] : ''));
     $tags  = trim(isset($_POST['tags']) ? (string) $_POST['tags'] : (isset($meta['tags']) ? $meta['tags'] : ''));
+    cms_require_size($title, 'max_title_bytes', 255, 'Title');
+    foreach (array($date, $cat, $exc, $img, $tags) as $value) {
+        cms_require_size($value, 'max_metadata_bytes', 4096, 'Post metadata');
+    }
     cms_utf8_or_fail($title, $exc);
     cms_utf8_or_fail($tags, $tags);
     if ($strict) {
@@ -223,12 +235,19 @@ if (isset($actionMethods[$action]) && $_SERVER['REQUEST_METHOD'] !== $actionMeth
     cms_fail('Method not allowed.', 405);
 }
 
+$contentLength = isset($_SERVER['CONTENT_LENGTH']) ? (int) $_SERVER['CONTENT_LENGTH'] : 0;
+$requestLimit = cms_limit('max_request_bytes', (cms_limit('max_upload_mb', 8) * 1024 * 1024) + 524288);
+if ($contentLength > $requestLimit) {
+    cms_fail('Request body exceeds the configured limit.', 413);
+}
+
 cms_require_auth();
 
 switch ($action) {
 
 case 'get':
     $key = isset($_GET['key']) ? $_GET['key'] : '';
+    cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
     $t = cms_resolve_key($key, false);
     if (!$t) { cms_fail('Invalid content identifier.'); }
     list($kind, $path, $slug) = $t;
@@ -248,6 +267,7 @@ case 'get':
 
 case 'revisions':
     $key = isset($_GET['key']) ? $_GET['key'] : '';
+    cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
     $t = cms_resolve_key($key, false);
     if (!$t) { cms_fail('Invalid content identifier.'); }
     list($kind, , $slug) = $t;
@@ -256,14 +276,19 @@ case 'revisions':
 
 case 'media-list':
     $query = isset($_GET['q']) ? (string) $_GET['q'] : '';
+    $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+    cms_require_size($query, 'max_query_bytes', 256, 'Search query');
     cms_utf8_or_fail($query);
-    cms_json(array('ok' => true, 'assets' => cms_media_assets($query)));
+    $media = cms_media_assets_page($query, $page);
+    cms_json(array('ok' => true, 'assets' => $media['items'], 'pagination' => array_diff_key($media, array('items' => true))));
 
 case 'content-inventory':
     $query = isset($_GET['q']) ? (string) $_GET['q'] : '';
     $category = isset($_GET['category']) ? (string) $_GET['category'] : '';
     $page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
     // The API accepts the same filters as the inventory screen so callers never receive thousands of posts by default.
+    cms_require_size($query, 'max_query_bytes', 256, 'Search query');
+    cms_require_size($category, 'max_identifier_bytes', 512, 'Category');
     cms_utf8_or_fail($query, $category);
     cms_json(array('ok' => true, 'inventory' => cms_content_inventory($query, $category, $page, 100)));
 
@@ -272,6 +297,7 @@ case 'version':
 
 case 'preview-draft':
     $key = isset($_GET['key']) ? $_GET['key'] : '';
+    cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
     $t = cms_resolve_key($key, false);
     if (!$t) { cms_fail('Invalid content identifier.'); }
     list($kind, , $slug) = $t;
@@ -282,11 +308,14 @@ case 'preview-draft':
 
 case 'preview':
     $md = isset($_POST['markdown']) ? (string) $_POST['markdown'] : '';
+    cms_require_size($md, 'max_content_bytes', 1048576, 'Markdown');
     cms_json(array('ok' => true, 'html' => cms_render_markdown($md)));
 
 case 'save':
     $key = isset($_POST['key']) ? $_POST['key'] : '';
     $md  = isset($_POST['markdown']) ? (string) $_POST['markdown'] : '';
+    cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
+    cms_require_size($md, 'max_content_bytes', 1048576, 'Markdown');
     $md  = str_replace("\r\n", "\n", $md);
     $t = cms_resolve_key($key, false);
     if (!$t) { cms_fail('Invalid content identifier.'); }
@@ -311,6 +340,8 @@ case 'save':
 case 'save-draft':
     $key = isset($_POST['key']) ? $_POST['key'] : '';
     $md  = isset($_POST['markdown']) ? (string) $_POST['markdown'] : '';
+    cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
+    cms_require_size($md, 'max_content_bytes', 1048576, 'Markdown');
     $md  = str_replace("\r\n", "\n", $md);
     $t = cms_resolve_key($key, false);
     if (!$t) { cms_fail('Invalid content identifier.'); }
@@ -334,6 +365,8 @@ case 'save-draft':
 case 'publish':
     $key = isset($_POST['key']) ? $_POST['key'] : '';
     $md  = isset($_POST['markdown']) ? (string) $_POST['markdown'] : '';
+    cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
+    cms_require_size($md, 'max_content_bytes', 1048576, 'Markdown');
     $t = cms_resolve_key($key, false);
     if (!$t) { cms_fail('Invalid content identifier.'); }
     list($kind, $path, $slug) = $t;
@@ -348,6 +381,7 @@ case 'publish':
 
 case 'discard-draft':
     $key = isset($_POST['key']) ? $_POST['key'] : '';
+    cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
     $t = cms_resolve_key($key, false);
     if (!$t) { cms_fail('Invalid content identifier.'); }
     list($kind, $path, $slug) = $t;
@@ -360,6 +394,8 @@ case 'discard-draft':
 case 'restore':
     $key = isset($_POST['key']) ? $_POST['key'] : '';
     $revision = isset($_POST['revision']) ? (string) $_POST['revision'] : '';
+    cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
+    cms_require_size($revision, 'max_identifier_bytes', 512, 'Revision identifier');
     $t = cms_resolve_key($key, false);
     if (!$t) { cms_fail('Invalid content identifier.'); }
     list($kind, $path, $slug) = $t;
@@ -380,6 +416,10 @@ case 'restore':
 
 case 'save-post-meta':
     $slug = isset($_POST['slug']) ? $_POST['slug'] : '';
+    cms_require_size($slug, 'max_identifier_bytes', 512, 'Post identifier');
+    foreach (array('title', 'date', 'category', 'excerpt', 'image', 'tags', 'status') as $field) {
+        cms_require_size(isset($_POST[$field]) ? (string) $_POST[$field] : '', 'max_metadata_bytes', 4096, 'Post metadata');
+    }
     $path = cms_post_path($slug, true);
     if (!$path) { cms_fail('Post not found.', 404); }
     list($meta, $body) = cms_parse_front_matter(file_get_contents($path));
@@ -394,6 +434,8 @@ case 'save-post-meta':
 case 'create-post':
     $title = trim(isset($_POST['title']) ? (string) $_POST['title'] : '');
     $cat   = trim(isset($_POST['category']) ? (string) $_POST['category'] : '');
+    cms_require_size($title, 'max_title_bytes', 255, 'Title');
+    cms_require_size($cat, 'max_identifier_bytes', 512, 'Category');
     cms_utf8_or_fail($title);
     if ($title === '') { cms_fail('Title is required.'); }
     $cats = cms_cfg('categories');
@@ -419,6 +461,7 @@ case 'create-post':
 
 case 'delete-post':
     $slug = trim(isset($_POST['slug']) ? (string) $_POST['slug'] : '');
+    cms_require_size($slug, 'max_identifier_bytes', 512, 'Post identifier');
     cms_utf8_or_fail($slug);
     $path = cms_post_path($slug, true);
     if (!$path) { cms_fail('Post not found.', 404); }
@@ -432,6 +475,7 @@ case 'delete-post':
 
 case 'save-nav':
     $raw = isset($_POST['json']) ? (string) $_POST['json'] : '';
+    cms_require_size($raw, 'max_nav_bytes', 65536, 'Navigation JSON');
     cms_utf8_or_fail($raw);
     $error = null;
     if (!cms_write_nav_json($raw, $error)) {
@@ -442,6 +486,8 @@ case 'save-nav':
 case 'create-region':
     $key = trim(isset($_POST['key']) ? (string) $_POST['key'] : '');
     $markdown = isset($_POST['markdown']) ? (string) $_POST['markdown'] : '';
+    cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
+    cms_require_size($markdown, 'max_content_bytes', 1048576, 'Markdown');
     cms_utf8_or_fail($key, $markdown);
     // Validate key format strictly (page/region pattern)
     if (!preg_match('~^[a-z0-9-]+(/[a-z0-9-]+){0,2}$~', $key)) {
@@ -477,6 +523,9 @@ case 'save-media-meta':
     $rel = isset($_POST['rel']) ? (string) $_POST['rel'] : '';
     $alt = trim(isset($_POST['alt']) ? (string) $_POST['alt'] : '');
     $caption = trim(isset($_POST['caption']) ? (string) $_POST['caption'] : '');
+    cms_require_size($rel, 'max_identifier_bytes', 512, 'Media identifier');
+    cms_require_size($alt, 'max_metadata_bytes', 4096, 'Media metadata');
+    cms_require_size($caption, 'max_metadata_bytes', 4096, 'Media metadata');
     cms_utf8_or_fail($rel, $alt, $caption);
     // Validate relative path format
     if (!preg_match('~^[A-Za-z0-9._/-]+$~', $rel)) {
@@ -504,6 +553,7 @@ case 'save-media-meta':
 
 case 'delete-media':
     $rel = isset($_POST['rel']) ? (string) $_POST['rel'] : '';
+    cms_require_size($rel, 'max_identifier_bytes', 512, 'Media identifier');
     cms_utf8_or_fail($rel);
     $asset = cms_media_asset($rel);
     if (!$asset) { cms_fail('File not found.', 404); }
@@ -526,7 +576,7 @@ case 'upload':
     // Read the configured cap once so regular and featured uploads enforce the same limit.
     $maxUploadMb = max(1, (int) cms_cfg('max_upload_mb', 8));
     $maxBytes = $maxUploadMb * 1024 * 1024;
-    if ($f['size'] > $maxBytes) { cms_fail('File exceeds the ' . $maxUploadMb . ' MB limit.'); }
+    if ($f['size'] > $maxBytes) { cms_fail('File exceeds the ' . $maxUploadMb . ' MB limit.', 413); }
 
     $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
     // The featured-image scope prevents non-JPEG/PNG files from becoming featured images.
@@ -553,8 +603,17 @@ case 'upload':
         cms_fail('File contents do not match its extension.');
     }
     $isImage = ($ext !== 'pdf');
-    if ($isImage && !getimagesize($f['tmp_name'])) {
-        cms_fail('Invalid image file.');
+    if ($isImage) {
+        $dimensions = getimagesize($f['tmp_name']);
+        if (!$dimensions) { cms_fail('Invalid image file.'); }
+        $width = (int) $dimensions[0];
+        $height = (int) $dimensions[1];
+        $maxWidth = cms_limit('max_image_width', 8000);
+        $maxHeight = cms_limit('max_image_height', 8000);
+        $maxPixels = cms_limit('max_image_pixels', 40000000);
+        if ($width > $maxWidth || $height > $maxHeight || $width <= 0 || $height <= 0 || $width > intdiv($maxPixels, $height)) {
+            cms_fail('Image dimensions exceed the configured limit.', 413);
+        }
     }
     $base = pathinfo($f['name'], PATHINFO_FILENAME);
     $base = strtolower(preg_replace('~[^A-Za-z0-9-]+~', '-', $base));
@@ -562,15 +621,34 @@ case 'upload':
     if ($base === '') { $base = 'file'; }
     $sub = date('Y/m');
     $dir = cms_cfg('uploads_dir') . '/' . $sub;
+    $storageLimit = cms_limit('max_upload_storage_bytes', 268435456);
+    $fileLimit = cms_limit('max_upload_files', 2000);
+    $usage = cms_directory_usage(cms_cfg('uploads_dir'), $storageLimit, $fileLimit);
+    if ($usage['exceeded'] || $usage['bytes'] + (int) $f['size'] + 4096 > $storageLimit || $usage['files'] + 2 > $fileLimit) {
+        cms_fail('Upload storage quota has been reached.', 413);
+    }
+    $periodLimit = cms_limit('max_uploads_per_month', 200);
+    $periodUsage = cms_directory_usage($dir, PHP_INT_MAX, $periodLimit * 2);
+    if ($periodUsage['files'] + 2 > $periodLimit * 2) {
+        cms_fail('Upload period quota has been reached.', 413);
+    }
     if (!is_dir($dir) && !mkdir($dir, 0775, true)) { cms_fail('Could not create directory.', 500); }
     $name = $base . '-' . bin2hex(random_bytes(3)) . '.' . $ext;
     if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $name)) {
         cms_fail('Could not save uploaded file.', 500);
     }
     $rel = $sub . '/' . $name;
-    cms_media_write_meta($dir . '/' . $name, array('alt' => $base, 'caption' => ''));
+    $savedPath = $dir . '/' . $name;
+    if (!cms_media_write_meta($savedPath, array('alt' => $base, 'caption' => ''))) {
+        @unlink($savedPath);
+        cms_fail('Could not save file metadata.', 500);
+    }
     $asset = cms_media_asset($rel);
-    if (!$asset) { cms_fail('Could not read saved file.', 500); }
+    if (!$asset) {
+        @unlink($savedPath);
+        @unlink(cms_media_meta_path($savedPath));
+        cms_fail('Could not read saved file.', 500);
+    }
     cms_json(array(
         'ok' => true,
         'url' => $asset['url'],
