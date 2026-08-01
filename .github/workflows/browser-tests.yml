@@ -29,6 +29,7 @@ jobs:
           npm run test:api-registry
           npm run test:input-validation
           npm run test:path-policy
+          npm run test:front-matter
           npm run test:e2e
 
   migration-browser-suite:

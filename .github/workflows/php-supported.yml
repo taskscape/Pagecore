@@ -50,6 +50,9 @@ jobs:
       - run: npm run test:path-policy
         env:
           PAGECORE_PHP_EXE: php
+      - run: npm run test:front-matter
+        env:
+          PAGECORE_PHP_EXE: php
       - name: Lint PHP
         run: find cms sample-site -type f -name '*.php' -print0 | xargs -0 -n1 php -l
       - run: npx playwright install --with-deps chromium

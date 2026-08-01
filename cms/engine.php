@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.25.0');
+define('PAGECORE_VERSION', '2.26.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
@@ -29,6 +29,7 @@ require_once __DIR__ . '/config-schema.php';
 require_once __DIR__ . '/modules/PathPolicy.php';
 require_once __DIR__ . '/modules/SessionContext.php';
 require_once __DIR__ . '/modules/ContentPolicy.php';
+require_once __DIR__ . '/modules/FrontMatter.php';
 list($cmsConfig, $cmsConfigErrors) = cms_validate_config(require $cmsConfigFile, !$cmsDevelopment);
 if ($cmsConfigErrors) {
     error_log('Pagecore configuration invalid: ' . implode('; ', $cmsConfigErrors));
@@ -570,31 +571,20 @@ function cms_media_is_referenced($url, $rel = '') {
 
 /* ------------------------------------------------------------ front matter */
 /** Parse "---\nkey: value\n---\nbody" into array(meta, body). */
+function cms_parse_front_matter_detailed($raw) {
+    return PagecoreFrontMatter::parse($raw, array_keys(cms_cfg('categories', array())));
+}
+
 function cms_parse_front_matter($raw) {
-    $meta = array();
-    $body = $raw;
-    if (strncmp($raw, "---", 3) === 0) {
-        $end = strpos($raw, "\n---", 3);
-        if ($end !== false) {
-            $head = substr($raw, 3, $end - 3);
-            $body = ltrim(substr($raw, $end + 4), "\r\n");
-            foreach (preg_split('~\r?\n~', $head) as $line) {
-                $line = trim($line);
-                if ($line === '' || strpos($line, ':') === false) { continue; }
-                list($k, $v) = explode(':', $line, 2);
-                $meta[trim($k)] = trim($v);
-            }
-        }
+    $parsed = cms_parse_front_matter_detailed($raw);
+    if ($parsed['diagnostics']) {
+        error_log('Pagecore front matter: ' . implode(' ', $parsed['diagnostics']));
     }
-    return array($meta, $body);
+    return array($parsed['meta'], $parsed['body']);
 }
 
 function cms_build_front_matter(array $meta, $body) {
-    $out = "---\n";
-    foreach ($meta as $k => $v) {
-        $out .= $k . ': ' . str_replace(array("\r", "\n"), ' ', (string) $v) . "\n";
-    }
-    return $out . "---\n" . $body;
+    return PagecoreFrontMatter::build($meta, $body);
 }
 
 /* -------------------------------------------------------------- rendering */
@@ -776,7 +766,13 @@ function cms_posts_from_disk() {
     $cats = cms_cfg('categories');
     foreach (glob(cms_cfg('content_dir') . '/posts/*.md') as $file) {
         $slug = basename($file, '.md');
-        list($meta, $body) = cms_parse_front_matter(file_get_contents($file));
+        $parsed = cms_parse_front_matter_detailed(file_get_contents($file));
+        if ($parsed['diagnostics']) {
+            error_log('Pagecore skipped malformed post metadata for ' . basename($file));
+            continue;
+        }
+        $meta = $parsed['meta'];
+        $body = $parsed['body'];
         if (!cms_post_status_is_public(isset($meta['status']) ? $meta['status'] : 'publish')) { continue; }
         $cat = isset($meta['category']) ? $meta['category'] : '';
         $list[] = array(
@@ -956,7 +952,10 @@ function cms_post_status_is_public($status) {
 function cms_post($slug, $includeNonPublic = false) {
     $path = cms_post_path($slug, true);
     if (!$path) { return null; }
-    list($meta, $body) = cms_parse_front_matter(file_get_contents($path));
+    $parsed = cms_parse_front_matter_detailed(file_get_contents($path));
+    if ($parsed['diagnostics']) { error_log('Pagecore rejected malformed post metadata for ' . basename($path)); return null; }
+    $meta = $parsed['meta'];
+    $body = $parsed['body'];
     $status = isset($meta['status']) ? strtolower(trim($meta['status'])) : 'publish';
     if (!$includeNonPublic && !cms_post_status_is_public($status)) { return null; }
     $cats = cms_cfg('categories');
