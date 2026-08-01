@@ -189,6 +189,46 @@ test('CMS responses enforce security headers without inline-policy exceptions', 
   expect(violations).toEqual([]);
 });
 
+test('API action table rejects every unintended method and tokenless mutation', async ({ page }) => {
+  await login(page);
+  const token = await page.evaluate(() => window.CMS_CONFIG && window.CMS_CONFIG.token);
+  const reads = ['get', 'revisions', 'media-list', 'content-inventory', 'version', 'preview-draft'];
+  const mutations = [
+    'preview', 'save', 'save-draft', 'publish', 'discard-draft', 'restore', 'save-post-meta',
+    'create-post', 'delete-post', 'save-nav', 'create-region', 'save-media-meta', 'delete-media',
+    'upload', 'logout'
+  ];
+
+  for (const action of reads) {
+    const response = await page.request.post(`/cms/api.php?action=${action}`, {
+      headers: { 'X-CMS-Token': token }
+    });
+    expect(response.status(), `${action} must reject POST`).toBe(405);
+    expect(response.headers().allow).toBe('GET');
+    const headResponse = await page.request.head(`/cms/api.php?action=${action}`);
+    expect(headResponse.status(), `${action} must reject HEAD`).toBe(405);
+    expect(headResponse.headers().allow).toBe('GET');
+  }
+  for (const action of mutations) {
+    const wrongMethod = await page.request.get(`/cms/api.php?action=${action}`);
+    expect(wrongMethod.status(), `${action} must reject GET`).toBe(405);
+    expect(wrongMethod.headers().allow).toBe('POST');
+    const wrongHead = await page.request.head(`/cms/api.php?action=${action}`);
+    expect(wrongHead.status(), `${action} must reject HEAD`).toBe(405);
+    expect(wrongHead.headers().allow).toBe('POST');
+
+    const missingToken = await page.request.post(`/cms/api.php?action=${action}`);
+    expect(missingToken.status(), `${action} must require a token`).toBe(403);
+    const invalidToken = await page.request.post(`/cms/api.php?action=${action}`, {
+      headers: { 'X-CMS-Token': 'invalid-token' }
+    });
+    expect(invalidToken.status(), `${action} must reject an invalid token`).toBe(403);
+  }
+
+  const stillAuthenticated = await page.request.get('/cms/api.php?action=version');
+  expect(stillAuthenticated.ok()).toBeTruthy();
+});
+
 test('social summary falls back to post body when no excerpt is authored', async ({ page }) => {
   const postPath = path.join(workingContent, 'posts', 'summer-maintenance.md');
   const withoutExcerpt = fs.readFileSync(postPath, 'utf8').replace(/^excerpt:.*\r?\n/m, '');
@@ -284,14 +324,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.15.0');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.15.1');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.15.0');
+  expect((await version.json()).version).toBe('2.15.1');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.15.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.15.1')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {

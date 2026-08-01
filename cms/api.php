@@ -194,9 +194,36 @@ function cms_preview_page($key, $kind, array $payload) {
     exit;
 }
 
-cms_require_auth();
-
 $action = isset($_GET['action']) ? $_GET['action'] : '';
+$actionMethods = array(
+    'get' => 'GET',
+    'revisions' => 'GET',
+    'media-list' => 'GET',
+    'content-inventory' => 'GET',
+    'version' => 'GET',
+    'preview-draft' => 'GET',
+    'preview' => 'POST',
+    'save' => 'POST',
+    'save-draft' => 'POST',
+    'publish' => 'POST',
+    'discard-draft' => 'POST',
+    'restore' => 'POST',
+    'save-post-meta' => 'POST',
+    'create-post' => 'POST',
+    'delete-post' => 'POST',
+    'save-nav' => 'POST',
+    'create-region' => 'POST',
+    'save-media-meta' => 'POST',
+    'delete-media' => 'POST',
+    'upload' => 'POST',
+    'logout' => 'POST',
+);
+if (isset($actionMethods[$action]) && $_SERVER['REQUEST_METHOD'] !== $actionMethods[$action]) {
+    header('Allow: ' . $actionMethods[$action]);
+    cms_fail('Method not allowed.', 405);
+}
+
+cms_require_auth();
 
 switch ($action) {
 

@@ -129,12 +129,14 @@ This was a source review with targeted local checks, not a production penetratio
   - Resolution: 2026-08-01 — Added a repository-wide response-header policy with per-request cryptographic nonces for the remaining server-generated CMS style/configuration/application blocks. The enforced CSP uses self-scoped scripts/connections, explicit font/image sources, no objects or frames, `frame-ancestors 'none'`, and disabled script/style attributes without `unsafe-inline` or `unsafe-eval`. Added `nosniff`, `DENY` framing fallback, strict-origin referrers, and a restrictive Permissions-Policy; synchronized the local Zagozda runtime.
   - Evidence: A browser test asserted the complete header contract, absence of unsafe CSP exceptions, authenticated content/media navigation, and zero CSP refusal messages; it passed 1/1 on port 18797. Existing editor, preview, inventory, media, upload, and login workflows exercise every nonced block. PHP lint and `git diff --check` passed, and an isolated staged checkout passed the full base suite 20/20 on port 18798.
 
-- [ ] **SEC-11 — Enforce the declared HTTP method for every API action.**
+- [x] **SEC-11 — Enforce the declared HTTP method for every API action.**
   - Severity: Medium-low; confirmed method confusion and logout CSRF.
   - Explanation: The authentication guard requires CSRF for non-GET requests, but the switch does not reject a wrong method. Most mutation handlers happen to read only `$_POST`, limiting impact, while `?action=logout` works via GET and can be triggered cross-site. Future actions could accidentally become GET mutations.
   - Justification: [`cms/auth.php`](cms/auth.php) lines 68-83 makes CSRF conditional on the request method. [`cms/api.php`](cms/api.php) lines 202-204 dispatches only by action; lines 593-596 log out without a method check.
   - Recommendation: Define an action table with handler and allowed method, return `405` plus `Allow` on mismatch, require POST+CSRF for logout, and add tests for every action/method pair. Consider an Origin check as defense in depth for state changes.
   - Done when: every mutation rejects GET/HEAD and missing/invalid tokens, read actions reject unintended methods, and cross-site logout no longer succeeds.
+  - Resolution: 2026-08-01 — Added an explicit method contract for every API action before authentication and dispatch. Method mismatches now return `405` with the action's `Allow` header, logout is POST-only, and every state-changing action continues through the existing CSRF token check. Synchronized the local Zagozda runtime.
+  - Evidence: PHP lint passed for both API copies. A browser action-matrix test exercised all six read actions and fifteen mutations with GET, HEAD, POST, missing tokens, and invalid tokens; it passed 1/1 on port 18799 and confirmed that rejected cross-site logout attempts preserve the authenticated session. The isolated staged checkout passed the full base suite 21/21 on port 18800.
 
 - [ ] **SEC-12 — Add application-level request, media-dimension, storage, and inventory limits.**
   - Severity: Medium; authenticated/session-compromise availability risk.
