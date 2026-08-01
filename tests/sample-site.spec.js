@@ -328,6 +328,34 @@ test('API action table rejects every unintended method and tokenless mutation', 
   expect(stillAuthenticated.ok()).toBeTruthy();
 });
 
+test('API rejects non-scalar, malformed, invalid UTF-8, and impossible-date input without warnings', async ({ page }) => {
+  await login(page);
+  const token = await page.evaluate(() => window.CMS_CONFIG && window.CMS_CONFIG.token);
+  const arrayAction = await page.request.get('/cms/api.php?action[]=version');
+  expect(arrayAction.status()).toBe(400);
+  expect((await arrayAction.json()).error).toContain('scalar');
+
+  const invalidPage = await page.request.get('/cms/api.php?action=media-list&page=1.5');
+  expect(invalidPage.status()).toBe(400);
+  expect((await invalidPage.json()).error).toContain('integer');
+
+  const invalidUtf8 = await page.request.post('/cms/api.php?action=save', {
+    headers: { 'X-CMS-Token': token, 'Content-Type': 'application/x-www-form-urlencoded' },
+    data: 'key=home%2Fhero&markdown=%FF&revision=missing'
+  });
+  expect(invalidUtf8.status()).toBe(400);
+  expect((await invalidUtf8.json()).error).toContain('UTF-8');
+
+  const post = await page.request.get('/cms/api.php?action=get&key=post%3Alaunch-notes');
+  const payload = await post.json();
+  const invalidDate = await page.request.post('/cms/api.php?action=save-post-meta', {
+    headers: { 'X-CMS-Token': token },
+    form: { slug: 'launch-notes', revision: payload.revision, title: payload.meta.title, date: '2026-02-30', category: payload.meta.category }
+  });
+  expect(invalidDate.status()).toBe(400);
+  expect((await invalidDate.json()).error).toContain('real calendar date');
+});
+
 test('social summary falls back to post body when no excerpt is authored', async ({ page }) => {
   const postPath = path.join(workingContent, 'posts', 'summer-maintenance.md');
   const withoutExcerpt = fs.readFileSync(postPath, 'utf8').replace(/^excerpt:.*\r?\n/m, '');
@@ -423,14 +451,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.23.0');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.24.0');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.23.0');
+  expect((await version.json()).version).toBe('2.24.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.23.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.24.0')).toBeVisible();
 });
 
 test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {

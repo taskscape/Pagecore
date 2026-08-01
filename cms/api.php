@@ -30,6 +30,7 @@
 require __DIR__ . '/engine.php';
 require __DIR__ . '/auth.php';
 require __DIR__ . '/api-registry.php';
+require __DIR__ . '/modules/Input.php';
 
 header('Cache-Control: no-store');
 
@@ -60,7 +61,8 @@ function cms_json($data, $code = 200) {
     exit;
 }
 function cms_fail($msg, $code = 400) {
-    $auditAction = isset($_GET['action']) ? preg_replace('/[^a-z0-9-]/', '_', strtolower((string) $_GET['action'])) : 'unknown';
+    $rawAction = isset($_GET['action']) && is_scalar($_GET['action']) ? (string) $_GET['action'] : 'invalid';
+    $auditAction = preg_replace('/[^a-z0-9-]/', '_', strtolower($rawAction));
     cms_audit_event('api.' . $auditAction, 'failure', array('status' => $code, 'reason' => 'request_rejected'));
     cms_json(array('ok' => false, 'error' => $msg), $code);
 }
@@ -71,6 +73,11 @@ function cms_require_size($value, $configKey, $default, $label) {
     if (strlen((string) $value) > $limit) {
         cms_fail($label . ' exceeds the configured limit.', 413);
     }
+}
+
+function cms_request_integer(array $source, $key, $default, $minimum = null, $maximum = null) {
+    try { return PagecoreInput::integer($source, $key, $default, $minimum, $maximum); }
+    catch (InvalidArgumentException $error) { cms_fail($error->getMessage(), 400); }
 }
 
 /** Resolve an editor key to array(kind, path, slug|null). */
@@ -165,13 +172,11 @@ function cms_post_meta_from_request(array $meta, $strict) {
     foreach (array($date, $cat, $exc, $img, $tags) as $value) {
         cms_require_size($value, 'max_metadata_bytes', 4096, 'Post metadata');
     }
-    cms_utf8_or_fail($title, $exc);
-    cms_utf8_or_fail($tags, $tags);
+    cms_utf8_or_fail($title, $date, $cat, $exc, $img, $tags);
     if ($strict) {
         if ($title === '') { cms_fail('Title is required.'); }
-        if (!preg_match('~^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?$~', $date)) {
-            cms_fail('Date must use YYYY-MM-DD format (with optional time).');
-        }
+        try { PagecoreInput::date($date); }
+        catch (InvalidArgumentException $error) { cms_fail($error->getMessage()); }
         $cats = cms_cfg('categories');
         if (!isset($cats[$cat])) { cms_fail('Unknown category.'); }
     }
@@ -253,7 +258,10 @@ function cms_preview_page($key, $kind, array $payload) {
     exit;
 }
 
-$action = isset($_GET['action']) ? $_GET['action'] : '';
+$scalarError = PagecoreInput::scalarMapError($_GET);
+if ($scalarError === null) { $scalarError = PagecoreInput::scalarMapError($_POST); }
+if ($scalarError !== null) { cms_fail($scalarError, 400); }
+$action = isset($_GET['action']) ? (string) $_GET['action'] : '';
 $actionRegistry = pagecore_api_registry();
 if (isset($actionRegistry[$action]) && $_SERVER['REQUEST_METHOD'] !== $actionRegistry[$action]['method']) {
     header('Allow: ' . $actionRegistry[$action]['method']);
@@ -303,7 +311,7 @@ $actionHandlers = array(
     },
     'media-list' => function () {
     $query = isset($_GET['q']) ? (string) $_GET['q'] : '';
-    $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+    $page = cms_request_integer($_GET, 'page', 1, 1);
     cms_require_size($query, 'max_query_bytes', 256, 'Search query');
     cms_utf8_or_fail($query);
     $media = cms_media_assets_page($query, $page);
@@ -313,7 +321,7 @@ $actionHandlers = array(
     'content-inventory' => function () {
     $query = isset($_GET['q']) ? (string) $_GET['q'] : '';
     $category = isset($_GET['category']) ? (string) $_GET['category'] : '';
-    $page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
+    $page = cms_request_integer($_GET, 'page', 1, 1);
     // The API accepts the same filters as the inventory screen so callers never receive thousands of posts by default.
     cms_require_size($query, 'max_query_bytes', 256, 'Search query');
     cms_require_size($category, 'max_identifier_bytes', 512, 'Category');
@@ -561,22 +569,8 @@ $actionHandlers = array(
     cms_require_size($key, 'max_identifier_bytes', 512, 'Content identifier');
     cms_require_size($markdown, 'max_content_bytes', 1048576, 'Markdown');
     cms_utf8_or_fail($key, $markdown);
-    // Validate key format strictly (page/region pattern)
-    if (!preg_match('~^[a-z0-9-]+(/[a-z0-9-]+){0,2}$~', $key)) {
-        cms_fail('Invalid content identifier format.');
-    }
-    // Check for directory traversal in key
-    if (strpos($key, '..') !== false || strpos($key, "/../") !== false) {
-        cms_fail('Invalid content identifier.');
-    }
     $path = cms_region_path($key, false);
     if (!$path) { cms_fail('Invalid content identifier.'); }
-    // Ensure the resolved path is within the content directory
-    $realPath = realpath(dirname($path));
-    $contentBase = realpath(cms_cfg('content_dir'));
-    if ($realPath === false || strpos($realPath, $contentBase) !== 0) {
-        cms_fail('Access denied.');
-    }
     // Sanitize markdown content - escape any potential HTML injection
     if ($markdown === '') {
         $markdown = "# " . str_replace('-', ' ', basename($key)) . "\n\nNew content.\n";
@@ -605,22 +599,8 @@ $actionHandlers = array(
     cms_require_size($alt, 'max_metadata_bytes', 4096, 'Media metadata');
     cms_require_size($caption, 'max_metadata_bytes', 4096, 'Media metadata');
     cms_utf8_or_fail($rel, $alt, $caption);
-    // Validate relative path format
-    if (!preg_match('~^[A-Za-z0-9._/-]+$~', $rel)) {
-        cms_fail('Invalid media identifier format.');
-    }
-    // Reject path traversal attempts
-    if (strpos($rel, '..') !== false || strpos($rel, '/../') !== false || strpos($rel, './') === 0) {
-        cms_fail('Invalid media identifier.');
-    }
     $path = cms_media_path($rel, true);
     if (!$path) { cms_fail('File not found.', 404); }
-    // Verify the file is within the uploads directory
-    $uploadsBase = realpath(cms_cfg('uploads_dir'));
-    $fileRealPath = realpath($path);
-    if ($fileRealPath === false || strpos($fileRealPath, $uploadsBase) !== 0) {
-        cms_fail('Access denied.');
-    }
     $asset = cms_mutate_locked('media:' . $rel, function () use ($path, $rel, $alt, $caption) {
         cms_require_revision(cms_media_meta_path($path));
         $alt = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $alt);

@@ -27,6 +27,7 @@ jobs:
           npm run test:config-schema
           npm run test:modules
           npm run test:api-registry
+          npm run test:input-validation
           npm run test:e2e
 
   migration-browser-suite:
