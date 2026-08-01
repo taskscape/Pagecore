@@ -219,6 +219,51 @@ test('login requires its pre-authentication token and rejects cross-site origins
   await expect(page.locator('.cms-toolbar')).toBeVisible();
 });
 
+test('mobile admin supports password managers and a touch-friendly new-post flow', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/cms/login.php?next=${encodeURIComponent('/cms/content.php')}`);
+
+  const loginForm = page.locator('.pc-login-form form');
+  const username = page.getByLabel('Username');
+  const password = page.getByLabel('Password');
+  await expect(loginForm).toHaveAttribute('autocomplete', 'on');
+  await expect(username).toHaveAttribute('autocomplete', 'username');
+  await expect(username).toHaveAttribute('autocapitalize', 'none');
+  await expect(password).toHaveAttribute('autocomplete', 'current-password');
+  await expect(page.getByText('Your browser can save these credentials securely')).toBeVisible();
+  expect((await username.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  expect((await password.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await username.fill('admin');
+  await password.fill('pagecore-demo');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('heading', { name: 'Content inventory' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  const newPost = page.getByRole('button', { name: 'New post' });
+  expect((await newPost.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await newPost.click();
+
+  const postDialog = page.getByRole('dialog', { name: 'New post' });
+  await expect(postDialog).toBeVisible();
+  await expect(postDialog.getByText('You can add the content on the next screen.')).toBeVisible();
+  expect((await postDialog.boundingBox()).width).toBeLessThanOrEqual(390);
+  await postDialog.getByLabel('Post title').fill('Mobile admin post');
+  await postDialog.getByLabel('Category').selectOption('news');
+  expect((await postDialog.getByRole('button', { name: 'Create' }).boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await postDialog.getByRole('button', { name: 'Create' }).click();
+
+  await expect(page).toHaveURL(/\/sample-site\/post\/mobile-admin-post\/#cms-edit$/);
+  const panel = page.locator('.cms-panel');
+  await expect(panel).toBeVisible();
+  expect((await panel.boundingBox()).width).toBeLessThanOrEqual(390);
+  await expect(panel.locator('.cms-textarea')).toBeVisible();
+  expect((await panel.getByRole('button', { name: 'Save draft' }).boundingBox()).height).toBeGreaterThanOrEqual(44);
+  expect((await panel.getByRole('button', { name: 'Publish' }).boundingBox()).height).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
 test('post links expose Facebook-friendly title, summary, canonical URL, and featured image', async ({ page }) => {
   const samplePort = process.env.PAGECORE_SAMPLE_PORT || '8765';
   const baseUrl = process.env.PAGECORE_BASE_URL || `http://127.0.0.1:${samplePort}`;

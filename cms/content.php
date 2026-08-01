@@ -215,7 +215,7 @@ function cms_content_posts_url($page, $query, $category) {
         </div>
       </div>
       <div class="table-wrap">
-        <table>
+        <table class="post-table">
           <!-- The actions column separates editorial work from opening the published post. -->
           <thead><tr><th>Title</th><th>Category</th><th>Date</th><th>URL</th><th>Actions</th></tr></thead>
           <tbody>
@@ -223,11 +223,11 @@ function cms_content_posts_url($page, $query, $category) {
               <!-- The row key lets the successful delete action remove exactly the affected post. -->
               <tr data-content-post="<?= cms_content_e($post['slug']) ?>">
                 <!-- The title is an editor shortcut so an inventory is also useful for day-to-day editing. -->
-                <td><a href="<?= cms_content_e($post['url']) ?>#cms-edit"><?= cms_content_e($post['title']) ?></a></td>
-                <td><?= cms_content_e($post['category_label']) ?> <span class="muted">(<?= cms_content_e($post['category']) ?>)</span></td>
-                <td><?= cms_content_e($post['date']) ?></td>
-                <td><a href="<?= cms_content_e($post['url']) ?>"><?= cms_content_e($post['url']) ?></a></td>
-                <td>
+                <td data-label="Title"><a href="<?= cms_content_e($post['url']) ?>#cms-edit"><?= cms_content_e($post['title']) ?></a></td>
+                <td data-label="Category"><?= cms_content_e($post['category_label']) ?> <span class="muted">(<?= cms_content_e($post['category']) ?>)</span></td>
+                <td data-label="Date"><?= cms_content_e($post['date']) ?></td>
+                <td data-label="URL"><a href="<?= cms_content_e($post['url']) ?>"><?= cms_content_e($post['url']) ?></a></td>
+                <td data-label="Actions">
                   <!-- Keep all post actions together so deletion is deliberate but available beside Edit and View. -->
                   <div class="post-actions">
                     <a class="button button-primary" href="<?= cms_content_e($post['url']) ?>#cms-edit">Edit</a>
@@ -284,8 +284,9 @@ function cms_content_posts_url($page, $query, $category) {
     <div class="post-modal" id="post-modal" role="dialog" aria-modal="true" aria-labelledby="post-modal-title" hidden>
       <form class="post-modal-box" id="post-form">
         <h3 id="post-modal-title">New post</h3>
+        <p class="post-modal-intro">Name your post and choose where it should appear. You can add the content on the next screen.</p>
         <label for="post-title">Post title
-          <input id="post-title" name="title" type="text" required autofocus>
+          <input id="post-title" name="title" type="text" autocomplete="off" enterkeyhint="next" required autofocus>
         </label>
         <label for="post-category">Category
           <select id="post-category" name="category" required>

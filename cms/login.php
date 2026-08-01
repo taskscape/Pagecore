@@ -108,13 +108,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php if ($error !== ''): ?>
           <p class="error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></p>
         <?php endif; ?>
-        <form method="post" action="<?= htmlspecialchars(cms_admin_url('login.php'), ENT_QUOTES, 'UTF-8') ?>?next=<?= rawurlencode($next) ?>">
+        <form method="post" action="<?= htmlspecialchars(cms_admin_url('login.php'), ENT_QUOTES, 'UTF-8') ?>?next=<?= rawurlencode($next) ?>" autocomplete="on">
           <input type="hidden" name="login_token" value="<?= htmlspecialchars(cms_login_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
           <label for="cms-login-username">Username</label>
-          <input id="cms-login-username" name="username" autocomplete="username" placeholder="Enter your username" required autofocus>
+          <input id="cms-login-username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Enter your username" required autofocus>
           <label for="cms-login-password">Password</label>
           <input id="cms-login-password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required>
           <button type="submit">Sign in to Pagecore</button>
+          <p class="pc-login-save-note">Your browser can save these credentials securely for your next visit.</p>
         </form>
       </main>
     </section>

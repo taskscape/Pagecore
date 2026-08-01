@@ -272,9 +272,9 @@
         cancel.addEventListener('click', function () { closeEditor(false); });
         var status = h('span', 'cms-status', '');
         foot.appendChild(draftBtn);
+        foot.appendChild(publishBtn);
         foot.appendChild(mediaBtn);
         foot.appendChild(previewBtn);
-        foot.appendChild(publishBtn);
         foot.appendChild(discardBtn);
         foot.appendChild(cancel);
         foot.appendChild(status);
@@ -659,9 +659,16 @@
                 var modalTitle = h('h3', null, 'New post');
                 modalTitle.id = 'cms-new-post-title-heading';
                 box.appendChild(modalTitle);
+                var label = h('label', 'cms-modal-label', 'Post title');
+                label.htmlFor = 'cms-new-post-title';
+                box.appendChild(label);
                 var input = document.createElement('input');
+                input.id = 'cms-new-post-title';
+                input.name = 'title';
                 input.type = 'text';
                 input.placeholder = 'Post title';
+                input.autocomplete = 'off';
+                input.enterKeyHint = 'done';
                 box.appendChild(input);
                 var actions = h('div', 'cms-modal-actions');
                 var ok = h('button', 'cms-btn cms-btn-primary', 'Create');

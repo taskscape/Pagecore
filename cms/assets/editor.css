@@ -80,6 +80,7 @@
 }
 .cms-featured-image-disabled { opacity: .6; cursor: default; }
 .cms-featured-image-preview { display: block; max-width: 100%; max-height: 180px; margin-top: 8px; border-radius: 4px; }
+.cms-featured-image-preview[hidden], .cms-featured-image-remove[hidden] { display: none; }
 .cms-featured-image-selection { display: block; margin-top: 6px; color: #6f665c; overflow-wrap: anywhere; }
 .cms-featured-image-remove {
     margin-top: 7px; padding: 5px 8px; color: #8c2f1c; background: none; border: 1px solid #d8d2c4;
@@ -285,13 +286,34 @@
 .cms-modal { background: rgba(30,30,28,.42); backdrop-filter: blur(4px); }
 .cms-modal-box { border: 1px solid #deded9; border-radius: 14px; font-family: "Inter", -apple-system, "Segoe UI", sans-serif; box-shadow: 0 28px 80px rgba(20,20,18,.24); }
 .cms-modal-box h3 { font-size: 19px; letter-spacing: -.02em; }
+.cms-modal-label { display: block; margin-bottom: 6px; color: #71716c; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .cms-modal-box input { border-color: #d2d2cc; border-radius: 8px; }
 
 @media (max-width: 760px) {
-    .cms-toolbar { left: 10px; right: 10px; bottom: 10px; overflow-x: auto; }
+    .cms-edit-btn { display: inline-flex; min-height: 44px; align-items: center; }
+    .cms-toolbar { left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); overflow-x: auto; }
     .cms-toolbar-brand, .cms-version { display: none; }
+    .cms-toolbar a { min-height: 44px; flex: 0 0 auto; }
+    .cms-add-post { width: 100%; min-height: 48px; font-size: 14px; }
     .cms-panel { top: 0; right: 0; bottom: 0; width: 100vw; border: 0; border-radius: 0; }
-    .cms-panel-body, .cms-panel-region .cms-panel-body { display: flex; flex-direction: column; padding: 16px; }
-    .cms-panel-foot { padding: 10px 14px; }
-    .cms-status { display: none; }
+    .cms-panel-head { min-height: 64px; padding: 10px 14px; }
+    .cms-panel-title { grid-template-columns: minmax(0, 1fr); }
+    .cms-panel-title strong, .cms-panel-title code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cms-panel-title code { grid-column: 1; }
+    .cms-panel-close { width: 44px; height: 44px; flex: 0 0 auto; }
+    .cms-panel-body, .cms-panel-region .cms-panel-body { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+    .cms-meta { padding: 14px; }
+    .cms-field input, .cms-field select { min-height: 46px; font-size: 16px; }
+    .cms-featured-image-drop { min-height: 96px; }
+    .cms-editor-area { min-height: 48vh; }
+    .cms-textarea { min-height: 42vh; padding: 14px; font-size: 16px; }
+    .cms-format-btn { width: 44px; height: 44px; }
+    .cms-panel-foot { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; overflow: visible; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+    .cms-panel-foot .cms-btn { width: 100%; min-height: 44px; padding-inline: 8px; }
+    .cms-status { display: block; grid-column: 1 / -1; min-height: 0; margin: 0; text-align: center; }
+    .cms-modal { align-items: flex-end; padding: 0; }
+    .cms-modal-box { width: 100%; padding: 24px 20px calc(20px + env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; }
+    .cms-modal-box input { min-height: 48px; font-size: 16px; }
+    .cms-modal-actions { display: grid; grid-template-columns: 1fr 1fr; }
+    .cms-modal-actions .cms-btn { min-height: 48px; }
 }
