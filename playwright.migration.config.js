@@ -1,11 +1,11 @@
 const { defineConfig, devices } = require('@playwright/test');
 
-const port = Number(process.env.PAGECORE_SAMPLE_PORT || 8765);
-const baseURL = process.env.PAGECORE_BASE_URL || `http://127.0.0.1:${port}`;
+const port = Number(process.env.PAGECORE_MIGRATION_PORT || 18767);
+const baseURL = process.env.PAGECORE_MIGRATION_BASE_URL || `http://127.0.0.1:${port}`;
 
 module.exports = defineConfig({
   testDir: './tests',
-  testMatch: 'sample-site.spec.js',
+  testMatch: 'migration.spec.js',
   timeout: 30 * 1000,
   expect: {
     timeout: 5000

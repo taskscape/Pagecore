@@ -524,6 +524,17 @@ Run the Playwright suite against the sample site:
 npm run test:e2e
 ```
 
+Run the separate, reusable migration-output contract lane:
+
+```powershell
+npm run test:migration
+```
+
+The base configuration discovers only `tests/sample-site.spec.js`; the migration
+configuration discovers only `tests/migration.spec.js`. Site-specific deployment
+data such as a local `zagozda/` checkout remains ignored and cannot change either
+lane's test discovery.
+
 The Playwright config starts the PHP built-in server with `php/php.exe`. Test
 content is reset from `sample-site/fixtures/` into ignored runtime folders
 before each run. The suite covers visitor rendering, drafts, preview, publish,

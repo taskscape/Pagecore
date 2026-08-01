@@ -1,13 +1,14 @@
 {
   "name": "pagecore",
-  "version": "2.6.1",
+  "version": "2.7.0",
   "private": true,
   "description": "Pagecore CMS sample site and end-to-end tests.",
   "scripts": {
     "sample:reset": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Reset-SampleSite.ps1",
     "sample:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Start-SampleSite.ps1",
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "test:migration": "playwright test -c playwright.migration.config.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0"

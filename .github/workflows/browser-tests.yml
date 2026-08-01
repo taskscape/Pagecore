@@ -1,0 +1,44 @@
+name: Browser tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  base-browser-suite:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+      - run: npm ci
+      - run: npx playwright install chromium
+      - name: Run base browser lane
+        shell: powershell
+        run: |
+          $env:PAGECORE_PHP_EXE = (Get-Command php).Source
+          npm run test:e2e
+
+  migration-browser-suite:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+      - run: npm ci
+      - run: npx playwright install chromium
+      - name: Run migration contract lane
+        shell: powershell
+        run: |
+          $env:PAGECORE_PHP_EXE = (Get-Command php).Source
+          npm run test:migration

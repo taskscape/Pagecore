@@ -40,3 +40,10 @@ Run the browser suite with:
 ```powershell
 npm run test:e2e
 ```
+
+The independent migration-output contract suite uses the same reproducible
+fixtures but has its own Playwright configuration and command:
+
+```powershell
+npm run test:migration
+```
