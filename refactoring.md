@@ -361,11 +361,13 @@ This was a source review with targeted local checks, not a production penetratio
 
 ### Priority 3 — improve operability, testing, and user experience
 
-- [ ] **REF-22 — Add a fast PHP unit/security suite below Playwright.**
+- [x] **REF-22 — Add a fast PHP unit/security suite below Playwright.**
   - Explanation: Pure parsers, validators, path resolvers, rendering, status filtering, and failure paths are tested mainly through long serial browser flows or not tested. This slows security work and leaves platform-specific edge cases uncovered.
   - Justification: The repository has no PHP unit-test configuration. [`tests/sample-site.spec.js`](tests/sample-site.spec.js) is a single 600+ line browser file; the existing security test covers default Markdown but not redirect, method matrix, SVG, status, proxy cookies, symlinks, malformed inputs, or write failures.
   - Recommendation: Add a lightweight PHP unit runner with isolated temporary roots, then retain Playwright for user-visible end-to-end flows. Cover all security acceptance criteria in this report and run lint/unit checks before browser tests.
   - Done when: pure/security tests run without starting a server, have cross-platform fixtures, and failures identify one contract rather than a long UI scenario.
+  - Resolution: `test:php` now runs 22 named parser, policy, storage, rendering, authentication, transport, mutation, cache, and importer contracts as isolated PHP processes without a server. The suite contract documents temporary-root safety and how new boundaries join the gate.
+  - Evidence: `npm run test:php` reports each contract independently and completes before browser testing; `tests/php-suite.md` maps its security coverage and fixture rules.
 
 - [ ] **REF-23 — Isolate browser-test state so tests can be safely parallelized.**
   - Explanation: Every test resets the same fixed working content/uploads and generated files, forcing one worker and preventing reliable parallel or shard execution. The reset safety check uses a raw prefix without a separator boundary, although current targets are hard-coded.
