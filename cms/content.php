@@ -463,16 +463,25 @@ function cms_content_posts_url($page, $query, $category) {
     var createPost = document.getElementById('create-post');
     var cancelPost = document.getElementById('cancel-post');
     var postStatus = document.getElementById('post-status');
+    var postDialogController = null;
 
     function closePostModal() {
+      if (postDialogController) {
+        postDialogController.deactivate();
+        postDialogController = null;
+      }
       postModal.hidden = true;
       postForm.reset();
       setStatus(postStatus, '');
     }
 
-    function openPostModal() {
+    function openPostModal(ev) {
       postModal.hidden = false;
-      postTitle.focus();
+      postDialogController = window.PagecoreDialog.activate(postModal, {
+        opener: ev && ev.currentTarget,
+        initialFocus: postTitle,
+        onRequestClose: closePostModal
+      });
     }
     addPost.addEventListener('click', openPostModal);
     if (addPostTop) { addPostTop.addEventListener('click', openPostModal); }

@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.40.0');
+define('PAGECORE_VERSION', '2.41.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
@@ -1505,6 +1505,7 @@ function cms_assets() {
          . '<link rel="stylesheet" href="' . htmlspecialchars(cms_admin_url('assets/tokens.css'), ENT_QUOTES, 'UTF-8') . "\">\n"
          . '<link rel="stylesheet" href="' . htmlspecialchars(cms_admin_url('assets/editor.css'), ENT_QUOTES, 'UTF-8') . "\">\n"
          . '<script nonce="' . htmlspecialchars(cms_csp_nonce(), ENT_QUOTES, 'UTF-8') . '">window.CMS_CONFIG = ' . $cfg . ";</script>\n"
+         . '<script src="' . htmlspecialchars(cms_admin_url('assets/dialog.js'), ENT_QUOTES, 'UTF-8') . "\" defer></script>\n"
          . '<script src="' . htmlspecialchars(cms_admin_url('assets/admin-client.js'), ENT_QUOTES, 'UTF-8') . "\" defer></script>\n"
          . '<script src="' . htmlspecialchars(cms_admin_url('assets/editor-state.js'), ENT_QUOTES, 'UTF-8') . "\" defer></script>\n"
          . '<script src="' . htmlspecialchars(cms_admin_url('assets/editor-view.js'), ENT_QUOTES, 'UTF-8') . "\" defer></script>\n"

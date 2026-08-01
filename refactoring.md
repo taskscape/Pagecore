@@ -401,11 +401,13 @@ This was a source review with targeted local checks, not a production penetratio
   - Resolution: Configuration now requires a valid IANA timezone (default UTC). One `DateTimeImmutable` policy owns strict post-date round trips, current local timestamps, file labels, upload periods, editor modification labels, and display dates; audit timestamps remain explicitly UTC.
   - Evidence: `npm run test:time-policy`, front-matter/input contracts, and browser post flows cover impossible dates, leap days, the Europe/Warsaw DST transition, UTC/local formatting, and compatible ordering/display.
 
-- [ ] **REF-27 — Add correct dialog/panel semantics, focus management, and keyboard lifecycle.**
+- [x] **REF-27 — Add correct dialog/panel semantics, focus management, and keyboard lifecycle.**
   - Explanation: The content and add-post modals and editor panel lack a complete focus trap, focus restoration, background inertness, and consistent Escape behavior. The editor panel is visually modal but is not exposed as a dialog to assistive technology.
   - Justification: [`cms/content.php`](cms/content.php) lines 309-329 and 498-540 and [`cms/assets/editor.js`](cms/assets/editor.js) lines 115-145 and 648-692 manage modals manually. Closing generally removes/hides UI without restoring focus to the opener.
   - Recommendation: Create one accessible dialog utility with `role="dialog"`, `aria-modal`, labelled title, initial focus, Tab containment, Escape, overlay handling, background `inert`, and opener focus restoration. Test keyboard-only and mobile flows.
   - Done when: automated accessibility/keyboard tests cover all dialogs/panels and focus returns predictably without changing requested editor behavior.
+  - Resolution: One shared dialog lifecycle now applies semantics and labels, traps Tab focus, handles Escape and overlays, makes background branches inert, and restores the exact opener for the inventory modal, listing modal, and editor panel.
+  - Evidence: The mobile-width Playwright keyboard scenario opens every dialog, verifies initial and wrapped focus, checks background inertness, closes with Escape, and confirms focus restoration.
 
 - [ ] **REF-28 — Add versioned asset URLs and a release manifest.**
   - Explanation: Editor/admin CSS and JavaScript are loaded from stable paths without a version query or content hash. Browser/proxy caches can serve an old client against a new API after deployment. Version synchronization is currently manual and the ignored deployment copy lacks the current version marker.

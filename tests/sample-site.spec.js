@@ -436,14 +436,14 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.40.0');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.41.0');
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.40.0');
+  expect((await version.json()).version).toBe('2.41.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.40.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.41.0')).toBeVisible();
 });
 
 test('admin design tokens preserve desktop, focus, disabled, and mobile states', async ({ page }) => {
@@ -1087,4 +1087,48 @@ test('optimistic revisions reject stale writes and region creation is exclusive'
   expect(creations.map(response => response.status()).sort()).toEqual([200, 409]);
   expect(['Exclusive A', 'Exclusive B']).toContain(fs.readFileSync(regionPath, 'utf8'));
   fs.rmSync(regionPath, { force: true });
+});
+
+test('dialogs trap keyboard focus, make the background inert, and restore their opener', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page);
+  await page.goto('/cms/content.php');
+
+  const inventoryOpener = page.getByRole('button', { name: 'New post' });
+  await inventoryOpener.click();
+  const inventoryDialog = page.getByRole('dialog', { name: 'New post' });
+  await expect(inventoryDialog).toBeVisible();
+  await expect(inventoryDialog.getByLabel('Post title')).toBeFocused();
+  await expect(page.locator('.pc-sidebar')).toHaveAttribute('inert', '');
+  await page.keyboard.press('Shift+Tab');
+  await expect(inventoryDialog.getByRole('button', { name: 'Create' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(inventoryDialog).toBeHidden();
+  await expect(inventoryOpener).toBeFocused();
+  await expect(page.locator('.pc-sidebar')).not.toHaveAttribute('inert', '');
+
+  await page.goto('/sample-site/');
+  const editableRegion = page.locator('[data-cms-key="home/hero"]');
+  const editButton = editableRegion.locator('.cms-edit-btn');
+  await editableRegion.hover();
+  await editButton.click();
+  const editorDialog = page.getByRole('dialog', { name: 'Edit content' });
+  await expect(editorDialog).toBeVisible();
+  await expect(editorDialog.getByRole('button', { name: 'Close editor' })).toBeFocused();
+  await expect(page.locator('.cms-toolbar')).toHaveAttribute('inert', '');
+  await editorDialog.getByRole('button', { name: 'Cancel' }).focus();
+  await page.keyboard.press('Tab');
+  await expect(editorDialog.getByRole('button', { name: 'Close editor' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(editorDialog).toHaveCount(0);
+  await expect(editButton).toBeFocused();
+
+  await page.goto('/sample-site/news/');
+  const listingOpener = page.locator('.cms-add-post[data-cms-category="news"]');
+  await listingOpener.click();
+  const listingDialog = page.getByRole('dialog', { name: 'New post' });
+  await expect(listingDialog.locator('input')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(listingDialog).toHaveCount(0);
+  await expect(listingOpener).toBeFocused();
 });

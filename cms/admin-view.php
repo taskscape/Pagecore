@@ -46,5 +46,6 @@ function cms_admin_client_assets($configName, $config) {
     $json = json_encode($config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     if ($json === false) { throw new RuntimeException('Could not encode admin client configuration.'); }
     return '<script nonce="' . cms_admin_e(cms_csp_nonce()) . '">window.' . $configName . ' = ' . $json . ';</script>' . "\n"
+        . '<script src="' . cms_admin_e(cms_admin_url('assets/dialog.js')) . '"></script>' . "\n"
         . '<script src="' . cms_admin_e(cms_admin_url('assets/admin-client.js')) . '"></script>';
 }

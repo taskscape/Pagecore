@@ -77,7 +77,7 @@
             btn.type = 'button';
             btn.addEventListener('click', function (ev) {
                 ev.preventDefault(); ev.stopPropagation();
-                openEditor(el);
+                openEditor(el, btn);
             });
             el.appendChild(btn);
         });
@@ -90,13 +90,14 @@
         if (!panel) return;
         if (!force && panel._dirty && !confirm('Discard unsaved changes?')) return;
         document.removeEventListener('keydown', panel._keys);
+        if (panel._dialog) panel._dialog.deactivate();
         window.cmsInsertMedia = null;
         panel._overlay.remove();
         panel.remove();
         panel = null;
     }
 
-    function openEditor(regionEl) {
+    function openEditor(regionEl, opener) {
         if (panel) closeEditor(true);
         var key = regionEl.getAttribute('data-cms-key');
         var isPost = key.indexOf('post:') === 0;
@@ -110,11 +111,14 @@
         panel = h('div', 'cms-panel ' + (isPost ? 'cms-panel-post' : 'cms-panel-region'));
         panel._overlay = overlay;
         panel._dirty = false;
+        panel.setAttribute('aria-labelledby', 'cms-editor-title');
 
         var head = h('div', 'cms-panel-head');
         var titleWrap = h('div', 'cms-panel-title');
         titleWrap.appendChild(h('span', 'cms-panel-kicker', isPost ? 'Post editor' : 'Page content'));
-        titleWrap.appendChild(h('strong', null, isPost ? 'Edit post' : 'Edit content'));
+        var editorTitle = h('strong', null, isPost ? 'Edit post' : 'Edit content');
+        editorTitle.id = 'cms-editor-title';
+        titleWrap.appendChild(editorTitle);
         titleWrap.appendChild(h('code', null, key));
         head.appendChild(titleWrap);
         var close = h('button', 'cms-panel-close');
@@ -278,6 +282,12 @@
 
         document.body.appendChild(overlay);
         document.body.appendChild(panel);
+        panel._dialog = window.PagecoreDialog.activate(panel, {
+            opener: opener,
+            initialFocus: close,
+            permittedElements: [overlay],
+            onRequestClose: function () { closeEditor(false); }
+        });
 
         function setStatus(text, isError) {
             status.className = isError ? 'cms-status cms-err' : 'cms-status';
@@ -631,7 +641,6 @@
         syncButtons();
 
         panel._keys = function (ev) {
-            if (ev.key === 'Escape') { closeEditor(false); }
             if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 's') {
                 ev.preventDefault();
                 saveDraft(false);
@@ -647,7 +656,9 @@
                 var cat = btn.getAttribute('data-cms-category');
                 var modal = h('div', 'cms-modal');
                 var box = h('div', 'cms-modal-box');
-                box.appendChild(h('h3', null, 'New post'));
+                var modalTitle = h('h3', null, 'New post');
+                modalTitle.id = 'cms-new-post-title-heading';
+                box.appendChild(modalTitle);
                 var input = document.createElement('input');
                 input.type = 'text';
                 input.placeholder = 'Post title';
@@ -657,7 +668,12 @@
                 ok.type = 'button';
                 var no = h('button', 'cms-btn cms-btn-ghost', 'Cancel');
                 no.type = 'button';
-                no.addEventListener('click', function () { modal.remove(); });
+                var dialogController = null;
+                function closeModal() {
+                    if (dialogController) dialogController.deactivate();
+                    modal.remove();
+                }
+                no.addEventListener('click', closeModal);
                 ok.addEventListener('click', function () {
                     var title = input.value.trim();
                     if (!title) { input.focus(); return; }
@@ -669,14 +685,18 @@
                 });
                 input.addEventListener('keydown', function (ev) {
                     if (ev.key === 'Enter') ok.click();
-                    if (ev.key === 'Escape') modal.remove();
                 });
                 actions.appendChild(no); actions.appendChild(ok);
                 box.appendChild(actions);
                 modal.appendChild(box);
-                modal.addEventListener('click', function (ev) { if (ev.target === modal) modal.remove(); });
+                modal.setAttribute('aria-labelledby', modalTitle.id);
+                modal.addEventListener('click', function (ev) { if (ev.target === modal) closeModal(); });
                 document.body.appendChild(modal);
-                input.focus();
+                dialogController = window.PagecoreDialog.activate(modal, {
+                    opener: btn,
+                    initialFocus: input,
+                    onRequestClose: closeModal
+                });
             });
         });
     }

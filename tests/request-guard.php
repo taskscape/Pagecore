@@ -28,6 +28,7 @@ $allowed = array(
     '/cms/login.php?next=%2F',
     '/cms/api.php?action=version',
     '/cms/assets/admin.css',
+    '/cms/assets/dialog.js',
     '/contented/public.txt',
     '/uploads/photo.png',
 );
