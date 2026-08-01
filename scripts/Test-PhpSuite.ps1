@@ -16,6 +16,7 @@ $tests = @(
     'media-references.php',
     'modules.php',
     'mutation-operation.php',
+    'operational-boundary.php',
     'parsedown-security.php',
     'path-policy.php',
     'private-storage.php',

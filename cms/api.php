@@ -55,9 +55,16 @@ function cms_utf8_or_fail() {
 }
 
 function cms_json($data, $code = 200) {
-    http_response_code($code);
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $encodingError = null;
+    $json = PagecoreApiBoundary::encode($data, $encodingError);
+    if ($encodingError !== null) {
+        $code = 500;
+        error_log('Pagecore API response encoding failed: ' . $encodingError);
+        cms_audit_event('api.response', 'failure', array('status' => 500, 'reason' => 'encoding_failed'));
+    }
+    http_response_code($code);
+    echo $json;
     exit;
 }
 function cms_fail($msg, $code = 400) {
@@ -550,7 +557,7 @@ $actionHandlers = array(
         cms_require_revision($path);
         $snapshot = cms_mutation_snapshot(array($path, cms_draft_path('post', $slug, false)));
         cms_backup('posts/' . $slug, $path);
-        if (!@unlink($path)) { cms_fail('Could not delete post.', 500); }
+        if (!PagecoreOperationalBoundary::delete($path, 'post.delete', false)->ok) { cms_fail('Could not delete post.', 500); }
         cms_clear_draft('post', $slug);
         cms_finish_indexed_mutation($snapshot);
     });
@@ -637,8 +644,8 @@ $actionHandlers = array(
         $metaPath = cms_media_meta_path($path);
         $snapshot = cms_file_snapshot(array($path, $metaPath));
         if ($snapshot === null) { cms_fail('Could not prepare the media operation.', 500); }
-        if (!$path || !@unlink($path)) { cms_fail('Could not delete file.', 500); }
-        if (is_file($metaPath) && !@unlink($metaPath)) {
+        if (!$path || !PagecoreOperationalBoundary::delete($path, 'media.delete', false)->ok) { cms_fail('Could not delete file.', 500); }
+        if (is_file($metaPath) && !PagecoreOperationalBoundary::delete($metaPath, 'media.metadata.delete', false)->ok) {
             $restored = cms_restore_file_snapshot($snapshot);
             error_log('CMS: media deletion rolled back after metadata delete failure; rollback ' . ($restored ? 'succeeded' : 'failed'));
             cms_fail('The media operation could not be completed. No changes were published.', 500);
@@ -720,24 +727,24 @@ $actionHandlers = array(
     for ($attempt = 0; $attempt < 5 && $reserved === null; $attempt++) {
         $name = $base . '-' . bin2hex(random_bytes(8)) . '.' . $ext;
         $candidate = $dir . '/' . $name;
-        $handle = @fopen($candidate, 'x+b');
-        if ($handle !== false) { fclose($handle); $reserved = $candidate; }
+        $reservation = PagecoreOperationalBoundary::reserve($candidate, 'media.reserve');
+        if ($reservation->ok) { fclose($reservation->value); $reserved = $candidate; }
     }
     if ($reserved === null) { cms_fail('Could not reserve an upload filename.', 500); }
     if (!move_uploaded_file($f['tmp_name'], $reserved)) {
-        @unlink($reserved);
+        PagecoreOperationalBoundary::delete($reserved, 'media.upload.cleanup');
         cms_fail('Could not save uploaded file.', 500);
     }
     $rel = $sub . '/' . $name;
     $savedPath = $reserved;
     if (!cms_media_write_meta($savedPath, array('alt' => $base, 'caption' => ''))) {
-        @unlink($savedPath);
+        PagecoreOperationalBoundary::delete($savedPath, 'media.metadata.rollback');
         cms_fail('Could not save file metadata.', 500);
     }
     $asset = cms_media_asset($rel);
     if (!$asset) {
-        @unlink($savedPath);
-        @unlink(cms_media_meta_path($savedPath));
+        PagecoreOperationalBoundary::delete($savedPath, 'media.asset.rollback');
+        PagecoreOperationalBoundary::delete(cms_media_meta_path($savedPath), 'media.asset.metadata.rollback');
         cms_fail('Could not read saved file.', 500);
     }
     cms_audit_event('media.upload', 'success', array('kind' => $asset['kind'], 'bytes' => (int) $asset['size']));
@@ -761,4 +768,16 @@ $actionHandlers = array(
 
 if (!isset($actionRegistry[$action], $actionHandlers[$action])) { cms_fail('Unknown action.', 400); }
 $actionRegistry[$action]['handler'] = $actionHandlers[$action];
-$actionRegistry[$action]['handler']();
+$previousHandler = set_error_handler(function ($severity, $message, $file, $line) {
+    if (!(error_reporting() & $severity)) { return false; }
+    throw new ErrorException($message, 0, $severity, $file, $line);
+});
+try {
+    $actionRegistry[$action]['handler']();
+} catch (Throwable $error) {
+    PagecoreApiBoundary::logThrowable($action, $error);
+    cms_audit_event('api.' . $action, 'failure', array('status' => 500, 'reason' => 'unhandled_exception'));
+    cms_json(array('ok' => false, 'error' => 'The operation could not be completed.'), 500);
+} finally {
+    restore_error_handler();
+}

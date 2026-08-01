@@ -385,11 +385,13 @@ This was a source review with targeted local checks, not a production penetratio
   - Resolution: A blocking quality workflow now runs version synchronization, tracked PHP/JavaScript syntax checks, level-3 PHPStan over extracted components, vendored Parsedown checksum/version validation, the fast PHP security suite, high-severity npm audit, and release artifact verification. Dependabot tracks npm, Composer, and action updates; the private migration lane is explicitly opt-in.
   - Evidence: `npm run quality`, `npm run test:php`, `npm audit --audit-level=high`, and `npm run release:test` are the local/CI commands. Composer's declared PHPStan range, Parsedown's checksum manifest, npm's lock file, and weekly Dependabot updates provide reviewed dependency signals.
 
-- [ ] **REF-25 — Centralize error handling and remove broad suppression at operational boundaries.**
+- [x] **REF-25 — Centralize error handling and remove broad suppression at operational boundaries.**
   - Explanation: `@unlink`, `@scandir`, `@filemtime`, `@fopen`, and similar suppression hide why an operation failed, while client code receives generic or even successful results. Conversely, uncaught warnings/type errors can corrupt JSON responses.
   - Justification: Suppression is widespread in [`cms/engine.php`](cms/engine.php) backup/draft/reservation paths and [`cms/api.php`](cms/api.php) delete/upload paths. `cms_json()` at `cms/api.php:58-64` does not handle `json_encode()` failure or an uncaught throwable.
   - Recommendation: Keep client messages generic, but capture last errors/throwables into structured server logs and typed results. Install one API exception/error boundary, detect JSON encoding failure, and use suppression only around an immediately inspected return value.
   - Done when: expected filesystem failures remain client-safe but diagnosable, API responses stay valid JSON, and tests cover warnings, exceptions, invalid UTF-8, and encoding failure.
+  - Resolution: API handlers now execute behind one warning/throwable boundary with correlation-aware structured logging and a stable generic 500 response. A typed operational boundary captures and logs filesystem warnings for reservations, deletion, directory cleanup, mtimes, rollback, and upload/post mutations; response encoding has a valid-JSON fallback for invalid UTF-8 or excessive depth.
+  - Evidence: `npm run test:operational-boundary`, `npm run test:mutation-operation`, and API browser failure scenarios cover typed filesystem failures, exclusive collisions, missing targets, invalid/deep JSON values, rollback, warnings, and valid client-safe responses.
 
 - [ ] **REF-26 — Normalize time, calendar dates, and timezone configuration.**
   - Explanation: File labels, post creation, import timestamps, and display rely on process-local `date()` while metadata accepts impossible calendar values. Deployments in different timezones can produce inconsistent ordering/labels.

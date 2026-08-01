@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.38.0');
+define('PAGECORE_VERSION', '2.39.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
@@ -34,6 +34,7 @@ require_once __DIR__ . '/modules/Routes.php';
 require_once __DIR__ . '/modules/MediaReferences.php';
 require_once __DIR__ . '/modules/TemplateDiscovery.php';
 require_once __DIR__ . '/modules/ContentCache.php';
+require_once __DIR__ . '/modules/OperationalBoundary.php';
 list($cmsConfig, $cmsConfigErrors) = cms_validate_config(require $cmsConfigFile, !$cmsDevelopment);
 if ($cmsConfigErrors) {
     error_log('Pagecore configuration invalid: ' . implode('; ', $cmsConfigErrors));
@@ -215,7 +216,7 @@ function cms_atomic_write($path, $data) {
     $written = fwrite($handle, $data);
     if ($written === false || $written !== strlen($data) || !fflush($handle)) {
         fclose($handle);
-        @unlink($tmp);
+        PagecoreOperationalBoundary::delete($tmp, 'atomic.cleanup');
         return false;
     }
     if (function_exists('fsync')) { @fsync($handle); }
@@ -224,7 +225,7 @@ function cms_atomic_write($path, $data) {
         $match = array_search(basename($path), $GLOBALS['PAGECORE_WRITE_FAILURES'], true);
         if ($match !== false) {
             unset($GLOBALS['PAGECORE_WRITE_FAILURES'][$match]);
-            @unlink($tmp);
+            PagecoreOperationalBoundary::delete($tmp, 'atomic.injected_cleanup');
             return false;
         }
     }
@@ -233,22 +234,22 @@ function cms_atomic_write($path, $data) {
 
     // Windows cannot replace an existing target with rename(). Keep a complete
     // recovery copy until the new file is known to be in place.
-    if (!is_file($path)) { @unlink($tmp); return false; }
+    if (!is_file($path)) { PagecoreOperationalBoundary::delete($tmp, 'atomic.missing_cleanup'); return false; }
     $recovery = $path . '.replace-' . bin2hex(random_bytes(4)) . '.bak';
-    if (!copy($path, $recovery)) { @unlink($tmp); return false; }
+    if (!copy($path, $recovery)) { PagecoreOperationalBoundary::delete($tmp, 'atomic.recovery_cleanup'); return false; }
     if (isset($GLOBALS['PAGECORE_ATOMIC_WRITE_FAILURE']) && $GLOBALS['PAGECORE_ATOMIC_WRITE_FAILURE'] === 'after-recovery') {
-        @unlink($tmp);
+        PagecoreOperationalBoundary::delete($tmp, 'atomic.replace_cleanup');
         return false;
     }
-    if (!unlink($path)) { @unlink($tmp); return false; }
+    if (!unlink($path)) { PagecoreOperationalBoundary::delete($tmp, 'atomic.target_cleanup'); return false; }
     if (rename($tmp, $path)) {
-        @unlink($recovery);
+        PagecoreOperationalBoundary::delete($recovery, 'atomic.recovery_remove');
         return true;
     }
     // Best-effort restoration preserves the old complete file. If restoration
     // is blocked, the uniquely named recovery copy remains for an operator.
     if (!is_file($path)) { @rename($recovery, $path); }
-    @unlink($tmp);
+    PagecoreOperationalBoundary::delete($tmp, 'atomic.final_cleanup');
     return false;
 }
 
@@ -270,7 +271,7 @@ function cms_restore_file_snapshot(array $snapshot) {
     foreach ($snapshot as $path => $state) {
         if ($state['exists']) {
             if (!cms_atomic_write($path, $state['data'])) { $ok = false; }
-        } elseif (is_file($path) && !@unlink($path)) {
+        } elseif (is_file($path) && !PagecoreOperationalBoundary::delete($path, 'snapshot.restore.delete', false)->ok) {
             $ok = false;
         }
     }
@@ -292,7 +293,7 @@ function cms_backup($relKey, $path) {
     if ($files && count($files) > $keep) {
         sort($files); // timestamped names sort chronologically
         foreach (array_slice($files, 0, count($files) - $keep) as $old) {
-            @unlink($old);  // Suppress errors for concurrent access
+            PagecoreOperationalBoundary::delete($old, 'backup.prune');
         }
     }
 }
@@ -321,9 +322,9 @@ function cms_remove_empty_dirs($dir, $stop) {
     $dir = rtrim($dir, '/\\');
     $stop = rtrim($stop, '/\\');
     while ($dir !== '' && str_replace('\\', '/', $dir) !== str_replace('\\', '/', $stop) && is_dir($dir)) {
-        $items = @scandir($dir);  // Suppress errors for concurrent access
-        if ($items === false || count($items) > 2) { break; }
-        if (!@rmdir($dir)) { break; }  // Suppress errors for concurrent access
+        $inspection = PagecoreOperationalBoundary::directoryItems($dir, 'draft.directory.inspect');
+        if (!$inspection->ok || count($inspection->value) > 2) { break; }
+        if (!PagecoreOperationalBoundary::removeDirectory($dir, 'draft.directory.remove')->ok) { break; }
         $dir = dirname($dir);
     }
 }
@@ -331,7 +332,7 @@ function cms_remove_empty_dirs($dir, $stop) {
 function cms_clear_draft($kind, $id) {
     $path = cms_draft_path($kind, $id, true);
     if (!$path) { return; }
-    @unlink($path);  // Suppress errors if file is locked or already deleted
+    PagecoreOperationalBoundary::delete($path, 'draft.clear');
     cms_remove_empty_dirs(dirname($path), cms_cfg('content_dir') . '/.drafts');
 }
 
@@ -848,7 +849,11 @@ function cms_posts_index_fresh() {
         $manifest = file_get_contents($manifestPath);
         return $manifest !== false && PagecoreContentCache::manifestMatches($manifest, $postsDir);
     }
-    if (is_dir($postsDir) && @filemtime($postsDir) > @filemtime($index)) { return false; }
+    if (is_dir($postsDir)) {
+        $postsModified = PagecoreOperationalBoundary::modified($postsDir, 'index.posts.modified');
+        $indexModified = PagecoreOperationalBoundary::modified($index, 'index.cache.modified');
+        if (!$postsModified->ok || !$indexModified->ok || $postsModified->value > $indexModified->value) { return false; }
+    }
     return true;
 }
 
@@ -1375,15 +1380,20 @@ function cms_reserve_post_slug($title, $maxAttempts = 1000) {
         $path = $dir . '/' . $slug . '.md';
         if (is_file($path)) { continue; }
         $lockPath = $path . '.create.lock';
-        $lock = @fopen($lockPath, 'x');
-        if ($lock === false) { continue; }
+        $reservation = PagecoreOperationalBoundary::reserve($lockPath, 'post.slug.reserve');
+        if (!$reservation->ok) { continue; }
+        $lock = $reservation->value;
         // Recheck after acquiring the lock to coexist safely with external writers.
         if (is_file($path)) {
             fclose($lock);
-            @unlink($lockPath);
+            PagecoreOperationalBoundary::delete($lockPath, 'post.slug.invalid_reservation');
             continue;
         }
-        fwrite($lock, (string) getmypid());
+        if (fwrite($lock, (string) getmypid()) === false || !fflush($lock)) {
+            fclose($lock);
+            PagecoreOperationalBoundary::delete($lockPath, 'post.slug.write_failure');
+            return null;
+        }
         return array('slug' => $slug, 'path' => $path, 'lock' => $lock, 'lock_path' => $lockPath);
     }
     return null;
@@ -1393,7 +1403,7 @@ function cms_reserve_post_slug($title, $maxAttempts = 1000) {
 function cms_release_post_slug_reservation($reservation) {
     if (!is_array($reservation)) { return; }
     if (isset($reservation['lock']) && is_resource($reservation['lock'])) { fclose($reservation['lock']); }
-    if (isset($reservation['lock_path'])) { @unlink($reservation['lock_path']); }
+    if (isset($reservation['lock_path'])) { PagecoreOperationalBoundary::delete($reservation['lock_path'], 'post.slug.release'); }
 }
 
 /* ------------------------------------------------- generated index files */
