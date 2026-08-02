@@ -465,6 +465,11 @@ from `content/posts/` and `categories`.
 
 ### 8. Deployment checklist
 
+For the mechanics of getting these right on a control-panel host — directory
+layout, FTP, permissions, PHP version and diagnosing a 500 — see
+[Deploying to shared hosting](#deploying-to-shared-hosting).
+
+- The domain runs PHP 8.3+; the engine refuses to boot on anything older.
 - The private configuration exists outside `DOCUMENT_ROOT` and has the production password hash, `site_url`,
   `site_root`, `content_dir`, `uploads_dir`, categories and search pages.
 - The PHP worker can write to the private `content/`, `content/.drafts/`, backups, and uploads,
@@ -486,6 +491,321 @@ from `content/posts/` and `categories`.
 Keep structure in PHP. Move words, tables, images, PDFs and post bodies into
 Markdown. This keeps the existing site design intact while giving editors the
 Pagecore in-place editing workflow.
+
+## Deploying to shared hosting
+
+This section covers a typical control-panel host (DirectAdmin, cPanel and
+similar) reached over FTP, with no shell access. The failure modes below are
+the ones that actually occur; each is cheap to avoid and expensive to diagnose
+after the fact.
+
+Nothing here can be verified by the bundled development server. `php -S`
+ignores `.htaccess` entirely and runs with `PAGECORE_DEVELOPMENT=1`, so a site
+that works perfectly in development can still fail every request in
+production. Treat the checks in this section as a separate lane.
+
+Run the layout validator against a built deployment before uploading it. It
+boots the engine with no `PAGECORE_DEVELOPMENT`, exactly as a host would, and
+catches most of what follows without a round trip to the server:
+
+```powershell
+scripts\Test-ProductionLayout.ps1 -PublicRoot .\deploy\public_html -ConfigFile .\deploy\pagecore-private\config.php
+```
+
+### Directory layout
+
+Pagecore **fails closed** in production if the configuration, content,
+backups, uploads or rate-limit directory resolve anywhere below
+`DOCUMENT_ROOT`:
+
+```
+Pagecore private storage must be outside DOCUMENT_ROOT: content_dir, uploads_dir
+```
+
+This is not advisory. A single-folder layout that mixes templates and content
+cannot be deployed, whatever else is configured. Split the site in two, with
+the private directory a **sibling** of the document root:
+
+```
+/home/<user>/domains/<domain>/
+├── public_html/          <- DOCUMENT_ROOT: templates, assets/, cms/, .htaccess
+├── private_html/         <- usually a symlink to public_html (see below)
+├── logs/
+└── pagecore-private/     <- outside the document root
+    ├── config.php
+    ├── content/
+    ├── uploads/
+    └── state/
+```
+
+The domain folder is therefore the smallest single directory that can hold a
+complete deployment — useful when building an upload artifact, because it maps
+one local folder onto one remote folder.
+
+`cms/config.php` must **not** ship to the public root. The engine's default
+config location is inside `cms/`, which is below the document root and would
+be rejected; production loads the private config instead.
+
+Note that `content/.backups` is created by the engine on first publish rather
+than shipped, which is one reason `content/` itself has to be writable.
+
+#### `public_html` and `private_html`
+
+Panels that predate universal SNI serve `http://` from `public_html` and
+`https://` from `private_html`. Two real directories mean maintaining two
+copies of every template. Prefer the panel's *"use a symbolic link from
+private_html to public_html"* option, then upload once. `pagecore-private` is
+a sibling of both, so the choice does not affect it, and the engine boots
+correctly with either as `DOCUMENT_ROOT`.
+
+### Uploading over FTP
+
+- **Enable hidden files in your FTP client.** Many clients skip dot-files
+  silently. A missing `.htaccess` produces a working homepage with 404s on
+  every other route, and the private configuration is never found at all.
+- **Merge, do not mirror.** A mirroring client pointed at the domain folder
+  can delete `logs/` and other panel-managed siblings.
+- **Clear the previous application out of the document root first.** Merging
+  leaves the old `index.php`, `.htaccess` and framework directories in place,
+  where they compete with the new rewrite rules.
+- Upload `pagecore-private` in the same pass, as a sibling — not inside the
+  document root.
+
+### File and directory permissions
+
+Under PHP-FPM or suPHP the PHP worker runs as the domain user, so
+owner-permissions are what matter:
+
+| Path | Mode | Why |
+|---|---|---|
+| `pagecore-private/config.php` | `600` | Contains the bcrypt password hash; `644` is world-readable on a shared server |
+| `pagecore-private/content/` | `755` | Engine writes drafts, backups, `posts-index.json` |
+| `pagecore-private/uploads/` | `755` | Editor uploads land here |
+| `pagecore-private/state/` | `755` | Rate-limit counters and the audit log |
+| Files inside `content/` | `644` | Read and rewritten by the engine |
+
+`755` is what a control panel creates by default and what these directories
+should keep. They sit outside the document root, so the web server has no
+route to them regardless of mode, and the owner bits are the ones the PHP
+worker uses. Tightening them further tends to cause more trouble than it
+prevents: some panels run backup, quota and file-manager tasks under a
+different account, which loses access at `700`.
+
+**Never use `777`.** Beyond the obvious exposure, suPHP and some PHP-FPM
+configurations refuse to execute anything under a group- or world-writable
+directory and return 500.
+
+Permissions alone do not prove writability — that depends on which user PHP
+runs as. Confirm it with the diagnostics file below rather than assuming.
+
+### Selecting the PHP version
+
+Pagecore requires **PHP 8.3 or newer** and refuses to boot below it:
+
+```
+Pagecore requires PHP 8.3.0 or newer; running 7.4.33
+```
+
+Hosts frequently default a domain to an old branch, and a domain migrated from
+a legacy application often keeps whatever version that application needed. Set
+the version **per domain** before uploading.
+
+Two things regularly obscure this:
+
+- The panel's global *PHP settings* page may be restricted to the account's
+  default domain, reporting that PHP settings cannot be controlled for this
+  domain. That page governs `php.ini` values, not the version.
+- The version selector usually lives on the **domain**'s own settings screen
+  (*Domains → the domain → select PHP version*), which remains available even
+  when the global page is locked.
+
+Choose a branch still receiving security fixes, comfortably above the 8.3
+minimum.
+
+### Pointing the engine at the private configuration
+
+The configuration lives outside the document root, so the engine has to be
+told where it is. Add one line to the document root's `.htaccess`:
+
+```apache
+SetEnv PAGECORE_CONFIG /home/<user>/domains/<domain>/pagecore-private/config.php
+```
+
+`SetEnv` reaches `getenv()` under mod_php and CGI, but only `$_SERVER` under
+PHP-FPM; the engine reads both, so this works across SAPIs. If `mod_env` is
+unavailable, set the variable in the panel's PHP-FPM configuration for the
+domain instead (`env[PAGECORE_CONFIG] = …`).
+
+`PAGECORE_DEVELOPMENT` is deliberately read from `getenv()` only. It is a
+security switch, and `$_SERVER` holds a start-up snapshot that `putenv()`
+cannot clear, so honouring it there would let a stale value pin a production
+site in development mode.
+
+Derive the two postures from that one variable so the engine and the
+configuration can never disagree:
+
+```php
+$production = getenv('PAGECORE_DEVELOPMENT') !== '1';
+```
+
+A configuration that invents its own flag — `PAGECORE_PRODUCTION` or similar —
+will report development values on a host where nothing is set, while the
+engine treats the same request as production. The result is a 500 on every
+request with `production cannot use development or demo credentials`.
+
+### Serving uploads from outside the document root
+
+Because `uploads/` is private, map the public URL onto the engine's media
+endpoint. Content then keeps ordinary `/uploads/...` URLs and needs no
+rewriting:
+
+```apache
+RewriteRule ^uploads/(.+)$ cms/media-file.php?path=$1 [L,QSA]
+```
+
+### Redirect HTTP in Apache, not PHP
+
+With `require_https` enabled the engine answers plain HTTP with a bare
+`400 HTTPS is required`. Redirect before PHP is reached:
+
+```apache
+RewriteCond %{HTTPS} !=on
+RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+```
+
+The `X-Forwarded-Proto` condition prevents a redirect loop where TLS
+terminates at a proxy. If PHP still fails to see HTTPS in that setup, add the
+proxy to `trusted_proxies`; leave it empty otherwise, since trusting forwarded
+headers unconditionally lets a client claim any scheme or address.
+
+### `.htaccess` directives that break on shared hosts
+
+Two constructs fail hard and take the whole site with them, because Apache
+rejects the entire file and returns 500 for **every** request — including
+static assets:
+
+- **`<Directory>` sections are not valid in `.htaccess`.** They belong in the
+  server configuration. Per-directory rules go in that directory's own
+  `.htaccess`.
+- **`php_flag` / `php_value` only exist under mod_php.** On PHP-FPM,
+  LiteSpeed or CGI they are unknown directives. Guard them, and rely on a
+  `<FilesMatch>` denial as the enforcing rule:
+
+```apache
+<FilesMatch "\.(php|phtml|phar|cgi|pl)$">
+    Require all denied
+</FilesMatch>
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+```
+
+### When something returns 500
+
+**First, find out whether PHP is involved at all.** Request a static asset and
+a PHP entry point.
+
+POSIX shell:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://example.com/assets/style.css
+```
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://example.com/index.php
+```
+
+PowerShell:
+
+```powershell
+'/assets/style.css', '/index.php' | ForEach-Object {
+    $r = Invoke-WebRequest "https://example.com$_" -SkipHttpErrorCheck -MaximumRedirection 0
+    '{0,-20} {1}' -f $_, $r.StatusCode
+}
+```
+
+`-SkipHttpErrorCheck` requires PowerShell 7+; without it a 500 raises a
+terminating error instead of reporting the status. Note also that Windows
+`curl.exe` has no `/dev/null` — use `NUL` if you prefer the curl form.
+
+- Static **500** → Apache is rejecting `.htaccess`. Look for the constructs
+  above; renaming `.htaccess` aside confirms it in one request.
+- Static **200**, PHP **500** → the failure is inside PHP. Continue below.
+
+**Do not expect the domain error log to help.** An uncaught PHP exception
+under PHP-FPM is not an Apache error, so a panel's per-domain
+`<domain>.error.log` can sit at 0 bytes through a completely broken site while
+the access log fills normally. An empty error log is not a broken log; it is
+the wrong log.
+
+**Create a diagnostics file** in the document root — this reports in one
+request everything the engine needs and prints the real exception:
+
+```php
+<?php
+ini_set('display_errors', '1');
+error_reporting(E_ALL);
+header('Content-Type: text/plain; charset=utf-8');
+
+echo 'php=', PHP_VERSION, ' sapi=', PHP_SAPI, "\n";
+echo 'docroot=', $_SERVER['DOCUMENT_ROOT'], "\n";
+echo 'getenv=', var_export(getenv('PAGECORE_CONFIG'), true), "\n";
+echo 'server=', var_export($_SERVER['PAGECORE_CONFIG'] ?? null, true), "\n";
+
+$private = dirname($_SERVER['DOCUMENT_ROOT']) . '/pagecore-private';
+echo 'config readable=', var_export(is_readable($private . '/config.php'), true), "\n";
+foreach (array('content', 'content/.backups', 'uploads', 'state') as $dir) {
+    printf("%-18s exists=%-3s writable=%s\n", $dir,
+        is_dir("$private/$dir") ? 'yes' : 'NO',
+        is_writable("$private/$dir") ? 'yes' : 'NO');
+}
+
+echo "--- boot ---\n";
+require __DIR__ . '/cms/engine.php';
+echo "BOOTED OK\n";
+```
+
+Expect a PHP version of 8.3+, both `getenv` and `server` naming the private
+config, `writable=yes` throughout, and `BOOTED OK`. `content/.backups` reports
+`exists=NO` until the first publish, which is normal.
+
+**Delete the file as soon as you have read it.** It discloses absolute paths
+and PHP internals. Avoid `posix_*` calls in it — hosts commonly disable them,
+and the resulting fatal masks the answer you are looking for.
+
+### Post-deployment verification
+
+Walk the routes rather than only the homepage — a wrong `DOCUMENT_ROOT`,
+missing `.htaccess` or bad `post_url` shows up on the second page, not the
+first. Expect `200` on every line; a `500` on the media path alone points at
+the `/uploads/` rewrite, and a `404` on a post at `post_url`.
+
+POSIX shell:
+
+```bash
+for p in / /about/ /blog/ /blog/some-post/ /cms/login.php /uploads/2026/01/photo.jpg; do
+  printf '%-34s %s\n' "$p" "$(curl -s -o /dev/null -w '%{http_code}' "https://example.com$p")"
+done
+```
+
+PowerShell:
+
+```powershell
+$base = 'https://example.com'
+'/', '/about/', '/blog/', '/blog/some-post/', '/cms/login.php', '/uploads/2026/01/photo.jpg' | ForEach-Object {
+    $r = Invoke-WebRequest "$base$_" -SkipHttpErrorCheck -MaximumRedirection 0 -TimeoutSec 25
+    '{0,-34} {1}' -f $_, $r.StatusCode
+}
+```
+
+Keep `-MaximumRedirection 0` in both: it makes the HTTP-to-HTTPS redirect and
+any `post_url` redirect visible as `301` rather than being silently followed.
+
+Then log in and publish one small edit. That is the only way to exercise the
+write path — drafts, backup creation, search index and sitemap regeneration —
+and it is the step most likely to reveal a permissions problem that read-only
+browsing hides.
 
 ## Security
 
@@ -516,7 +836,9 @@ Pagecore in-place editing workflow.
 ## Requirements
 
 - PHP **8.3+** on a branch still receiving security fixes; the `fileinfo` extension is used when
-  present, with a magic-byte fallback otherwise.
+  present, with a magic-byte fallback otherwise. The version is enforced at
+  boot, so a host still defaulting the domain to an older branch fails every
+  request until the per-domain PHP version is raised.
 - A PHP-capable web server whose document root contains only public templates
   and `cms/`; private storage must be a sibling or otherwise external path.
   The bundled PHP router is for loopback development only.

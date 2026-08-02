@@ -15,9 +15,28 @@ site/
     └── uploads/
 ```
 
-Set `PAGECORE_CONFIG` to the absolute private `config.php` path and
-`PAGECORE_DOCUMENT_ROOT` to the absolute `public/` path in the PHP process
-environment. Grant the PHP worker write access only to the three private data
+Set `PAGECORE_CONFIG` to the absolute private `config.php` path in the PHP
+process environment. On a control-panel host this is normally one `SetEnv`
+line in the public `.htaccess`; the engine reads the variable from both
+`getenv()` and `$_SERVER`, so the same line works under mod_php, CGI and
+PHP-FPM. `PAGECORE_DOCUMENT_ROOT` is only required for CLI tooling such as
+`scripts/reindex.php`, where the server provides no `DOCUMENT_ROOT` for the
+configuration to read.
+
+Verify a built deployment before uploading it:
+
+```powershell
+scripts\Test-ProductionLayout.ps1 -PublicRoot .\deploy\public_html -ConfigFile .\deploy\pagecore-private\config.php
+```
+
+That boots the engine with no `PAGECORE_DEVELOPMENT`, exactly as a host would,
+and reports private-storage violations, a development or demo posture, a
+non-HTTPS `site_url`, an `cms/config.php` left in the public root, and
+unwritable data directories. None of these are reachable through the bundled
+development server, which ignores `.htaccess` and always runs with the
+development opt-in set.
+
+Grant the PHP worker write access only to the three private data
 directories and to the generated public `search-index.json` and `sitemap.xml`.
 The private state directory also stores the shared account/source login attempt
 budget; all PHP workers for an installation must see the same filesystem path.
@@ -30,7 +49,16 @@ subdomain is permanently HTTPS-capable.
 
 The browser never reads Markdown or upload files directly. `/cms/media-file.php`
 validates the requested relative media path and supplies a fixed MIME policy;
-PDFs are attachments and raster images may render inline. Do not set
+PDFs are attachments and raster images may render inline. Content migrated from
+another CMS usually carries literal `/uploads/...` URLs; map them onto that
+endpoint in the fronting server rather than rewriting the content, so the
+files stay outside the document root:
+
+```apache
+RewriteRule ^uploads/(.+)$ cms/media-file.php?path=$1 [L,QSA]
+```
+
+Do not set
 `PAGECORE_DEVELOPMENT=1` in production. That opt-in exists only for the bundled
 sample and private local migration fixture, whose routers enforce explicit
 HTTP denials.

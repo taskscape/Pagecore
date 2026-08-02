@@ -7,6 +7,7 @@ $tests = @(
     'admin-view.php',
     'api-registry.php',
     'config-schema.php',
+    'config-source.php',
     'content-cache.php',
     'demo-config-policy.php',
     'front-matter.php',

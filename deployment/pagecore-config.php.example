@@ -4,8 +4,14 @@
  * public document root. Set PAGECORE_CONFIG to this file's absolute path.
  */
 $privateRoot = __DIR__;
+// Web requests take the public root from the server. Setting even one
+// environment variable is awkward on shared hosting, so PAGECORE_DOCUMENT_ROOT
+// is only needed where DOCUMENT_ROOT is absent — CLI tooling such as
+// scripts/reindex.php.
 $publicRoot = getenv('PAGECORE_DOCUMENT_ROOT');
-if (!$publicRoot) { throw new RuntimeException('PAGECORE_DOCUMENT_ROOT is required.'); }
+if (!$publicRoot && !empty($_SERVER['DOCUMENT_ROOT'])) { $publicRoot = $_SERVER['DOCUMENT_ROOT']; }
+if (!$publicRoot) { throw new RuntimeException('Set PAGECORE_DOCUMENT_ROOT, or run behind a server that provides DOCUMENT_ROOT.'); }
+$publicRoot = rtrim(str_replace('\\', '/', $publicRoot), '/');
 
 return array(
     'development_only' => false,
@@ -32,7 +38,12 @@ return array(
     'backup_dir' => $privateRoot . '/backups',
     'backup_keep' => 20,
     'uploads_dir' => $privateRoot . '/uploads',
-    'uploads_url' => '', // legacy only; new media is delivered by cms/media-file.php
+    // Leave empty for a fresh site: media is delivered by cms/media-file.php.
+    // Content migrated from another CMS usually carries literal /uploads/...
+    // URLs; keep '/uploads' and map the path to the media endpoint in the
+    // fronting server rather than rewriting the content. For Apache:
+    //   RewriteRule ^uploads/(.+)$ cms/media-file.php?path=$1 [L,QSA]
+    'uploads_url' => '',
     'site_root' => $publicRoot,
     'site_url' => 'https://example.com',
     'site_name' => 'Example site',

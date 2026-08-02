@@ -1,5 +1,18 @@
 # Media only: never execute PHP or other server-side scripts from uploads.
-php_flag engine off
+# The FilesMatch denial is the enforcing rule and works on any Apache 2.4.
 <FilesMatch "\.(php|phtml|php3|php4|php5|php7|php8|phar|pht|cgi|pl)$">
     Require all denied
 </FilesMatch>
+
+# Defence in depth, and only where mod_php is actually loaded: php_flag is an
+# unknown directive on PHP-FPM/LiteSpeed/CGI hosts, where leaving it unguarded
+# makes Apache return 500 for every request under this directory.
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php5.c>
+    php_flag engine off
+</IfModule>

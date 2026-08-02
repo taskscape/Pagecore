@@ -21,9 +21,16 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.46.0');
+define('PAGECORE_VERSION', '2.48.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
+// Shared hosts set these with `SetEnv` in .htaccess, which reaches getenv()
+// under mod_php/CGI but only $_SERVER under PHP-FPM. Read both so one
+// deployment recipe works across SAPIs.
+if (!$cmsConfigFile && isset($_SERVER['PAGECORE_CONFIG'])) { $cmsConfigFile = (string) $_SERVER['PAGECORE_CONFIG']; }
 if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
+// Deliberately getenv() only: the development switch must stay easy to turn
+// off. $_SERVER keeps a startup snapshot that putenv() cannot clear, so
+// honouring it here would let a stale value hold the engine in development.
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
 require_once __DIR__ . '/config-schema.php';
 require_once __DIR__ . '/modules/PathPolicy.php';
