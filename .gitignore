@@ -39,3 +39,4 @@ tools/PagecoreDeployer/bin/
 tools/PagecoreDeployer/obj/
 tools/PagecoreDeployer/.vs
 .claude
+scripts/Start-TerapiaSite.ps1
