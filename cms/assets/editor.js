@@ -497,7 +497,6 @@
             fillEditor(res.draft || res);
             ta.disabled = false;
             ta.placeholder = '';
-            ta.focus();
             updateDraftState(res.draft || null);
             renderPreview();
             loadRevisions();

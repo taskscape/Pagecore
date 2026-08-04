@@ -32,6 +32,7 @@ async function openEditor(page, key) {
   await region.locator('.cms-edit-btn').click();
   const panel = page.locator('.cms-panel');
   await expect(panel).toBeVisible();
+  await expect(panel.locator('.cms-textarea')).toBeEnabled();
   return panel;
 }
 
@@ -481,15 +482,15 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.48.0');
-  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.48.0"]')).toHaveCount(1);
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.48.1');
+  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.48.1"]')).toHaveCount(1);
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.48.0');
+  expect((await version.json()).version).toBe('2.48.1');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.48.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.48.1')).toBeVisible();
 });
 
 test('admin design tokens preserve desktop, focus, disabled, and mobile states', async ({ page }) => {
@@ -1161,6 +1162,7 @@ test('dialogs trap keyboard focus, make the background inert, and restore their 
   await editButton.click();
   const editorDialog = page.getByRole('dialog', { name: 'Edit content' });
   await expect(editorDialog).toBeVisible();
+  await expect(editorDialog.locator('.cms-textarea')).toBeEnabled();
   await expect(editorDialog.getByRole('button', { name: 'Close editor' })).toBeFocused();
   await expect(page.locator('.cms-toolbar')).toHaveAttribute('inert', '');
   await editorDialog.getByRole('button', { name: 'Cancel' }).focus();
