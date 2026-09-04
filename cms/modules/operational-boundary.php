@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/JsonPolicy.php';
+require_once __DIR__ . '/json-policy.php';
 
 final class PagecoreOperationResult {
     public $ok;

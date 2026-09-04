@@ -209,6 +209,7 @@ function cms_media_bytes($bytes) {
   </div>
 
   <?= cms_admin_client_assets('PAGECORE_MEDIA', array('api' => cms_admin_url('api.php'), 'login' => cms_admin_url('login.php'), 'media' => cms_admin_url('media.php'), 'token' => cms_csrf_token(), 'picker' => $picker)) ?>
+  <?= cms_admin_update_refresh() ?>
   <script nonce="<?= cms_media_e(cms_csp_nonce()) ?>">
   (function () {
     'use strict';

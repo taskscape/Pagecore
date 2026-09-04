@@ -1,10 +1,10 @@
 <?php
-require_once dirname(__DIR__) . '/cms/modules/PathPolicy.php';
-require_once __DIR__ . '/lib/WordPressHtmlConverter.php';
-require_once __DIR__ . '/lib/WordPressShortcodes.php';
-require_once __DIR__ . '/lib/WordPressSqlDump.php';
-require_once __DIR__ . '/lib/WordPressImportPolicy.php';
-require_once __DIR__ . '/lib/WordPressMenu.php';
+require_once dirname(__DIR__) . '/cms/modules/path-policy.php';
+require_once __DIR__ . '/lib/wordpress-html-converter.php';
+require_once __DIR__ . '/lib/wordpress-shortcodes.php';
+require_once __DIR__ . '/lib/wordpress-sql-dump.php';
+require_once __DIR__ . '/lib/wordpress-import-policy.php';
+require_once __DIR__ . '/lib/wordpress-menu.php';
 /**
  * One-time WordPress -> Pagecore importer.
  *

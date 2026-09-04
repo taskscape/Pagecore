@@ -1,13 +1,13 @@
 <?php
-require dirname(__DIR__) . '/scripts/lib/WordPressSqlDump.php';
-require dirname(__DIR__) . '/scripts/lib/WordPressImportPolicy.php';
-require dirname(__DIR__) . '/scripts/lib/WordPressHtmlConverter.php';
-require dirname(__DIR__) . '/scripts/lib/WordPressShortcodes.php';
+require dirname(__DIR__) . '/scripts/lib/wordpress-sql-dump.php';
+require dirname(__DIR__) . '/scripts/lib/wordpress-import-policy.php';
+require dirname(__DIR__) . '/scripts/lib/wordpress-html-converter.php';
+require dirname(__DIR__) . '/scripts/lib/wordpress-shortcodes.php';
 
 function sql_fields($row) { return PagecoreWordPressSqlDump::fields($row); }
 function sql_val($value) { return PagecoreWordPressSqlDump::value($value); }
 function wp_unserialize_option($value) { return PagecoreWordPressImportPolicy::decodeSerializedOption($value); }
-require dirname(__DIR__) . '/scripts/lib/WordPressMenu.php';
+require dirname(__DIR__) . '/scripts/lib/wordpress-menu.php';
 
 $failures = array();
 function import_component_check($condition, $message) { global $failures; if (!$condition) { $failures[] = $message; } }

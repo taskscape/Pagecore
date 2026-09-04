@@ -40,3 +40,6 @@ tools/PagecoreDeployer/obj/
 tools/PagecoreDeployer/.vs
 .claude
 scripts/Start-TerapiaSite.ps1
+
+# Generated at package time; never committed from a working tree.
+cms/build.json

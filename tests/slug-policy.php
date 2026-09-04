@@ -1,6 +1,6 @@
 <?php
-require dirname(__DIR__) . '/cms/modules/SlugPolicy.php';
-require dirname(__DIR__) . '/scripts/lib/WordPressImportPolicy.php';
+require dirname(__DIR__) . '/cms/modules/slug-policy.php';
+require dirname(__DIR__) . '/scripts/lib/wordpress-import-policy.php';
 
 $failures = array();
 function slug_policy_check($condition, $message) { global $failures; if (!$condition) { $failures[] = $message; } }

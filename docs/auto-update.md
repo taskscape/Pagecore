@@ -1,8 +1,30 @@
 # Auto-update design
 
-Status: design, not yet implemented.
+Status: implemented in 2.50.0. Phases 1-3 ship; phase 4 (signing, rollback from
+the admin UI) remains open.
 Scope: PageCore instances deployed to a Unix host from the public repository
 `https://github.com/taskscape/Pagecore`.
+
+Implementation map:
+
+| Concern | Code |
+| --- | --- |
+| Eligibility, identity, cron-key comparison | `cms/modules/update-policy.php` |
+| Outbound HTTPS, allowlist, redirects | `cms/modules/update-transport.php` |
+| Extraction and manifest verification | `cms/modules/update-archive.php` |
+| Tree primitives, path safety | `cms/modules/update-files.php` |
+| Cached state, lock, maintenance flag | `cms/modules/update-state.php` |
+| The ten-stage apply | `cms/modules/update-installer.php` |
+| Configuration binding and orchestration | `cms/update-service.php` |
+| Admin page, keyed endpoint, CLI entry | `cms/update.php`, `cms/update-cron.php`, `cms/update-cli.php` |
+| Identity, asset build id, maintenance gate | `cms/engine.php` |
+| Publication | `.github/workflows/release-publish.yml`, `scripts/Build-PagecoreRelease.ps1` |
+
+One option was added during implementation that the design did not anticipate:
+`update_ca_bundle`, an absolute path to a CA bundle for hosts whose PHP ships
+without one. It selects the trust store and cannot disable verification — a
+host with no usable bundle fails closed with an actionable message rather than
+proceeding insecurely.
 
 An instance learns that a newer build of `main` exists, tells the operator in one
 unobtrusive line inside the admin panel, explains the difference on a dedicated

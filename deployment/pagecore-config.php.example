@@ -34,6 +34,27 @@ return array(
     'audit_log_path' => $privateRoot . '/state/audit.jsonl',
     'audit_hash_key' => 'REPLACE_WITH_RANDOM_AUDIT_HASH_KEY',
     'audit_max_bytes' => 5242880,
+    // ---------------------------------------------------------------- updates
+    // Pagecore compares this installation against the published main build and
+    // shows one line in the admin panel when a newer one exists.
+    'update_channel' => 'main',                 // 'off' disables checking entirely
+    'update_state_dir' => $privateRoot . '/state',
+    'update_work_dir' => $privateRoot . '/updates',
+    // Allow this instance to replace its own cms/ directory. Leaving this false
+    // keeps the notice and the update page but removes every write path; the
+    // update page then prints the manual commands instead of a button.
+    'update_apply' => false,
+    'update_auto_apply' => true,                // cron applies, once update_apply is on
+    // Secret for /cms/update-cron.php. Empty disables the endpoint, which then
+    // answers 404 exactly like an instance without the feature. Generate with:
+    //   php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
+    // Prefer the keyless CLI entry where cron can run PHP directly:
+    //   /usr/local/bin/php /home/USER/public_html/cms/update-cli.php
+    'update_cron_key' => '',
+    'update_cron_min_interval_seconds' => 300,
+    'update_check_ttl_seconds' => 21600,
+    'update_keep' => 3,                         // retained rollback snapshots
+
     'content_dir' => $privateRoot . '/content',
     'backup_dir' => $privateRoot . '/backups',
     'backup_keep' => 20,

@@ -144,14 +144,31 @@ release artifact; individual dependency files are never copied to sites.
 
 ## Release and deployment
 
-`npm run release:build` creates `artifacts/pagecore-X.Y.Z.zip` from the tracked
-`cms/`, `content/`, and `uploads/` sources. The archive contains `VERSION` and a
-SHA-256 manifest. Install it with `scripts/Install-PagecoreRelease.ps1`; the
+`npm run release:build` creates `artifacts/pagecore-X.Y.Z-<short-sha>.zip` from
+the tracked `cms/`, `content/`, and `uploads/` sources. The archive contains
+`VERSION`, a SHA-256 manifest, and `cms/build.json` — the build stamp naming the
+version, the `main` commit, and that commit's time, which is what a deployed
+instance compares against the published feed.
+Install it with `scripts/Install-PagecoreRelease.ps1`; the
 installer validates every entry, replaces the managed CMS as a unit, preserves
 only site-specific `cms/config.php`, and writes `.pagecore-release.json`.
 Run `scripts/Test-PagecoreDeployment.ps1` after deployment to fail on drift or
 a version mismatch. `npm run release:test` exercises build, install,
 configuration preservation, checksum verification, and drift detection.
+
+## Staying current
+
+Open **Updates** in the sidebar to see the installed build, the published one,
+and whether this instance can apply the change. A newer build also adds one
+line of text beside the version in the sidebar.
+
+Applying is opt-in: `update_apply` is `false` until you decide the PHP worker
+may replace its own code. Until then the page prints the manual commands
+instead of an Update button. An update replaces `cms/` only — content, uploads,
+backups, and configuration are untouched, and the previous engine is kept as a
+rollback snapshot. Schedule unattended updates with cron; see
+`deployment/README.md` for both cron forms and `docs/auto-update.md` for the
+full design.
 
 ## Requirements
 

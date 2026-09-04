@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/modules/PathPolicy.php';
+require_once __DIR__ . '/modules/path-policy.php';
 
 /**
  * Normalize a request path without allowing ambiguous traversal or separator
@@ -56,6 +56,8 @@ function pagecore_request_is_denied($requestUri, $privatePrefixes = array(), $up
             '/cms/login.php',
             '/cms/media-file.php',
             '/cms/media.php',
+            '/cms/update.php',
+            '/cms/update-cron.php',
         );
         if (in_array($path, $publicEndpoints, true)) { return false; }
         if (preg_match('~^/cms/assets/(?:admin|admin-client|dialog|editor|editor-state|editor-view|tokens)\.(?:css|js)$~', $path)) { return false; }

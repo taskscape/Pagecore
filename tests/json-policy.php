@@ -1,5 +1,5 @@
 <?php
-require dirname(__DIR__) . '/cms/modules/JsonPolicy.php';
+require dirname(__DIR__) . '/cms/modules/json-policy.php';
 
 $failures = array();
 function json_policy_check($condition, $message) { global $failures; if (!$condition) { $failures[] = $message; } }

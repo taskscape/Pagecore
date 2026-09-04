@@ -1,5 +1,5 @@
 <?php
-require dirname(__DIR__) . '/cms/modules/OperationalBoundary.php';
+require dirname(__DIR__) . '/cms/modules/operational-boundary.php';
 
 $failures = array();
 function boundary_check($condition, $message) { global $failures; if (!$condition) { $failures[] = $message; } }

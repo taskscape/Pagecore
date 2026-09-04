@@ -1,5 +1,5 @@
 <?php
-require dirname(__DIR__) . '/cms/modules/Input.php';
+require dirname(__DIR__) . '/cms/modules/input.php';
 
 $failures = array();
 function input_check($condition, $message) { global $failures; if (!$condition) { $failures[] = $message; } }

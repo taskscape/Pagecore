@@ -30,6 +30,11 @@ $tests = @(
     'time-policy.php',
     'transport-config.php',
     'transport.php',
+    'update-cron-auth.php',
+    'update-installer.php',
+    'update-manifest.php',
+    'update-policy.php',
+    'update-transport.php',
     'wordpress-import-components.php'
 )
 

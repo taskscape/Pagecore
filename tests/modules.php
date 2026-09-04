@@ -1,7 +1,7 @@
 <?php
-require dirname(__DIR__) . '/cms/modules/PathPolicy.php';
-require dirname(__DIR__) . '/cms/modules/ContentPolicy.php';
-require dirname(__DIR__) . '/cms/modules/SessionContext.php';
+require dirname(__DIR__) . '/cms/modules/path-policy.php';
+require dirname(__DIR__) . '/cms/modules/content-policy.php';
+require dirname(__DIR__) . '/cms/modules/session-context.php';
 
 $failures = array();
 function module_check($condition, $message) { global $failures; if (!$condition) { $failures[] = $message; } }

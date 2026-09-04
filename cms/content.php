@@ -163,6 +163,7 @@ function cms_content_posts_url($page, $query, $category) {
         <h1>Content inventory</h1>
         <p class="sub">Manage pages, posts, site structure, and everything your visitors see.</p>
         <p class="version">Pagecore <?= cms_content_e(cms_version()) ?></p>
+        <?= cms_admin_update_notice('version') ?>
       </div>
       <nav class="nav pc-page-actions" aria-label="Content navigation">
         <a href="/"><span class="material-symbols-rounded" aria-hidden="true">open_in_new</span>View site</a>
@@ -414,6 +415,7 @@ function cms_content_posts_url($page, $query, $category) {
   </div>
 
   <?= cms_admin_client_assets('PAGECORE_CONTENT', array('api' => cms_admin_url('api.php'), 'login' => cms_admin_url('login.php'), 'token' => cms_csrf_token(), 'navRevision' => $inventory['nav']['revision'])) ?>
+  <?= cms_admin_update_refresh() ?>
   <script nonce="<?= cms_content_e(cms_csp_nonce()) ?>">
   (function () {
     'use strict';

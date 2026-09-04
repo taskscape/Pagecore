@@ -1,6 +1,6 @@
 <?php
-require_once dirname(__DIR__, 2) . '/cms/modules/SlugPolicy.php';
-require_once dirname(__DIR__, 2) . '/cms/modules/JsonPolicy.php';
+require_once dirname(__DIR__, 2) . '/cms/modules/slug-policy.php';
+require_once dirname(__DIR__, 2) . '/cms/modules/json-policy.php';
 
 final class PagecoreWordPressImportPolicy {
     public static function decodeSerializedOption($value) {

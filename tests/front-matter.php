@@ -1,5 +1,5 @@
 <?php
-require dirname(__DIR__) . '/cms/modules/FrontMatter.php';
+require dirname(__DIR__) . '/cms/modules/front-matter.php';
 
 $failures = array();
 function front_check($condition, $message) { global $failures; if (!$condition) { $failures[] = $message; } }

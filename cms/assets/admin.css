@@ -104,6 +104,8 @@ body.pc-admin a { color: inherit; }
   font-variation-settings: "FILL" 1, "wght" 450, "GRAD" 0, "opsz" 20;
 }
 .pc-sidebar-foot { margin-top: auto; padding: 18px 10px 4px; color: var(--pc-muted); font-size: 12px; }
+.pc-update-notice { margin: 6px 0 0; color: var(--pc-muted); font-size: 12px; line-height: 1.4; }
+.pc-update-notice a { color: var(--pc-text); font-weight: 600; }
 
 .pc-main { min-width: 0; background: var(--pc-surface); }
 .pc-main > .shell { max-width: none; margin: 0; padding: 0; }

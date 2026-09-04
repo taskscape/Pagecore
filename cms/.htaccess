@@ -1,8 +1,8 @@
 # Engine internals are not directly reachable
-<FilesMatch "^(config|engine|auth|audit|runtime|transport)\.php$">
+<FilesMatch "^(config|engine|auth|audit|runtime|transport|update-service|update-cli|build)\.(php|json)$">
     Require all denied
 </FilesMatch>
-RedirectMatch 404 ^/cms/(lib|tools)/
+RedirectMatch 404 ^/cms/(lib|tools|modules)/
 
 # Match the default application request cap (8 MiB upload plus multipart overhead).
 LimitRequestBody 8912896

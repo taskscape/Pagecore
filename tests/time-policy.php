@@ -1,5 +1,5 @@
 <?php
-require dirname(__DIR__) . '/cms/modules/TimePolicy.php';
+require dirname(__DIR__) . '/cms/modules/time-policy.php';
 
 $failures = array();
 function time_check($condition, $message) { global $failures; if (!$condition) { $failures[] = $message; } }

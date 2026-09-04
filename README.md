@@ -913,6 +913,18 @@ creation, upload validation, media-library search, metadata sidecars, picker
 insertion, deletion of unused uploads, content inventory, missing Markdown
 creation and editable navigation.
 
+## Source filename policy
+
+Project-authored PHP, JavaScript, and CSS filenames are lowercase. Use hyphens
+to separate words when that improves readability. This keeps includes portable
+to case-sensitive hosts and makes the web-facing source tree consistent.
+
+The remaining mixed-case names follow an external convention rather than a
+Pagecore convention: PowerShell scripts use the standard `Verb-Noun.ps1`
+format, C# and WPF filenames match their PascalCase types, `README.md` and
+`AGENTS.md` are conventional repository metadata names, and
+`cms/lib/Parsedown.php` retains its upstream vendored filename.
+
 ## Repository layout
 
 ```

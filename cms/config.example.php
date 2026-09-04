@@ -19,6 +19,14 @@ return array(
     'audit_enabled' => true,
     'audit_log_path' => $private . '/state/audit.jsonl',
     'audit_max_bytes' => 5242880,
+    // Updates: check the published main build, but never rewrite our own code
+    // until an operator opts in. See docs/auto-update.md.
+    'update_channel' => 'main',
+    'update_state_dir' => $private . '/state',
+    'update_work_dir' => $private . '/updates',
+    'update_apply' => false,
+    'update_auto_apply' => true,
+    'update_cron_key' => '',
     'content_dir' => $private . '/content',
     'external_edit_validation' => true,
     'rendered_content_cache' => true,

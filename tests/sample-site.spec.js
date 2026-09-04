@@ -493,15 +493,59 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.49.0');
-  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.49.0"]')).toHaveCount(1);
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.50.1');
+  // A source checkout carries no build stamp, so the asset token stays the
+  // bare version; a release stamps it with the commit as well.
+  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.50.1"]')).toHaveCount(1);
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.49.0');
+  expect((await version.json()).version).toBe('2.50.1');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.49.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.50.1')).toBeVisible();
+});
+
+test('update page reports the build and never offers to write without opt-in', async ({ page }) => {
+  await login(page);
+
+  await page.goto('/cms/update.php');
+  await expect(page.getByRole('heading', { name: 'Updates', exact: true })).toBeVisible();
+  await expect(page.getByText('2.50.1').first()).toBeVisible();
+
+  // update_apply defaults to false, so no write path is offered anywhere.
+  await expect(page.locator('#apply-update')).toHaveCount(0);
+  await expect(page.locator('#check-now')).toBeVisible();
+
+  // The sample site has never checked, so no notice is rendered.
+  await expect(page.locator('.pc-update-notice')).toHaveCount(0);
+
+  const status = await page.request.get('/cms/api.php?action=update-status');
+  expect(status.ok()).toBeTruthy();
+  const body = await status.json();
+  expect(body.ok).toBe(true);
+  expect(body.can_apply).toBe(false);
+  expect(body.installed).toContain('2.50.1');
+
+  // Applying is refused while update_apply is off, whatever the caller asks for.
+  const apply = await page.request.post('/cms/api.php?action=update-apply', {
+    headers: { 'X-CMS-Token': await page.evaluate(() => window.PAGECORE_UPDATE.token) },
+  });
+  expect(apply.ok()).toBeFalsy();
+});
+
+test('the keyed update endpoint stays invisible without a configured key', async ({ page }) => {
+  // The sample site leaves update_cron_key empty, so the endpoint must answer
+  // exactly as an installation without the feature would.
+  for (const url of ['/cms/update-cron.php', '/cms/update-cron.php?key=', '/cms/update-cron.php?key=wrong']) {
+    const response = await page.request.get(url);
+    expect(response.status(), `${url} should be indistinguishable from absent`).toBe(404);
+    expect((await response.text()).trim()).toBe('');
+  }
+
+  // The CLI entry is not reachable over HTTP at all.
+  const cli = await page.request.get('/cms/update-cli.php');
+  expect(cli.status()).toBe(404);
 });
 
 test('committed browser test site renders its page, post, navigation, and visibility contract', async ({ page }) => {

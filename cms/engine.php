@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.49.0');
+define('PAGECORE_VERSION', '2.50.1');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 // Shared hosts set these with `SetEnv` in .htaccess, which reaches getenv()
 // under mod_php/CGI but only $_SERVER under PHP-FPM. Read both so one
@@ -33,18 +33,20 @@ if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 // honouring it here would let a stale value hold the engine in development.
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
 require_once __DIR__ . '/config-schema.php';
-require_once __DIR__ . '/modules/PathPolicy.php';
-require_once __DIR__ . '/modules/SessionContext.php';
-require_once __DIR__ . '/modules/ContentPolicy.php';
-require_once __DIR__ . '/modules/FrontMatter.php';
-require_once __DIR__ . '/modules/Routes.php';
-require_once __DIR__ . '/modules/MediaReferences.php';
-require_once __DIR__ . '/modules/TemplateDiscovery.php';
-require_once __DIR__ . '/modules/ContentCache.php';
-require_once __DIR__ . '/modules/JsonPolicy.php';
-require_once __DIR__ . '/modules/OperationalBoundary.php';
-require_once __DIR__ . '/modules/TimePolicy.php';
-require_once __DIR__ . '/modules/SlugPolicy.php';
+require_once __DIR__ . '/modules/path-policy.php';
+require_once __DIR__ . '/modules/session-context.php';
+require_once __DIR__ . '/modules/content-policy.php';
+require_once __DIR__ . '/modules/front-matter.php';
+require_once __DIR__ . '/modules/routes.php';
+require_once __DIR__ . '/modules/media-references.php';
+require_once __DIR__ . '/modules/template-discovery.php';
+require_once __DIR__ . '/modules/content-cache.php';
+require_once __DIR__ . '/modules/json-policy.php';
+require_once __DIR__ . '/modules/operational-boundary.php';
+require_once __DIR__ . '/modules/time-policy.php';
+require_once __DIR__ . '/modules/slug-policy.php';
+require_once __DIR__ . '/modules/update-policy.php';
+require_once __DIR__ . '/modules/update-state.php';
 list($cmsConfig, $cmsConfigErrors) = cms_validate_config(require $cmsConfigFile, !$cmsDevelopment);
 if ($cmsConfigErrors) {
     error_log('Pagecore configuration invalid: ' . implode('; ', $cmsConfigErrors));
@@ -161,6 +163,92 @@ function cms_version() {
     return PAGECORE_VERSION;
 }
 
+/**
+ * The build this installation actually runs: the textual version, the main
+ * commit it was packaged from, and that commit's time. Releases carry
+ * cms/build.json; a hand-copied install has no stamp and reports a null
+ * commit, which blocks unattended updates but not the notice.
+ */
+function cms_build_identity() {
+    if (isset($GLOBALS['CMS_BUILD_IDENTITY'])) { return $GLOBALS['CMS_BUILD_IDENTITY']; }
+    $identity = null;
+    $stamp = CMS_DIR . '/build.json';
+    if (is_file($stamp)) {
+        $decoded = PagecoreJsonPolicy::decodeObject((string) @file_get_contents($stamp));
+        if ($decoded->ok) { $identity = PagecoreUpdatePolicy::normalizeBuild($decoded->value); }
+    }
+    // A stamp that disagrees with the engine constant describes a different
+    // build than the one running, so it is discarded rather than trusted.
+    if ($identity === null || $identity['version'] !== PAGECORE_VERSION) {
+        $identity = PagecoreUpdatePolicy::unstampedBuild(PAGECORE_VERSION);
+    }
+    $GLOBALS['CMS_BUILD_IDENTITY'] = $identity;
+    return $identity;
+}
+
+/**
+ * Cache-busting token for versioned admin assets. Commit-level updates change
+ * cms/assets/* without moving PAGECORE_VERSION, and .htaccess serves those
+ * files as immutable for a year, so the token has to follow the build.
+ */
+function cms_build_id() {
+    return PagecoreUpdatePolicy::buildId(cms_build_identity());
+}
+
+/** Private directory holding update state, the lock, and the maintenance flag. */
+function cms_update_state_dir() {
+    $configured = cms_cfg('update_state_dir');
+    if (is_string($configured) && $configured !== '') { return rtrim($configured, '/\\'); }
+    return rtrim(cms_cfg('login_rate_limit_dir', cms_cfg('content_dir') . '/.state'), '/\\');
+}
+
+/** True only during the brief directory swap an update performs. */
+function cms_update_maintenance_active() {
+    return PagecoreUpdateState::maintenanceActive(cms_update_state_dir());
+}
+
+/**
+ * The cached update decision an admin screen renders. This reads state written
+ * by cron or by the asynchronous refresh and performs no network I/O: a page
+ * render must never depend on the update host being reachable.
+ */
+function cms_update_notice() {
+    if (cms_cfg('update_channel', 'main') === 'off') { return null; }
+    $state = PagecoreUpdateState::read(cms_update_state_dir());
+    if ($state['decision'] !== 'available' || !is_array($state['latest'])) { return null; }
+    return array(
+        'version' => $state['latest']['version'],
+        'identity' => PagecoreUpdatePolicy::describe($state['latest']),
+        'url' => cms_admin_url('update.php'),
+    );
+}
+
+/** True when the cached check is old enough for the admin panel to refresh it. */
+function cms_update_check_due() {
+    if (cms_cfg('update_channel', 'main') === 'off' || !cms_cfg('update_check_on_admin', true)) { return false; }
+    $state = PagecoreUpdateState::read(cms_update_state_dir());
+    return PagecoreUpdateState::isStale($state, (int) cms_cfg('update_check_ttl_seconds', 21600));
+}
+
+/**
+ * Hold admin traffic while the engine directory is being replaced. Public
+ * pages keep serving: content is untouched and served by loaded code.
+ */
+function cms_require_no_maintenance($json = false) {
+    if (!cms_update_maintenance_active()) { return; }
+    http_response_code(503);
+    header('Retry-After: 15');
+    header('Cache-Control: no-store');
+    if ($json) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo '{"ok":false,"error":"Pagecore is installing an update. Try again in a few seconds."}';
+    } else {
+        header('Content-Type: text/plain; charset=utf-8');
+        echo "Pagecore is installing an update. Try again in a few seconds.\n";
+    }
+    exit;
+}
+
 function cms_is_logged_in() {
     return !empty($_SESSION['cms_auth']);
 }
@@ -196,7 +284,7 @@ function cms_content_revision($path) {
 function cms_site_url($path = '') { return PagecoreRoutes::join(cms_cfg('base_url', '/'), $path); }
 function cms_admin_url($path = '') { return PagecoreRoutes::join(cms_cfg('cms_url', '/cms'), $path); }
 function cms_asset_url($filename) {
-    return cms_admin_url('assets/' . ltrim((string) $filename, '/')) . '?v=' . rawurlencode(cms_version());
+    return cms_admin_url('assets/' . ltrim((string) $filename, '/')) . '?v=' . rawurlencode(cms_build_id());
 }
 
 /** Run a mutation while holding an advisory lock scoped to one logical resource. */

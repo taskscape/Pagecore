@@ -75,6 +75,50 @@ that branch reaches end of security support. The runtime guard fails startup
 on older branches, while CI runs lint, policy, and browser lanes on every
 declared supported branch.
 
+## Updates
+
+Pagecore compares this installation against the build published from `main` and
+shows one line in the admin panel when a newer one exists. The full contract is
+in `docs/auto-update.md`; the operational summary is:
+
+- Checking is read-only and needs no write access. Page rendering never
+  contacts the network — the notice is served from cached state that either a
+  cron job or one asynchronous same-origin request refreshes.
+- `update_apply` is `false` by default. While it is off, Pagecore reports and
+  explains but never writes to `cms/`, and the update page prints the manual
+  commands instead of a button. Turn it on only when the PHP worker may replace
+  its own code, and prefer the CLI cron entry below if that trade is unwelcome.
+- An update replaces `cms/` only. Content, uploads, backups, configuration, and
+  site templates are never touched, and the previous engine is retained as a
+  rollback snapshot under `update_work_dir`.
+- Public pages keep serving throughout. The admin panel answers `503` with
+  `Retry-After` for the few seconds the directory swap takes.
+
+Schedule a check with either cron form. Servers run UTC, so pick a random
+minute per instance rather than the same one everywhere:
+
+```
+37 3 * * * /usr/local/bin/php /home/USER/public_html/cms/update-cli.php >/dev/null 2>&1
+```
+
+```
+37 3 * * * /usr/bin/curl -fsS -m 300 -H "X-Pagecore-Update-Key: KEY" "https://example.com/cms/update-cron.php" >/dev/null 2>&1
+```
+
+The CLI form is preferred: it needs no key, so nothing sensitive travels over
+the wire. The HTTP endpoint requires `update_cron_key`, at least 32 characters,
+generated with `php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"`. Leave the
+key empty and the endpoint answers `404`, exactly as an installation without
+the feature would. A key passed as `?key=` also works, for panels that only
+accept a URL, but it is recorded in the server access log — prefer the header.
+
+Add `?dry_run=1` to check without applying while validating a new cron entry.
+
+Updates are the only outbound connections Pagecore makes. They are HTTPS-only
+with mandatory certificate verification and no option to relax it. On a host
+whose PHP ships without a CA bundle the check fails closed; point
+`update_ca_bundle` at one (commonly `/etc/ssl/certs/ca-certificates.crt`).
+
 Security audit events are appended as JSON lines to `audit_log_path`. They
 contain event/outcome names, UTC timestamps, correlation IDs, and keyed hashes
 of the account and request source—never credentials, session/CSRF tokens,

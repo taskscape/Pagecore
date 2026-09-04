@@ -32,6 +32,15 @@ return array(
     'audit_enabled' => true,
     'audit_log_path' => $content . '/.state/audit.jsonl',
     'audit_max_bytes' => 5242880,
+    // The sample site exercises the update screens but must never reach the
+    // network: the background admin check is off, so an update check happens
+    // only when someone explicitly asks for one. Applying stays disabled.
+    'update_channel' => 'main',
+    'update_check_on_admin' => false,
+    'update_apply' => false,
+    'update_cron_key' => '',
+    'update_state_dir' => $content . '/.state',
+    'update_work_dir' => $content . '/.updates',
     'content_dir' => $content,
     'generated_dir' => $generated,
     'external_edit_validation' => true,
