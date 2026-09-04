@@ -1,7 +1,11 @@
 const { defineConfig, devices } = require('@playwright/test');
+const os = require('os');
+const path = require('path');
+const { randomUUID } = require('crypto');
 
 const port = Number(process.env.PAGECORE_MIGRATION_PORT || 18767);
 const baseURL = process.env.PAGECORE_MIGRATION_BASE_URL || `http://127.0.0.1:${port}`;
+process.env.PAGECORE_TEST_ROOT ||= path.join(os.tmpdir(), `pagecore-migration-${randomUUID()}`);
 
 module.exports = defineConfig({
   testDir: './tests',

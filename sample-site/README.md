@@ -10,6 +10,9 @@ npm install
 npm run sample:start
 ```
 
+The launcher uses `C:\Tools\PHP\php.exe` by default. Set `PAGECORE_PHP_EXE`
+when a different PHP executable is required.
+
 Then open `http://127.0.0.1:8765/sample-site/`.
 
 The bundled pages include `/sample-site/showcase/`, which demonstrates the
@@ -34,10 +37,24 @@ folders:
 - `search-index.json`
 - `sitemap.xml`
 
+`fixtures/test-site.json` is the committed browser-regression contract. It
+lists the routes, content fragments, post visibility states, navigation, and
+uploads the browser tests must preserve. Playwright copies the fixture into a
+worker-specific temporary directory before every test, removes mutations after
+every test, and deletes the worker directory at completion.
+
 Reset them with:
 
 ```powershell
 npm run sample:reset
+```
+
+`npm run test:site:reset` is an equivalent, explicitly test-oriented reset
+command. Both commands verify that the resulting runtime files are exact copies
+of the committed fixture. Validate the fixture itself with:
+
+```powershell
+npm run test:sample-test-site
 ```
 
 Run the browser suite with:

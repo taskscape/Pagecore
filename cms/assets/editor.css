@@ -4,13 +4,34 @@
 /* --- editable region affordances ------------------------------------- */
 .cms-editable { position: relative; }
 .cms-editable:hover { outline: 2px dashed rgba(156, 63, 46, .55); outline-offset: 4px; }
+.cms-inline-actions {
+    position: absolute; top: -18px; right: -8px; z-index: 9990;
+    display: none; align-items: center; gap: 6px;
+    font: 600 12px/1.4 "Open Sans", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+.cms-editable:hover > .cms-inline-actions,
+.cms-inline-actions:focus-within,
+.cms-inline-editing > .cms-inline-actions { display: flex; }
+.cms-inline-actions[hidden], .cms-inline-btn[hidden] { display: none !important; }
 .cms-edit-btn {
-    position: absolute; top: -14px; right: -10px; z-index: 9990;
     display: none; padding: 4px 10px; font: 600 12px/1.4 "Open Sans", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
     color: #fff; background: #9c3f2e; border: 0; border-radius: 14px; cursor: pointer;
     box-shadow: 0 2px 8px rgba(0,0,0,.25);
 }
-.cms-editable:hover > .cms-edit-btn { display: block; }
+.cms-inline-actions > .cms-edit-btn { position: static; display: inline-flex; align-items: center; }
+.cms-inline-btn {
+    padding: 6px 10px; border: 1px solid rgba(255,255,255,.65); border-radius: 14px;
+    color: #fff; background: #2f6b52; font: inherit; cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+}
+.cms-inline-cancel { color: #2b2620; border-color: #d8d2c4; background: #fff; }
+.cms-inline-btn[disabled], .cms-edit-btn[disabled] { opacity: .6; cursor: default; }
+.cms-inline-status { padding: 5px 7px; border-radius: 6px; color: #555550; background: rgba(255,255,255,.95); white-space: nowrap; }
+.cms-inline-status:empty { display: none; }
+.cms-inline-error { color: #8c2f1c; }
+.cms-inline-editing { outline: 2px solid rgba(47,107,82,.7); outline-offset: 4px; }
+.cms-inline-editing [contenteditable] { cursor: text; }
+.cms-inline-editing [contenteditable]:focus { outline: 1px dashed rgba(47,107,82,.7); outline-offset: 2px; }
 .cms-empty { color: #8a8072; font-style: italic; }
 
 /* --- toolbar ----------------------------------------------------------- */
@@ -185,13 +206,19 @@
 }
 .cms-editable:hover { outline-color: rgba(32, 32, 30, .45); }
 .cms-edit-btn {
-    top: -18px; right: -8px; display: none; align-items: center; gap: 5px;
+    display: none; align-items: center; gap: 5px;
     padding: 7px 11px; border: 1px solid rgba(255,255,255,.55); border-radius: 8px;
     background: #20201e; font-family: "Inter", -apple-system, "Segoe UI", sans-serif;
     box-shadow: 0 5px 16px rgba(20,20,18,.18);
 }
 .cms-edit-btn .material-symbols-rounded { font-size: 16px; }
-.cms-editable:hover > .cms-edit-btn, .cms-edit-btn:focus { display: inline-flex; }
+.cms-inline-actions > .cms-edit-btn, .cms-edit-btn:focus { display: inline-flex; }
+.cms-inline-actions { font-family: "Inter", -apple-system, "Segoe UI", sans-serif; }
+.cms-inline-btn { min-height: 32px; border-radius: 8px; box-shadow: 0 5px 16px rgba(20,20,18,.16); }
+.cms-inline-save { border-color: var(--pc-success); background: var(--pc-success); }
+.cms-inline-save:hover { background: var(--pc-success-hover); }
+.cms-inline-cancel { border-color: var(--pc-border); background: var(--pc-surface); color: var(--pc-text); }
+.cms-inline-cancel:hover { background: #f1f1ee; }
 
 .cms-toolbar {
     right: 18px; bottom: 18px; gap: 5px; padding: 7px;
@@ -291,6 +318,8 @@
 
 @media (max-width: 760px) {
     .cms-edit-btn { display: inline-flex; min-height: 44px; align-items: center; }
+    .cms-inline-actions { top: -22px; max-width: calc(100vw - 20px); flex-wrap: wrap; justify-content: flex-end; }
+    .cms-inline-btn { min-height: 44px; }
     .cms-toolbar { left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); overflow-x: auto; }
     .cms-toolbar-brand, .cms-version { display: none; }
     .cms-toolbar a { min-height: 44px; flex: 0 0 auto; }

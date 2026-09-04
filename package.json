@@ -1,10 +1,11 @@
 {
   "name": "pagecore",
-  "version": "2.48.1",
+  "version": "2.49.0",
   "private": true,
   "description": "Pagecore CMS sample site and end-to-end tests.",
   "scripts": {
     "sample:reset": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Reset-SampleSite.ps1",
+    "test:site:reset": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Reset-SampleSite.ps1",
     "sample:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Start-SampleSite.ps1",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
@@ -37,6 +38,7 @@
     "test:admin-view": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-AdminView.ps1",
     "test:editor-state": "node tests/editor-state.js",
     "test:reset-helper": "node tests/reset-sample-site.js",
+    "test:sample-test-site": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-SampleTestSite.ps1",
     "quality:version": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-VersionSync.ps1",
     "quality:php-lint": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-PhpLint.ps1",
     "quality:js": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-JavaScript.ps1",

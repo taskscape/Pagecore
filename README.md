@@ -25,10 +25,12 @@ files, and a folder of uploads.
 1. **Log in** at `/cms/login.php` (the URL is deliberately not linked anywhere
    on the site). A toolbar appears confirming you are logged in, with a logout
    link.
-2. **Browse the site normally.** Every editable fragment is outlined; hovering
-   reveals an **✎ Edytuj** (Edit) button. Empty fragments show a placeholder
-   so they can still be found and filled in.
-3. **Edit in a panel** that opens over the page:
+2. **Browse the site normally.** Every editable fragment is outlined. Click its
+   content to edit the rendered text directly, then choose **Save** to publish
+   immediately or **Cancel** to restore the text from before editing. Inline
+   mode accepts text only. Hovering still reveals the existing **Edit** button,
+   and empty fragments show a placeholder so they can still be found and filled in.
+3. **Use Edit for the full panel** that opens over the page:
    - Content is written in **Markdown**, including tables.
    - A server-side **preview** shows exactly how the fragment will render.
    - **Save draft** stores work under `content/.drafts/` without changing what
@@ -893,12 +895,23 @@ retain only their own `cms/config.php`, templates, and content. The Zagozda
 launcher performs this verified install before it starts, so its ignored
 fixture cannot become a second CMS implementation.
 
-The Playwright config starts the PHP built-in server with `php/php.exe`. Test
-content is reset from `sample-site/fixtures/` into ignored runtime folders
-before each run. The suite covers visitor rendering, drafts, preview, publish,
-revision restore, post creation, upload validation, media-library search,
-metadata sidecars, picker insertion, deletion of unused uploads, content
-inventory, missing Markdown creation and editable navigation.
+The Playwright config starts the PHP built-in server with
+`C:\Tools\PHP\php.exe` (or `PAGECORE_PHP_EXE` when set). The committed browser
+test site lives in `sample-site/fixtures/`; its page, post, visibility,
+navigation, and upload contract is recorded in
+`sample-site/fixtures/test-site.json`. Each browser-test worker receives a
+private copy in the system temporary directory. That copy is reset before and
+after every test, then removed at the end of the worker, so browser tests never
+depend on data created by another test or a previous run.
+
+Check the committed test-site contract with `npm run test:sample-test-site`.
+Reset the local runnable sample to its committed fixture state with either
+`npm run sample:reset` or `npm run test:site:reset`. The reset helper verifies
+that its copied files match the committed fixtures byte-for-byte. The suite
+covers visitor rendering, drafts, preview, publish, revision restore, post
+creation, upload validation, media-library search, metadata sidecars, picker
+insertion, deletion of unused uploads, content inventory, missing Markdown
+creation and editable navigation.
 
 ## Repository layout
 

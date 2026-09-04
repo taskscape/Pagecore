@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
 const { resetSampleSite, isWithin } = require('../scripts/reset-sample-site');
+const { assertTestSiteContract } = require('../scripts/test-sample-test-site');
 
 const repoRoot = path.resolve(__dirname, '..');
 const sampleRoot = path.join(repoRoot, 'sample-site');
@@ -14,6 +15,7 @@ const generatedFiles = [
   path.join(workerRoot, 'generated', 'search-index.json'),
   path.join(workerRoot, 'generated', 'sitemap.xml')
 ];
+const testSite = assertTestSiteContract();
 
 test.use({ extraHTTPHeaders: { 'X-Pagecore-Test-Worker': workerToken } });
 
@@ -37,6 +39,10 @@ async function openEditor(page, key) {
 }
 
 test.beforeEach(() => {
+  resetSampleSite(workerRoot, testRoot);
+});
+
+test.afterEach(() => {
   resetSampleSite(workerRoot, testRoot);
 });
 
@@ -460,7 +466,11 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
     '',
     '[Unsafe link](javascript:window.__pagecoreExecutableHtml="link")'
   ].join('\n'));
-  page.once('dialog', dialog => dialog.accept());
+  let publishConfirmation;
+  page.once('dialog', dialog => {
+    publishConfirmation = dialog.message();
+    dialog.dismiss();
+  });
   await panel.getByRole('button', { name: 'Publish' }).click();
 
   await page.goto('/sample-site/');
@@ -469,6 +479,7 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
   await expect(page.locator('main script')).toHaveCount(0);
   await expect(page.locator('main img[src="x"]')).toHaveCount(0);
   await expect(page.locator('main')).toContainText('<script>');
+  expect(publishConfirmation).toBeUndefined();
 
   const unsafeLink = page.getByRole('link', { name: 'Unsafe link' });
   await expect(unsafeLink).toBeVisible();
@@ -482,15 +493,83 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.48.1');
-  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.48.1"]')).toHaveCount(1);
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.49.0');
+  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.49.0"]')).toHaveCount(1);
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.48.1');
+  expect((await version.json()).version).toBe('2.49.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.48.1')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.49.0')).toBeVisible();
+});
+
+test('committed browser test site renders its page, post, navigation, and visibility contract', async ({ page }) => {
+  for (const expected of testSite.pages) {
+    const response = await page.goto(expected.route);
+    expect(response.ok(), `${expected.route} should resolve`).toBeTruthy();
+    await expect(page.getByRole('heading', { name: expected.heading, exact: true })).toBeVisible();
+  }
+
+  for (const expected of testSite.posts) {
+    const response = await page.request.get(`/sample-site/post/${expected.slug}/`);
+    if (expected.status === 'publish') {
+      expect(response.ok(), `${expected.slug} should be public`).toBeTruthy();
+    } else {
+      expect(response.status(), `${expected.slug} should stay private`).toBe(404);
+    }
+  }
+
+  await page.goto('/sample-site/');
+  const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
+  await expect(navigation.getByRole('link')).toHaveText(testSite.navigation);
+});
+
+test('editor can cancel and publish plain-text changes directly inline', async ({ page }) => {
+  await login(page);
+  const region = page.locator('[data-cms-key="home/hero"]');
+  const save = region.getByRole('button', { name: 'Save', exact: true });
+  const cancel = region.getByRole('button', { name: 'Cancel', exact: true });
+  const edit = region.getByRole('button', { name: 'Edit', exact: true });
+
+  await expect(save).toBeHidden();
+  await expect(cancel).toBeHidden();
+  await region.getByRole('heading', { name: 'Pagecore sample site' }).click();
+  await expect(save).toBeVisible();
+  await expect(cancel).toBeVisible();
+  await expect(edit).toBeVisible();
+  const inlineHeading = region.locator('h1[contenteditable="plaintext-only"]');
+  await expect(inlineHeading).toBeFocused();
+  await inlineHeading.fill('Temporary inline heading');
+  await cancel.click();
+  await expect(region.getByRole('heading', { name: 'Pagecore sample site' })).toBeVisible();
+  await expect(save).toBeHidden();
+  await expect(cancel).toBeHidden();
+
+  await region.getByRole('heading', { name: 'Pagecore sample site' }).click();
+  await expect(inlineHeading).toBeEditable();
+  await inlineHeading.fill('Saved inline heading');
+  await region.locator('p[contenteditable="plaintext-only"]').fill('Contact editor@example.com & pay $5 = exact.');
+  const publishRequest = page.waitForRequest(request =>
+    request.method() === 'POST' && request.url().includes('/cms/api.php?action=publish')
+  );
+  await save.click();
+  await publishRequest;
+
+  await expect(region).toContainText('Saved inline heading');
+  await expect(region).toContainText('Contact editor@example.com & pay $5 = exact.');
+  await expect(save).toBeHidden();
+  await expect(cancel).toBeHidden();
+
+  const response = await page.request.get('/cms/api.php?action=get&key=home%2Fhero');
+  const payload = await response.json();
+  expect(payload.markdown).toContain('Saved inline heading');
+
+  await region.hover();
+  await edit.click();
+  const fullEditor = page.getByRole('dialog', { name: 'Edit content' });
+  await expect(fullEditor).toBeVisible();
+  await expect(fullEditor.locator('.cms-textarea')).toHaveValue(payload.markdown);
 });
 
 test('admin design tokens preserve desktop, focus, disabled, and mobile states', async ({ page }) => {
@@ -826,11 +905,16 @@ test('editor creates a post, publishes body changes, uploads media, and regenera
   const panel = page.locator('.cms-panel');
   await expect(panel).toBeVisible();
   await panel.locator('textarea').fill('This post was authored through the sample site test.\n\nIt should appear in search and the sitemap after publishing.');
-  page.once('dialog', dialog => dialog.accept());
+  let publishConfirmation;
+  page.once('dialog', dialog => {
+    publishConfirmation = dialog.message();
+    dialog.dismiss();
+  });
   await panel.getByRole('button', { name: 'Publish' }).click();
 
   await page.goto('/sample-site/news/');
   await expect(page.getByRole('link', { name: 'Playwright Announcement' })).toBeVisible();
+  expect(publishConfirmation).toBeUndefined();
 
   const token = await page.evaluate(() => window.CMS_CONFIG && window.CMS_CONFIG.token);
   expect(token).toBeTruthy();

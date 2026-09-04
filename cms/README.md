@@ -45,7 +45,9 @@ Paste the output into `password_hash` in `cms/config.php`.
 
 ## Day-to-day editing
 
-- Log in → browse the site → hover an outlined fragment → **✎ Edit**.
+- Log in → browse the site → click an outlined fragment to edit plain text in
+  place. **Save** publishes immediately, **Cancel** restores the prior content,
+  and the existing **Edit** button still opens the full Markdown editor.
 - Post metadata includes a featured-image drop area. Drop or choose a JPEG/PNG
   within the configured upload limit; Pagecore uploads it and saves its URL to the post draft automatically.
   For a crisp Facebook preview, use a landscape image around 1200 x 630 pixels.

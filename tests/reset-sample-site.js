@@ -2,16 +2,19 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const assert = require('assert');
-const { resetSampleSite } = require('../scripts/reset-sample-site');
+const { resetSampleSite, assertCopiedFixture } = require('../scripts/reset-sample-site');
+const { assertTestSiteContract } = require('../scripts/test-sample-test-site');
 
 const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pagecore-reset-contract-'));
 const workerRoot = path.join(testRoot, 'worker-0');
 try {
   const roots = resetSampleSite(workerRoot, testRoot);
+  assertTestSiteContract();
   assert(fs.existsSync(path.join(roots.content, 'posts')), 'content fixtures were not copied');
   assert(fs.existsSync(roots.uploads), 'upload fixtures were not copied');
   fs.writeFileSync(path.join(roots.content, 'sentinel.txt'), 'remove me');
   resetSampleSite(workerRoot, testRoot);
+  assertCopiedFixture(path.join(__dirname, '..', 'sample-site', 'fixtures', 'content'), roots.content);
   assert(!fs.existsSync(path.join(roots.content, 'sentinel.txt')), 'assigned root was not reset');
 
   const siblingPrefix = testRoot + '-sibling';

@@ -68,18 +68,213 @@
         document.body.appendChild(bar);
     }
 
+    /* ------------------------------------------------------ inline editing */
+    function regionContentHtml(regionEl) {
+        var clone = regionEl.cloneNode(true);
+        var actions = clone.querySelector('.cms-inline-actions');
+        if (actions) actions.remove();
+        return clone.innerHTML;
+    }
+
+    function replaceRegionContent(regionEl, html) {
+        var actions = regionEl._cmsInlineActions || regionEl.querySelector('.cms-inline-actions');
+        if (actions && actions.parentNode === regionEl) actions.remove();
+        regionEl.innerHTML = html || '<p class="cms-empty">(empty content — click to edit)</p>';
+        if (actions) regionEl.appendChild(actions);
+    }
+
+    function inlineText(regionEl) {
+        var actions = regionEl._cmsInlineActions;
+        if (actions) actions.hidden = true;
+        var text = (regionEl.innerText || '').replace(/\u00a0/g, ' ');
+        if (actions) actions.hidden = false;
+        return text.replace(/\r\n?/g, '\n');
+    }
+
+    function enableInlineSurfaces(state) {
+        var regionEl = state.region;
+        var children = Array.prototype.slice.call(regionEl.childNodes);
+        children.forEach(function (node) {
+            if (node === state.actions) return;
+            if (node.nodeType === 3 && node.nodeValue.trim() !== '') {
+                var span = h('span', 'cms-inline-text-node');
+                node.parentNode.insertBefore(span, node);
+                span.appendChild(node);
+                node = span;
+            }
+            if (node.nodeType === 1) {
+                if (node.classList.contains('cms-empty')) node.textContent = '';
+                node.setAttribute('contenteditable', 'plaintext-only');
+                node.setAttribute('spellcheck', 'true');
+            }
+        });
+        regionEl.classList.add('cms-inline-editing');
+        regionEl.removeAttribute('aria-busy');
+        state.ready = true;
+        state.save.disabled = false;
+        state.status.classList.remove('cms-inline-error');
+        state.status.textContent = 'Editing plain text';
+        var first = Array.prototype.find.call(regionEl.children, function (child) {
+            return child !== state.actions && child.getAttribute('contenteditable') === 'plaintext-only';
+        });
+        if (first) {
+            first.focus();
+            var selection = window.getSelection();
+            var range = document.createRange();
+            range.selectNodeContents(first);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+    }
+
+    function leaveInline(state, html) {
+        state.active = false;
+        state.ready = false;
+        state.busy = false;
+        replaceRegionContent(state.region, html);
+        state.region.classList.remove('cms-inline-editing');
+        state.region.removeAttribute('aria-busy');
+        state.save.hidden = true;
+        state.cancel.hidden = true;
+        state.save.disabled = true;
+        state.cancel.disabled = false;
+        state.edit.disabled = false;
+        state.status.classList.remove('cms-inline-error');
+        state.status.textContent = '';
+    }
+
+    function cancelInline(state, restoreFocus) {
+        if (!state || !state.active) return;
+        leaveInline(state, state.originalHtml);
+        if (restoreFocus) state.edit.focus();
+    }
+
+    function beginInline(state) {
+        if (state.active) return;
+        state.active = true;
+        state.ready = false;
+        state.originalHtml = regionContentHtml(state.region);
+        state.revision = 'missing';
+        state.save.hidden = false;
+        state.cancel.hidden = false;
+        state.save.disabled = true;
+        state.status.classList.remove('cms-inline-error');
+        state.status.textContent = 'Loading…';
+        state.region.setAttribute('aria-busy', 'true');
+        apiGet(state.key).then(function (res) {
+            if (!state.active) return;
+            state.revision = res.revision || 'missing';
+            state.originalHtml = res.html || '';
+            replaceRegionContent(state.region, state.originalHtml);
+            enableInlineSurfaces(state);
+        }).catch(function (err) {
+            if (!state.active) return;
+            state.region.removeAttribute('aria-busy');
+            state.status.textContent = err.message || 'Could not load content.';
+            state.status.classList.add('cms-inline-error');
+        });
+    }
+
+    function saveInline(state) {
+        if (!state.active || !state.ready || state.busy) return;
+        state.busy = true;
+        state.save.disabled = true;
+        state.cancel.disabled = true;
+        state.edit.disabled = true;
+        state.status.classList.remove('cms-inline-error');
+        state.status.textContent = 'Saving…';
+        // Inline and full-window publishing intentionally use the same action,
+        // validation, Markdown parser, escaping policy, lock, and write path.
+        api('publish', { key: state.key, markdown: inlineText(state.region), revision: state.revision }).then(function (res) {
+            if (!state.active) return;
+            state.revision = res.revision || state.revision;
+            state.originalHtml = res.html || '';
+            leaveInline(state, state.originalHtml);
+            state.edit.focus();
+        }).catch(function (err) {
+            if (!state.active) return;
+            state.busy = false;
+            state.save.disabled = false;
+            state.cancel.disabled = false;
+            state.edit.disabled = false;
+            state.status.textContent = err.message || 'Could not save content.';
+            state.status.classList.add('cms-inline-error');
+        });
+    }
+
     /* ------------------------------------------------------ edit buttons */
     function decorateRegions() {
         var regions = document.querySelectorAll('.cms-editable');
         Array.prototype.forEach.call(regions, function (el) {
+            // A span keeps the controls valid inside custom phrasing wrappers
+            // such as cms_editable($key, 'p') as well as the default div.
+            var actions = h('span', 'cms-inline-actions');
+            actions.setAttribute('contenteditable', 'false');
+            var save = h('button', 'cms-inline-btn cms-inline-save', 'Save');
+            save.type = 'button';
+            save.hidden = true;
+            save.disabled = true;
+            var cancel = h('button', 'cms-inline-btn cms-inline-cancel', 'Cancel');
+            cancel.type = 'button';
+            cancel.hidden = true;
             var btn = h('button', 'cms-edit-btn', 'Edit');
             btn.prepend(icon('edit'));
             btn.type = 'button';
+            var status = h('span', 'cms-inline-status');
+            status.setAttribute('role', 'status');
+            var state = {
+                region: el, key: el.getAttribute('data-cms-key'), actions: actions,
+                save: save, cancel: cancel, edit: btn, status: status,
+                active: false, ready: false, busy: false, originalHtml: '', revision: 'missing'
+            };
+            el._cmsInlineActions = actions;
+            el._cmsInlineState = state;
+            save.addEventListener('click', function (ev) {
+                ev.preventDefault(); ev.stopPropagation();
+                saveInline(state);
+            });
+            cancel.addEventListener('click', function (ev) {
+                ev.preventDefault(); ev.stopPropagation();
+                cancelInline(state, true);
+            });
             btn.addEventListener('click', function (ev) {
                 ev.preventDefault(); ev.stopPropagation();
+                cancelInline(state, false);
                 openEditor(el, btn);
             });
-            el.appendChild(btn);
+            actions.appendChild(save);
+            actions.appendChild(cancel);
+            actions.appendChild(btn);
+            actions.appendChild(status);
+            el.appendChild(actions);
+            el.addEventListener('click', function (ev) {
+                if (actions.contains(ev.target)) return;
+                if (!state.active) {
+                    ev.preventDefault(); ev.stopPropagation();
+                    beginInline(state);
+                } else if (ev.target.closest && ev.target.closest('a')) {
+                    ev.preventDefault();
+                }
+            });
+            el.addEventListener('keydown', function (ev) {
+                if (!state.active || actions.contains(ev.target)) return;
+                if (ev.key === 'Escape') {
+                    ev.preventDefault();
+                    cancelInline(state, true);
+                } else if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
+                    ev.preventDefault();
+                    saveInline(state);
+                }
+            });
+            el.addEventListener('drop', function (ev) {
+                if (state.active) ev.preventDefault();
+            });
+            el.addEventListener('paste', function (ev) {
+                if (!state.active || actions.contains(ev.target)) return;
+                ev.preventDefault();
+                document.execCommand('insertText', false, ev.clipboardData.getData('text/plain'));
+            });
         });
     }
 
@@ -98,6 +293,9 @@
     }
 
     function openEditor(regionEl, opener) {
+        if (regionEl._cmsInlineState && regionEl._cmsInlineState.active) {
+            cancelInline(regionEl._cmsInlineState, false);
+        }
         if (panel) closeEditor(true);
         var key = regionEl.getAttribute('data-cms-key');
         var isPost = key.indexOf('post:') === 0;
@@ -370,9 +568,7 @@
             syncButtons();
         }
         function replaceRegionHtml(html) {
-            var btn = regionEl.querySelector('.cms-edit-btn');
-            regionEl.innerHTML = html || '<p class="cms-empty">(empty content — click to edit)</p>';
-            if (btn) regionEl.appendChild(btn);
+            replaceRegionContent(regionEl, html);
         }
         function applyPayloadToPage(payload) {
             replaceRegionHtml(payload.html || '');
@@ -436,7 +632,6 @@
             });
         }
         function publishCurrent() {
-            if (!confirm('Publish this version to the site?')) { return; }
             setBusy(true);
             setStatus('Publishing…');
             api('publish', currentPayload('published')).then(function (res) {
