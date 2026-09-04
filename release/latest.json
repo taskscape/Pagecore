@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "channel": "main",
+  "version": "2.50.1",
+  "commit": "3fdbe7c8813f1d3692e43df7be4a0c1c80ac2e71",
+  "commit_time": "2026-09-04T08:37:47Z",
+  "published_at": "2026-09-04T08:38:03Z",
+  "archive_url": "https://github.com/taskscape/Pagecore/releases/download/build-3fdbe7c/pagecore-2.50.1-3fdbe7c.zip",
+  "archive_sha256": "296b6242bd8e86bf2bbb12a0ca1c231603669c6bd7e25edbcde32a78ab234d7e",
+  "archive_bytes": 134625,
+  "min_php": "8.3.0",
+  "notes_url": "https://github.com/taskscape/Pagecore/commits/main"
+}
