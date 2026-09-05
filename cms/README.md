@@ -5,16 +5,20 @@ this `cms/` directory. Nothing else is required.
 
 ## Credentials
 
-Initial login: **admin / legalizm-cms-2026** at `/cms/login.php` (the URL is
-not linked anywhere on the site — bookmark it).
+Sign in as **admin** at `/cms/login.php` (the URL is not linked anywhere on
+the site — bookmark it). This file must never print a password: a copied
+`cms/` tree is web-reachable until Apache deny rules are in place.
 
-**Change the password now:**
+The bundled sample uses public demo credentials documented in
+`sample-site/README.md`. Those credentials are `development_only` and cannot
+boot in production. For a real site, generate a hash into the private
+configuration (not into `cms/config.php`):
 
 ```
 php -r "echo password_hash('your-new-password', PASSWORD_DEFAULT);"
 ```
 
-Paste the output into `password_hash` in `cms/config.php`.
+Paste the output into `password_hash` in the file named by `PAGECORE_CONFIG`.
 
 ## Installing into another PHP site
 
@@ -24,7 +28,10 @@ Paste the output into `password_hash` in `cms/config.php`.
    Raw HTML is always escaped; configuration cannot disable safe mode. Convert
    trusted embeds into template components outside editor-authored Markdown.
 3. Add `require __DIR__ . '/cms/engine.php';` to the site's bootstrap
-   (any file included by every page).
+   (any file included by every page). If that bootstrap defines
+   `CMS_CONFIG_FILE`, resolve `PAGECORE_CONFIG` from `getenv()` and
+   `$_SERVER` first — the engine ignores the environment once the constant
+   is set. `sample-site/_bootstrap.php` is the reference pattern.
 4. Emit `<?= cms_assets() ?>` once before `</body>`.
 5. Replace editable fragments with `<?= cms_editable('page/region') ?>` —
    content then lives in `content/pages/<page>/<region>.md`.

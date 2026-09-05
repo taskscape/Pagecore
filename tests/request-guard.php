@@ -5,6 +5,7 @@ require dirname(__DIR__) . '/cms/request-guard.php';
 $denied = array(
     '/cms/engine.php',
     '/cms/request-guard.php',
+    '/cms/README.md',
     '/cms/lib/Parsedown.php',
     '/cms/%65ngine.php',
     '/cms/%252e%252e/engine.php',
@@ -37,6 +38,18 @@ foreach ($allowed as $uri) {
         fwrite(STDERR, "FAIL: public request was denied: $uri\n");
         exit(1);
     }
+}
+
+$htaccess = (string) file_get_contents(dirname(__DIR__) . '/cms/.htaccess');
+if (strpos($htaccess, '<FilesMatch "\.md$">') === false) {
+    fwrite(STDERR, "FAIL: cms/.htaccess must deny Markdown so Apache cannot serve cms/README.md\n");
+    exit(1);
+}
+
+$readme = (string) file_get_contents(dirname(__DIR__) . '/cms/README.md');
+if (stripos($readme, 'legalizm') !== false) {
+    fwrite(STDERR, "FAIL: cms/README.md must not print a real-looking password\n");
+    exit(1);
 }
 
 fwrite(STDOUT, "PASS: request guard rejects private, executable, traversal, encoding, and backslash variants\n");

@@ -643,6 +643,12 @@ security switch, and `$_SERVER` holds a start-up snapshot that `putenv()`
 cannot clear, so honouring it there would let a stale value pin a production
 site in development mode.
 
+`PAGECORE_DISPLAY_ERRORS` is the diagnostic counterpart: it turns on
+`display_errors` before configuration is parsed and puts the validator's
+rejected keys on the page, without skipping production checks. The engine
+reads it from `getenv()` and from `$_SERVER`, so `SetEnv PAGECORE_DISPLAY_ERRORS 1`
+works under PHP-FPM. Remove it once the fault is found.
+
 Derive the two postures from that one variable so the engine and the
 configuration can never disagree:
 
@@ -741,8 +747,17 @@ under PHP-FPM is not an Apache error, so a panel's per-domain
 the access log fills normally. An empty error log is not a broken log; it is
 the wrong log.
 
-**Create a diagnostics file** in the document root — this reports in one
-request everything the engine needs and prints the real exception:
+**Set `PAGECORE_DISPLAY_ERRORS` first.** A `SetEnv PAGECORE_DISPLAY_ERRORS 1`
+line in the document-root `.htaccess` (or the PHP-FPM `env[]` equivalent)
+turns on `display_errors` before configuration is parsed and names the
+settings the validator rejected. `PAGECORE_DEVELOPMENT=1` implies it, but
+that skip of production checks is usually the wrong tool for a blank 500.
+**Remove the flag once the fault is found** — the output carries absolute
+paths, stack traces, and configuration key names.
+
+If the flag cannot be set, **create a diagnostics file** in the document root
+— this reports in one request everything the engine needs and prints the real
+exception:
 
 ```php
 <?php
@@ -853,7 +868,9 @@ browsing hides.
 This repository includes a working sample site under `sample-site/`. It uses
 the reusable `cms/` directory directly, but points the engine at
 `sample-site/config.php` through the `PAGECORE_CONFIG` environment variable.
-You can also define a `CMS_CONFIG_FILE` constant before requiring
+`sample-site/_bootstrap.php` copies that variable into `CMS_CONFIG_FILE`
+(reading `getenv()` and `$_SERVER`) so a pinned sibling path cannot disagree
+with `SetEnv`. You can also define a `CMS_CONFIG_FILE` constant before requiring
 `cms/engine.php` if an integration needs a per-site config file.
 
 Install the test runner and start the sample site:

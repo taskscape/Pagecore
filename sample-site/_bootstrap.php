@@ -1,6 +1,14 @@
 <?php
 if (!defined('CMS_CONFIG_FILE')) {
-    define('CMS_CONFIG_FILE', __DIR__ . '/config.php');
+    // PAGECORE_CONFIG has to win here. The engine reads it only when this
+    // constant is unset — pinning the sample path unconditionally would let
+    // public pages and /cms load two different configurations on any
+    // deployment that sets the variable. Same getenv()/$_SERVER pair the
+    // engine uses, because SetEnv reaches only one of them depending on the SAPI.
+    $siteConfig = getenv('PAGECORE_CONFIG');
+    if (!$siteConfig && isset($_SERVER['PAGECORE_CONFIG'])) { $siteConfig = (string) $_SERVER['PAGECORE_CONFIG']; }
+    define('CMS_CONFIG_FILE', $siteConfig ?: __DIR__ . '/config.php');
+    unset($siteConfig);
 }
 require dirname(__DIR__) . '/cms/engine.php';
 

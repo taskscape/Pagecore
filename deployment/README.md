@@ -58,6 +58,28 @@ files stay outside the document root:
 RewriteRule ^uploads/(.+)$ cms/media-file.php?path=$1 [L,QSA]
 ```
 
+## Diagnosing a blank 500
+
+By default the engine writes failures to the PHP error log and returns nothing
+to the browser. To read them on the page instead, set:
+
+```apache
+SetEnv PAGECORE_DISPLAY_ERRORS 1
+```
+
+The engine reads that flag from `getenv()` and from `$_SERVER`, so the same
+`SetEnv` line works under mod_php, CGI, and PHP-FPM. It turns on
+`display_errors` before the configuration is parsed, so even a boot failure is
+visible, and it makes the configuration validator name the settings it
+rejected instead of pointing at the log. `PAGECORE_DEVELOPMENT=1` implies it.
+**Remove it once the fault is found** — the output carries absolute paths,
+stack traces, and configuration key names.
+
+The most common cause of a blank 500 on a fresh deployment is the validator
+refusing a development configuration: without `PAGECORE_DEVELOPMENT=1` the
+engine demands `require_https`, `cookie_secure` and `hsts` set to `true`, an
+HTTPS `site_url`, and `development_only`/`demo_credentials` unset or `false`.
+
 Do not set
 `PAGECORE_DEVELOPMENT=1` in production. That opt-in exists only for the bundled
 sample and private local migration fixture, whose routers enforce explicit

@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.50.1');
+define('PAGECORE_VERSION', '2.51.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 // Shared hosts set these with `SetEnv` in .htaccess, which reaches getenv()
 // under mod_php/CGI but only $_SERVER under PHP-FPM. Read both so one
@@ -32,6 +32,23 @@ if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
 // off. $_SERVER keeps a startup snapshot that putenv() cannot clear, so
 // honouring it here would let a stale value hold the engine in development.
 $cmsDevelopment = getenv('PAGECORE_DEVELOPMENT') === '1';
+// Boot diagnostics stay off so production responses never name configuration
+// keys. Development implies them. PAGECORE_DISPLAY_ERRORS turns them on
+// without skipping production validation, so a rejected production profile
+// can be read on the page. SetEnv on PHP-FPM reaches only $_SERVER; this
+// flag reads both. Unlike PAGECORE_DEVELOPMENT it is not a fail-open
+// security switch — getenv() still wins when the variable is present, so
+// tests can turn it off with putenv().
+$cmsDisplayErrorsEnv = getenv('PAGECORE_DISPLAY_ERRORS');
+$cmsDisplayErrors = $cmsDevelopment || $cmsDisplayErrorsEnv === '1'
+    || ($cmsDisplayErrorsEnv === false && isset($_SERVER['PAGECORE_DISPLAY_ERRORS']) && $_SERVER['PAGECORE_DISPLAY_ERRORS'] === '1');
+define('PAGECORE_DISPLAY_ERRORS', $cmsDisplayErrors);
+if (PAGECORE_DISPLAY_ERRORS) {
+    ini_set('display_errors', '1');
+    ini_set('display_startup_errors', '1');
+    ini_set('html_errors', '1');
+    error_reporting(E_ALL);
+}
 require_once __DIR__ . '/config-schema.php';
 require_once __DIR__ . '/modules/path-policy.php';
 require_once __DIR__ . '/modules/session-context.php';
@@ -50,7 +67,11 @@ require_once __DIR__ . '/modules/update-state.php';
 list($cmsConfig, $cmsConfigErrors) = cms_validate_config(require $cmsConfigFile, !$cmsDevelopment);
 if ($cmsConfigErrors) {
     error_log('Pagecore configuration invalid: ' . implode('; ', $cmsConfigErrors));
-    throw new RuntimeException('Pagecore configuration is invalid. Check the server error log.');
+    // The reasons name configuration keys, so they stay out of the response
+    // unless diagnostics were explicitly enabled for this deployment.
+    throw new RuntimeException('Pagecore configuration is invalid. ' . (PAGECORE_DISPLAY_ERRORS
+        ? implode('; ', $cmsConfigErrors)
+        : 'Check the server error log.'));
 }
 $GLOBALS['CMS_CONFIG'] = $cmsConfig;
 require_once __DIR__ . '/audit.php';

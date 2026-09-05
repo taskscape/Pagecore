@@ -4,6 +4,12 @@
 </FilesMatch>
 RedirectMatch 404 ^/cms/(lib|tools|modules)/
 
+# Operator Markdown in cms/ is not a public endpoint. Apache would otherwise
+# serve README.md as a static file; the PHP router already deny-lists it.
+<FilesMatch "\.md$">
+    Require all denied
+</FilesMatch>
+
 # Match the default application request cap (8 MiB upload plus multipart overhead).
 LimitRequestBody 8912896
 

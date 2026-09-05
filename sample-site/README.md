@@ -29,7 +29,10 @@ serve non-loopback clients. Use the private production template under
 `deployment/` with a newly generated password hash for a real site.
 
 The sample uses `sample-site/config.php` via the `PAGECORE_CONFIG` environment
-variable. Mutable runtime files are copied from `fixtures/` into ignored
+variable. `_bootstrap.php` honours that variable (and `$_SERVER`) before
+falling back to the sibling `config.php`, so a `SetEnv` override cannot
+disagree with a pinned constant. Mutable runtime files are copied from
+`fixtures/` into ignored
 folders:
 
 - `working-content/`
