@@ -15,8 +15,8 @@ if ($testRoot && preg_match('~^worker-[0-9]+$~', $testWorker)) {
 }
 
 return array(
-    'development_only' => true,
-    'demo_credentials' => true,
+    'development_only' => false,
+    'demo_credentials' => false,
     'session_name' => 'PAGECORE_SAMPLE',
     'session_hours' => 8,
     'require_https' => false,
