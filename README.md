@@ -182,6 +182,10 @@ Site-specific settings (credentials, categories, searchable pages, site URL,
 upload limits) live in a private configuration file outside the document root,
 selected with `PAGECORE_CONFIG` or `CMS_CONFIG_FILE`. See
 [cms/README.md](cms/README.md) for the full install and operations guide.
+In the standard `public/cms` plus sibling `pagecore-private` layout, direct CMS
+entry points also discover `pagecore-private/config.php` when neither explicit
+configuration source is set; set `PAGECORE_CONFIG` whenever the private path
+differs from that layout.
 
 ## Converting an existing PHP website
 
@@ -543,9 +547,10 @@ The domain folder is therefore the smallest single directory that can hold a
 complete deployment — useful when building an upload artifact, because it maps
 one local folder onto one remote folder.
 
-`cms/config.php` must **not** ship to the public root. The engine's default
-config location is inside `cms/`, which is below the document root and would
-be rejected; production loads the private config instead.
+`cms/config.php` must **not** ship to the public root. When no explicit config
+source is configured, direct CMS entry points discover the sibling
+`pagecore-private/config.php` in this standard layout; deployments with a
+different private path must set `PAGECORE_CONFIG`.
 
 Note that `content/.backups` is created by the engine on first publish rather
 than shipped, which is one reason `content/` itself has to be writable.

@@ -21,13 +21,20 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.51.0');
+define('PAGECORE_VERSION', '2.51.1');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 // Shared hosts set these with `SetEnv` in .htaccess, which reaches getenv()
 // under mod_php/CGI but only $_SERVER under PHP-FPM. Read both so one
 // deployment recipe works across SAPIs.
 if (!$cmsConfigFile && isset($_SERVER['PAGECORE_CONFIG'])) { $cmsConfigFile = (string) $_SERVER['PAGECORE_CONFIG']; }
-if (!$cmsConfigFile) { $cmsConfigFile = __DIR__ . '/config.php'; }
+if (!$cmsConfigFile) {
+    // Direct CMS entry points bypass a site's shared bootstrap. In the standard
+    // public/cms + sibling pagecore-private layout, discover the private config
+    // first so those requests do not fatally require a deliberately absent
+    // public cms/config.php. Explicit configuration sources still take priority.
+    $privateConfigFile = dirname(__DIR__, 2) . '/pagecore-private/config.php';
+    $cmsConfigFile = is_file($privateConfigFile) ? $privateConfigFile : __DIR__ . '/config.php';
+}
 // Deliberately getenv() only: the development switch must stay easy to turn
 // off. $_SERVER keeps a startup snapshot that putenv() cannot clear, so
 // honouring it here would let a stale value hold the engine in development.

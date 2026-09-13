@@ -493,17 +493,17 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.51.0');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.51.1');
   // A source checkout carries no build stamp, so the asset token stays the
   // bare version; a release stamps it with the commit as well.
-  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.51.0"]')).toHaveCount(1);
+  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.51.1"]')).toHaveCount(1);
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.51.0');
+  expect((await version.json()).version).toBe('2.51.1');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.51.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.51.1')).toBeVisible();
 });
 
 test('update page reports the build and never offers to write without opt-in', async ({ page }) => {
@@ -511,7 +511,7 @@ test('update page reports the build and never offers to write without opt-in', a
 
   await page.goto('/cms/update.php');
   await expect(page.getByRole('heading', { name: 'Updates', exact: true })).toBeVisible();
-  await expect(page.getByText('2.51.0').first()).toBeVisible();
+  await expect(page.getByText('2.51.1').first()).toBeVisible();
 
   // update_apply defaults to false, so no write path is offered anywhere.
   await expect(page.locator('#apply-update')).toHaveCount(0);
@@ -525,7 +525,7 @@ test('update page reports the build and never offers to write without opt-in', a
   const body = await status.json();
   expect(body.ok).toBe(true);
   expect(body.can_apply).toBe(false);
-  expect(body.installed).toContain('2.51.0');
+  expect(body.installed).toContain('2.51.1');
 
   // Applying is refused while update_apply is off, whatever the caller asks for.
   const apply = await page.request.post('/cms/api.php?action=update-apply', {
