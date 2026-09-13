@@ -2,12 +2,12 @@
   "schema": 1,
   "channel": "main",
   "version": "2.51.1",
-  "commit": "cb80efa5642f6510a0443e0a82c472e426aa29a1",
-  "commit_time": "2026-09-13T18:44:35Z",
-  "published_at": "2026-09-13T18:44:47Z",
-  "archive_url": "https://github.com/taskscape/Pagecore/releases/download/build-cb80efa/pagecore-2.51.1-cb80efa.zip",
-  "archive_sha256": "f653e37da4986fe32c3af0a790231d80068ef9356518a6f342e33acf21c58522",
-  "archive_bytes": 135400,
+  "commit": "309525a8acf31f5e91f98a4ed13d81606a95a3af",
+  "commit_time": "2026-09-13T18:48:04Z",
+  "published_at": "2026-09-13T18:48:31Z",
+  "archive_url": "https://github.com/taskscape/Pagecore/releases/download/build-309525a/pagecore-2.51.1-309525a.zip",
+  "archive_sha256": "426cad85dcb7be3551a3695ed2e24c34d5ebffc3e6fd77338c35713c8bbb0963",
+  "archive_bytes": 135401,
   "min_php": "8.3.0",
-  "notes_url": "https://github.com/taskscape/Pagecore/compare/f50cb4d...cb80efa"
+  "notes_url": "https://github.com/taskscape/Pagecore/compare/cb80efa...309525a"
 }
