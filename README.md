@@ -836,6 +836,140 @@ write path â€” drafts, backup creation, search index and sitemap regeneration â€
 and it is the step most likely to reveal a permissions problem that read-only
 browsing hides.
 
+## Upgrading an existing installation
+
+Upgrade the Pagecore engine as a unit. Do not copy individual files from a
+checkout or overwrite a live `cms/` directory file by file: a release can add,
+remove, or rename files, and a browser request that arrives mid-upload could
+load a mismatched engine. The release archive is the supported manual upgrade
+source; it contains a stamped, checksummed `cms/` tree for one published build.
+
+Before any upgrade, read the release notes, confirm the target release supports
+the PHP version selected for the domain, and make a recoverable copy of the
+current `cms/` directory. Your private `config.php`, Markdown content, drafts,
+backups, uploads, public PHP templates, and generated search files are not
+part of the engine upgrade. Back them up under the site's normal backup policy
+as well, but do not replace them with the archive's sample `content/` or
+`uploads/` directories.
+
+### Manual upgrade
+
+Use this procedure when automatic application is disabled, when the host does
+not let PHP replace the engine, or when you want to choose when the change is
+made. It works through SSH, a hosting-file manager, or FTP; download and unpack
+the archive locally first if the host does not provide shell access.
+
+1. Sign in to Pagecore and note the installed version from **Content** or
+   **Updates**. Obtain the target archive and its SHA-256 value from the
+   published [GitHub release](https://github.com/taskscape/Pagecore/releases),
+   rather than from a source-code download.
+2. Put the archive in a temporary directory outside the document root. Verify
+   its SHA-256 checksum before extracting it. For example, on a Unix host:
+
+   ```bash
+   sha256sum pagecore-X.Y.Z-<build>.zip
+   # Compare the displayed hash with the one published for that exact archive.
+   unzip -q pagecore-X.Y.Z-<build>.zip -d pagecore-new
+   ```
+
+   On Windows, use `Get-FileHash pagecore-X.Y.Z-<build>.zip -Algorithm SHA256`.
+   Stop if the hash differs or if the extracted tree does not contain
+   `pagecore-new/cms/engine.php`.
+3. Check the release notes for configuration changes. In the standard
+   production layout, `pagecore-private/config.php` is outside the public
+   root and remains in place. Older installations that still use
+   `cms/config.php` must copy that file aside and restore it into the new
+   `cms/` directory; never replace it with the archive's example configuration.
+4. Make a named rollback copy of the complete live engine, then replace the
+   directory with the extracted `cms/` directory. With SSH, from the public
+   root, the essential swap is:
+
+   ```bash
+   mv cms cms.before-X.Y.Z
+   mv pagecore-new/cms cms
+   ```
+
+   Do not delete `cms.before-X.Y.Z` until the checks below succeed. On FTP or a
+   file manager, upload the extracted `cms/` directory under a new temporary
+   name, then use the host's rename operation to move the old directory aside
+   and the new one into the exact name `cms`. Renames are preferable to
+   deleting the old engine before the upload has finished.
+5. Load the public homepage, `/cms/login.php`, and `/cms/content.php`; then log
+   in and publish a small test edit. Confirm the reported version and that the
+   expected content, media, drafts, and backup history remain available. If
+   Pagecore fails to boot, rename `cms.before-X.Y.Z` back to `cms` and inspect
+   the PHP error log before retrying.
+
+Once verified, retain the previous engine for as long as your deployment policy
+requires, then remove it. Never leave a second copy with a public web route or
+an exposed `config.php`.
+
+### Enabling automatic upgrades
+
+Automatic upgrades are deliberately opt-in. In the private configuration copied
+from `deployment/pagecore-config.php.example`, leave update checking enabled
+and set the application switches only after the PHP worker has permission to
+rename the public `cms/` directory and write the configured private state and
+work directories:
+
+```php
+'update_channel' => 'main',
+'update_state_dir' => $privateRoot . '/state',
+'update_work_dir' => $privateRoot . '/updates',
+'update_apply' => true,
+'update_auto_apply' => true,
+'update_keep' => 3,
+```
+
+`update_apply` is the master safety switch. Its default is `false`: Pagecore
+may check for and display an available version, but it cannot change `cms/`.
+With it set to `true`, a logged-in administrator can apply an offered update
+from `/cms/update.php`. `update_auto_apply` controls only unattended runs;
+set it to `false` if cron should check and report availability but never apply
+the update itself. Set `update_channel` to `off` to disable all checks.
+
+Schedule a daily (or similarly infrequent) cron job after enabling it. The CLI
+form is preferred because it needs no secret in the network request:
+
+```cron
+37 3 * * * /usr/local/bin/php /home/USER/public_html/cms/update-cli.php >/dev/null 2>&1
+```
+
+Make sure the cron environment supplies `PAGECORE_CONFIG` and, where needed,
+`PAGECORE_DOCUMENT_ROOT`, just as the web process does. To prove the job can
+check without applying, run it once with `--check`:
+
+```bash
+/usr/local/bin/php /home/USER/public_html/cms/update-cli.php --check
+```
+
+If the control panel can call only a URL, generate a random 32-byte-or-longer
+`update_cron_key`, add it to the private configuration, and send it in the
+`X-Pagecore-Update-Key` header to `/cms/update-cron.php`. The CLI remains the
+safer choice because it does not send or log a credential. An empty or invalid
+key disables the HTTP endpoint and it responds with `404`.
+
+### How automatic upgrades work
+
+Pagecore never checks the network while rendering a site page. A scheduled run
+(or a same-origin administrative refresh) downloads the published update feed
+over HTTPS, caches its result in `update_state_dir`, and compares the stamped
+installed build with the published build. It refuses an unsupported PHP
+version, a different channel, a malformed feed or archive, and a build that is
+not newer; an unstamped hand-copied installation also requires an interactive
+first update rather than an unattended one.
+
+When an eligible update is applied, Pagecore downloads it to
+`update_work_dir`, verifies its archive SHA-256 and every file in its manifest,
+then snapshots the current `cms/` directory. It stages the verified replacement
+beside the live engine and swaps the directories under an exclusive lock. Only
+`cms/` changes: private configuration, content, uploads, drafts, backups, and
+site templates are preserved. The admin portion briefly returns `503` during
+the swap, while public pages continue serving; failed preflight, download, or
+verification steps leave the live engine untouched. The prior engine snapshots
+are kept according to `update_keep`, so an operator can restore one manually
+if a post-upgrade issue is discovered.
+
 ## Security
 
 - **Single-account login** with a bcrypt password hash; browser-session-scoped
