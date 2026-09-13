@@ -1,0 +1,125 @@
+<Window x:Class="PagecoreDeployer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Pagecore Deployer" Height="720" Width="820"
+        MinHeight="620" MinWidth="720"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="Segoe UI" FontSize="13">
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Connection -->
+        <GroupBox Grid.Row="0" Header="Server" Padding="10" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Host" VerticalAlignment="Center" Margin="0,4,10,4" MinWidth="60"/>
+                <TextBox   Grid.Row="0" Grid.Column="1" x:Name="HostBox" Margin="0,4"
+                           ToolTip="e.g. ftps://mojerzeczy.com — FTP with explicit TLS, always required, never falling back to cleartext. Use sftp:// only for a login that has SSH access."/>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="User" VerticalAlignment="Center" Margin="0,4,10,4"/>
+                <TextBox   Grid.Row="1" Grid.Column="1" x:Name="UserBox" Margin="0,4"
+                           ToolTip="e.g. admin@mojerzeczy.pl"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Password" VerticalAlignment="Center" Margin="0,4,10,4"/>
+                <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,4">
+                    <Button DockPanel.Dock="Right" Content="Import…" MinWidth="80" Margin="8,0,0,0"
+                            Click="OnImportCredential"
+                            ToolTip="Copy the user name and password from a saved Open Salamander FTP bookmark. The password is not shown."/>
+                    <PasswordBox x:Name="PassBox"/>
+                </DockPanel>
+            </Grid>
+        </GroupBox>
+
+        <!-- Folders -->
+        <GroupBox Grid.Row="1" Header="Folders" Padding="10" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Local engine" VerticalAlignment="Center" Margin="0,4,10,4" MinWidth="90"/>
+                <TextBox   Grid.Row="0" Grid.Column="1" x:Name="EngineBox" Margin="0,4"
+                           ToolTip="The engine folder itself, e.g. C:\Projects\Pagecore\cms. Choosing a repository or site root is corrected to its cms folder; only engine files are uploaded."/>
+                <Button    Grid.Row="0" Grid.Column="2" Content="Browse…" MinWidth="80" Margin="8,4,0,4" Click="BrowseEngine"/>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Local website" VerticalAlignment="Center" Margin="0,4,10,4"/>
+                <TextBox   Grid.Row="1" Grid.Column="1" x:Name="WebsiteBox" Margin="0,4"
+                           ToolTip="The site folder holding public_html\ and pagecore-private\, e.g. C:\Projects\Pagecore\terapiawypalenia. Only published files are uploaded; the live config, .htaccess and engine are left alone."/>
+                <Button    Grid.Row="1" Grid.Column="2" Content="Browse…" MinWidth="80" Margin="8,4,0,4" Click="BrowseWebsite"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Remote website" VerticalAlignment="Center" Margin="0,4,10,4"/>
+                <TextBox   Grid.Row="2" Grid.Column="1" x:Name="RemoteBox" Margin="0,4"
+                           ToolTip="Remote document root, e.g. /domains/terapiawypalenia.pl/public_html"/>
+            </Grid>
+        </GroupBox>
+
+        <!-- Optional new password -->
+        <GroupBox Grid.Row="2" Header="Reset password (optional)" Padding="10" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="New CMS password" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBox   Grid.Column="1" x:Name="NewPasswordBox"
+                           ToolTip="Leave blank to generate a strong one automatically"/>
+            </Grid>
+        </GroupBox>
+
+        <!-- Actions -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,12">
+            <Button x:Name="TestButton"    Content="Test connection"    Click="OnTestConnection"
+                    ToolTip="Log in over encrypted, verified FTP and list what is there. Uploads nothing."/>
+            <Button x:Name="EngineButton"  Content="Upload new engine"  Click="OnUploadEngine"/>
+            <Button x:Name="ContentButton" Content="Upload new content" Click="OnUploadContent"/>
+            <Button x:Name="ResetButton"   Content="Reset password"     Click="OnResetPassword"/>
+            <Button x:Name="ScanButton"    Content="Scan for backdoors" Click="OnScanRemote"
+                    ToolTip="Walk every folder this login can see and report files worth inspecting. Downloads copies to read locally. Changes nothing on the host."/>
+        </StackPanel>
+
+        <!-- Log -->
+        <TextBox Grid.Row="4" x:Name="LogBox" IsReadOnly="True" Margin="0,0,0,8"
+                 FontFamily="Consolas" FontSize="12"
+                 TextWrapping="NoWrap" AcceptsReturn="True"
+                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                 Background="#111418" Foreground="#DCE3EA" BorderBrush="#2A2F36"/>
+
+        <StatusBar Grid.Row="5">
+            <StatusBarItem>
+                <TextBlock x:Name="StatusText" Text="Ready."/>
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right">
+                <StackPanel Orientation="Horizontal">
+                    <CheckBox x:Name="ApiCheckBox" Content="Local API" VerticalAlignment="Center"
+                              Checked="OnApiToggled" Unchecked="OnApiToggled"
+                              ToolTip="Expose configuration and commands over HTTP on 127.0.0.1. Off by default; a new token is issued each time it starts."/>
+                    <TextBlock x:Name="ApiText" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#555"/>
+                </StackPanel>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>

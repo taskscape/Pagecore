@@ -1,27 +1,31 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
+const { resetSampleSite, isWithin } = require('../scripts/reset-sample-site');
+const { assertTestSiteContract } = require('../scripts/test-sample-test-site');
 
-const fixtureRoot = path.resolve(__dirname, '..', 'sample-site', 'fixtures', 'content');
+const testRoot = path.resolve(process.env.PAGECORE_TEST_ROOT);
+const workerToken = 'worker-0';
+const workerRoot = path.join(testRoot, workerToken);
+const testSite = assertTestSiteContract();
 
-function readPostFixture(fileName) {
-  const source = fs.readFileSync(path.join(fixtureRoot, 'posts', fileName), 'utf8');
-  const title = source.match(/^title:\s*(.+)$/m);
-  if (!title) {
-    throw new Error(`Post fixture ${fileName} has no title front-matter field`);
-  }
-  return {
-    slug: path.basename(fileName, '.md'),
-    title: title[1].trim(),
-    status: (source.match(/^status:\s*(.+)$/m) || [null, 'publish'])[1].trim()
-  };
-}
+test.use({ extraHTTPHeaders: { 'X-Pagecore-Test-Worker': workerToken } });
+
+test.beforeEach(() => {
+  resetSampleSite(workerRoot, testRoot);
+});
+
+test.afterEach(() => {
+  resetSampleSite(workerRoot, testRoot);
+});
+
+test.afterAll(() => {
+  if (!isWithin(workerRoot, testRoot)) throw new Error(`Refusing to remove unassigned worker root: ${workerRoot}`);
+  fs.rmSync(workerRoot, { recursive: true, force: true });
+});
 
 test('migration output contract keeps post slugs unique and directly routeable', async ({ page }) => {
-  const posts = fs.readdirSync(path.join(fixtureRoot, 'posts'))
-    .filter(fileName => fileName.endsWith('.md'))
-    .map(readPostFixture)
-    .filter(post => post.status === 'publish');
+  const posts = testSite.posts.filter(post => post.status === 'publish');
 
   expect(posts.length).toBeGreaterThan(0);
   expect(new Set(posts.map(post => post.slug)).size).toBe(posts.length);
@@ -34,13 +38,10 @@ test('migration output contract keeps post slugs unique and directly routeable',
 });
 
 test('migration output keeps non-public posts anonymous-inaccessible and editor-reviewable', async ({ browser }) => {
-  const posts = fs.readdirSync(path.join(fixtureRoot, 'posts'))
-    .filter(fileName => fileName.endsWith('.md'))
-    .map(readPostFixture)
-    .filter(post => post.status !== 'publish');
+  const posts = testSite.posts.filter(post => post.status !== 'publish');
   expect(posts.length).toBeGreaterThan(0);
 
-  const anonymous = await browser.newContext();
+  const anonymous = await browser.newContext({ extraHTTPHeaders: { 'X-Pagecore-Test-Worker': workerToken } });
   try {
     for (const post of posts) {
       const response = await anonymous.request.get(`/sample-site/post/${post.slug}/`);
@@ -50,7 +51,7 @@ test('migration output keeps non-public posts anonymous-inaccessible and editor-
     await anonymous.close();
   }
 
-  const editor = await browser.newContext();
+  const editor = await browser.newContext({ extraHTTPHeaders: { 'X-Pagecore-Test-Worker': workerToken } });
   const page = await editor.newPage();
   try {
     await page.goto('/cms/login.php?next=%2Fsample-site%2F');
@@ -68,10 +69,11 @@ test('migration output keeps non-public posts anonymous-inaccessible and editor-
 });
 
 test('migration output contract keeps navigation URLs unique and reachable', async ({ page }) => {
-  const nav = JSON.parse(fs.readFileSync(path.join(fixtureRoot, 'nav.json'), 'utf8'));
+  const nav = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'sample-site', 'fixtures', 'content', 'nav.json'), 'utf8'));
   const urls = nav.map(item => item.url);
 
   expect(nav.length).toBeGreaterThan(0);
+  expect(nav.map(item => item.label)).toEqual(testSite.navigation);
   expect(new Set(urls).size).toBe(urls.length);
 
   await page.goto('/sample-site/');

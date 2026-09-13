@@ -25,8 +25,24 @@ final class PagecoreTimePolicy {
         return (new DateTimeImmutable('@' . (int) $epoch))->setTimezone(self::timezone($timezone) ?: new DateTimeZone('UTC'))->format($format);
     }
 
-    public static function displayDate($value, $timezone) {
+    /**
+     * Format a post date for display.
+     *
+     * PHP's `F` always renders English month names, so a localized site passes
+     * its own twelve names (in the form the language uses for a full date —
+     * genitive in Polish: "1 sierpnia 2026"). Without them the English format
+     * is kept, so existing sites are unaffected.
+     */
+    public static function displayDate($value, $timezone, $months = null) {
         $date = self::parsePostDate($value, $timezone);
-        return $date ? $date->format('j F Y') : (string) $value;
+        if (!$date) { return (string) $value; }
+        if (is_array($months) && count($months) === 12) {
+            $names = array_values($months);
+            $name = $names[(int) $date->format('n') - 1];
+            if (is_string($name) && trim($name) !== '') {
+                return $date->format('j') . ' ' . $name . ' ' . $date->format('Y');
+            }
+        }
+        return $date->format('j F Y');
     }
 }

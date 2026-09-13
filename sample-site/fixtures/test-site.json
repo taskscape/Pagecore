@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "name": "Pagecore browser regression test site",
+  "baseUrl": "/sample-site",
+  "pages": [
+    {
+      "route": "/sample-site/",
+      "key": "home/hero",
+      "heading": "Pagecore sample site"
+    },
+    {
+      "route": "/sample-site/showcase/",
+      "key": "showcase/intro",
+      "heading": "Pagecore file-based content showcase"
+    },
+    {
+      "route": "/sample-site/contact.php",
+      "key": "contact/body",
+      "heading": "Contact content is another editable Markdown fragment",
+      "fixtureText": "Contact details"
+    }
+  ],
+  "posts": [
+    {
+      "slug": "launch-notes",
+      "title": "Launch notes for the sample site",
+      "status": "publish"
+    },
+    {
+      "slug": "editor-workflow",
+      "title": "Editor workflow checklist",
+      "status": "publish"
+    },
+    {
+      "slug": "summer-maintenance",
+      "title": "Summer maintenance window",
+      "status": "publish"
+    },
+    {
+      "slug": "draft-editor-note",
+      "title": "Draft editor note",
+      "status": "draft"
+    },
+    {
+      "slug": "private-editor-note",
+      "title": "Private editor note",
+      "status": "private"
+    }
+  ],
+  "navigation": ["Home", "Posts", "Showcase", "Search", "Contact"],
+  "uploads": [
+    "2026/07/featured-pagecore.png",
+    "2026/07/sample-logo.png"
+  ]
+}

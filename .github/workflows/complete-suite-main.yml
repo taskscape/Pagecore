@@ -1,0 +1,55 @@
+name: Complete test suite (main)
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: complete-suite-main-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  complete-suite:
+    name: Complete suite
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, fileinfo
+          coverage: none
+
+      - run: npm ci
+      - run: composer install --no-interaction --prefer-dist
+      - run: npx playwright install chromium
+
+      - name: Run complete test suite
+        shell: powershell
+        run: |
+          $env:PAGECORE_PHP_EXE = (Get-Command php).Source
+          npm run quality
+          npm run test:php
+          npm run test:sample-test-site
+          npm run test:e2e
+          npm run test:migration
+          npm run release:test
+          npm audit --audit-level=high
+
+      - name: Upload Playwright report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore

@@ -15,8 +15,8 @@ if ($testRoot && preg_match('~^worker-[0-9]+$~', $testWorker)) {
 }
 
 return array(
-    'development_only' => true,
-    'demo_credentials' => true,
+    'development_only' => false,
+    'demo_credentials' => false,
     'session_name' => 'PAGECORE_SAMPLE',
     'session_hours' => 8,
     'require_https' => false,
@@ -24,7 +24,7 @@ return array(
     'hsts' => false,
     'trusted_proxies' => array(),
     'username' => 'admin',
-    'password_hash' => '$2y$12$oWLexpCUtOum0KYLB0Ms/ukXgxPm0XepSJNAY8j.oZ8qldfdxpl9W',
+    'password_hash' => '$2y$12$Hrcs3OvrwJiwrIItDZyS7eP3q1EE4iH8CaaSjk1PAfBnUe8aFsIL6',
     'login_rate_limit_dir' => $content . '/.state',
     'login_rate_window_seconds' => 300,
     'login_rate_source_limit' => 5,
@@ -32,6 +32,15 @@ return array(
     'audit_enabled' => true,
     'audit_log_path' => $content . '/.state/audit.jsonl',
     'audit_max_bytes' => 5242880,
+    // The sample site exercises the update screens but must never reach the
+    // network: the background admin check is off, so an update check happens
+    // only when someone explicitly asks for one. Applying stays disabled.
+    'update_channel' => 'main',
+    'update_check_on_admin' => false,
+    'update_apply' => false,
+    'update_cron_key' => '',
+    'update_state_dir' => $content . '/.state',
+    'update_work_dir' => $content . '/.updates',
     'content_dir' => $content,
     'generated_dir' => $generated,
     'external_edit_validation' => true,

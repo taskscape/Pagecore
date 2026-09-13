@@ -2,7 +2,7 @@ parameters:
     level: 3
     paths:
         - cms/modules
-        - scripts/lib/WordPressHtmlConverter.php
-        - scripts/lib/WordPressImportPolicy.php
-        - scripts/lib/WordPressSqlDump.php
+        - scripts/lib/wordpress-html-converter.php
+        - scripts/lib/wordpress-import-policy.php
+        - scripts/lib/wordpress-sql-dump.php
     tmpDir: .phpstan-cache

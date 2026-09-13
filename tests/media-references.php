@@ -1,5 +1,5 @@
 <?php
-require dirname(__DIR__) . '/cms/modules/MediaReferences.php';
+require dirname(__DIR__) . '/cms/modules/media-references.php';
 
 $failures = array();
 function media_reference_check($condition, $message) { global $failures; if (!$condition) { $failures[] = $message; } }

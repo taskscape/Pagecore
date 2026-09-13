@@ -1,13 +1,19 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string] $Archive,
-    [Parameter(Mandatory = $true)][string] $SiteRoot
+    [Parameter(Mandatory = $true)][string] $SiteRoot,
+    # Where the content and uploads seeds go. Defaults to the site root, which
+    # is the flat layout the bundled sample uses; a site following the supported
+    # production layout passes its private directory instead, so the release
+    # never creates data folders under the document root.
+    [string] $PrivateRoot
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ReleaseHelpers.ps1')
 $archivePath = (Resolve-Path -LiteralPath $Archive).Path
 $sitePath = (Resolve-Path -LiteralPath $SiteRoot).Path
+$privatePath = if ($PrivateRoot) { (Resolve-Path -LiteralPath $PrivateRoot).Path } else { $sitePath }
 $targetCms = [System.IO.Path]::GetFullPath((Join-Path $sitePath 'cms'))
 if (-not $targetCms.StartsWith($sitePath + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw 'CMS target must be a direct child of the selected site root.'
@@ -41,7 +47,7 @@ try {
         foreach ($directory in @('content', 'uploads')) {
             $source = Join-Path $work $directory
             if (-not (Test-Path -LiteralPath $source)) { continue }
-            $target = Join-Path $sitePath $directory
+            $target = Join-Path $privatePath $directory
             New-Item -ItemType Directory -Path $target -Force | Out-Null
             Get-ChildItem -LiteralPath $source -File | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $target $_.Name) -Force }
         }

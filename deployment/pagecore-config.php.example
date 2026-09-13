@@ -4,8 +4,14 @@
  * public document root. Set PAGECORE_CONFIG to this file's absolute path.
  */
 $privateRoot = __DIR__;
+// Web requests take the public root from the server. Setting even one
+// environment variable is awkward on shared hosting, so PAGECORE_DOCUMENT_ROOT
+// is only needed where DOCUMENT_ROOT is absent — CLI tooling such as
+// scripts/reindex.php.
 $publicRoot = getenv('PAGECORE_DOCUMENT_ROOT');
-if (!$publicRoot) { throw new RuntimeException('PAGECORE_DOCUMENT_ROOT is required.'); }
+if (!$publicRoot && !empty($_SERVER['DOCUMENT_ROOT'])) { $publicRoot = $_SERVER['DOCUMENT_ROOT']; }
+if (!$publicRoot) { throw new RuntimeException('Set PAGECORE_DOCUMENT_ROOT, or run behind a server that provides DOCUMENT_ROOT.'); }
+$publicRoot = rtrim(str_replace('\\', '/', $publicRoot), '/');
 
 return array(
     'development_only' => false,
@@ -28,11 +34,37 @@ return array(
     'audit_log_path' => $privateRoot . '/state/audit.jsonl',
     'audit_hash_key' => 'REPLACE_WITH_RANDOM_AUDIT_HASH_KEY',
     'audit_max_bytes' => 5242880,
+    // ---------------------------------------------------------------- updates
+    // Pagecore compares this installation against the published main build and
+    // shows one line in the admin panel when a newer one exists.
+    'update_channel' => 'main',                 // 'off' disables checking entirely
+    'update_state_dir' => $privateRoot . '/state',
+    'update_work_dir' => $privateRoot . '/updates',
+    // Allow this instance to replace its own cms/ directory. Leaving this false
+    // keeps the notice and the update page but removes every write path; the
+    // update page then prints the manual commands instead of a button.
+    'update_apply' => false,
+    'update_auto_apply' => true,                // cron applies, once update_apply is on
+    // Secret for /cms/update-cron.php. Empty disables the endpoint, which then
+    // answers 404 exactly like an instance without the feature. Generate with:
+    //   php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
+    // Prefer the keyless CLI entry where cron can run PHP directly:
+    //   /usr/local/bin/php /home/USER/public_html/cms/update-cli.php
+    'update_cron_key' => '',
+    'update_cron_min_interval_seconds' => 300,
+    'update_check_ttl_seconds' => 21600,
+    'update_keep' => 3,                         // retained rollback snapshots
+
     'content_dir' => $privateRoot . '/content',
     'backup_dir' => $privateRoot . '/backups',
     'backup_keep' => 20,
     'uploads_dir' => $privateRoot . '/uploads',
-    'uploads_url' => '', // legacy only; new media is delivered by cms/media-file.php
+    // Leave empty for a fresh site: media is delivered by cms/media-file.php.
+    // Content migrated from another CMS usually carries literal /uploads/...
+    // URLs; keep '/uploads' and map the path to the media endpoint in the
+    // fronting server rather than rewriting the content. For Apache:
+    //   RewriteRule ^uploads/(.+)$ cms/media-file.php?path=$1 [L,QSA]
+    'uploads_url' => '',
     'site_root' => $publicRoot,
     'site_url' => 'https://example.com',
     'site_name' => 'Example site',

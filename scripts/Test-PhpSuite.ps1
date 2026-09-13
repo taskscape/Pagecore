@@ -7,10 +7,12 @@ $tests = @(
     'admin-view.php',
     'api-registry.php',
     'config-schema.php',
+    'config-source.php',
     'content-cache.php',
     'demo-config-policy.php',
     'front-matter.php',
     'input-validation.php',
+    'json-policy.php',
     'login-redirect.php',
     'login-throttle.php',
     'media-references.php',
@@ -28,6 +30,11 @@ $tests = @(
     'time-policy.php',
     'transport-config.php',
     'transport.php',
+    'update-cron-auth.php',
+    'update-installer.php',
+    'update-manifest.php',
+    'update-policy.php',
+    'update-transport.php',
     'wordpress-import-components.php'
 )
 

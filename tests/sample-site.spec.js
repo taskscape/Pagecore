@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
 const { resetSampleSite, isWithin } = require('../scripts/reset-sample-site');
+const { assertTestSiteContract } = require('../scripts/test-sample-test-site');
 
 const repoRoot = path.resolve(__dirname, '..');
 const sampleRoot = path.join(repoRoot, 'sample-site');
@@ -14,6 +15,7 @@ const generatedFiles = [
   path.join(workerRoot, 'generated', 'search-index.json'),
   path.join(workerRoot, 'generated', 'sitemap.xml')
 ];
+const testSite = assertTestSiteContract();
 
 test.use({ extraHTTPHeaders: { 'X-Pagecore-Test-Worker': workerToken } });
 
@@ -32,10 +34,15 @@ async function openEditor(page, key) {
   await region.locator('.cms-edit-btn').click();
   const panel = page.locator('.cms-panel');
   await expect(panel).toBeVisible();
+  await expect(panel.locator('.cms-textarea')).toBeEnabled();
   return panel;
 }
 
 test.beforeEach(() => {
+  resetSampleSite(workerRoot, testRoot);
+});
+
+test.afterEach(() => {
   resetSampleSite(workerRoot, testRoot);
 });
 
@@ -217,6 +224,51 @@ test('login requires its pre-authentication token and rejects cross-site origins
   await page.getByLabel('Password').fill('pagecore-demo');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.locator('.cms-toolbar')).toBeVisible();
+});
+
+test('mobile admin supports password managers and a touch-friendly new-post flow', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/cms/login.php?next=${encodeURIComponent('/cms/content.php')}`);
+
+  const loginForm = page.locator('.pc-login-form form');
+  const username = page.getByLabel('Username');
+  const password = page.getByLabel('Password');
+  await expect(loginForm).toHaveAttribute('autocomplete', 'on');
+  await expect(username).toHaveAttribute('autocomplete', 'username');
+  await expect(username).toHaveAttribute('autocapitalize', 'none');
+  await expect(password).toHaveAttribute('autocomplete', 'current-password');
+  await expect(page.getByText('Your browser can save these credentials securely')).toBeVisible();
+  expect((await username.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  expect((await password.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await username.fill('admin');
+  await password.fill('pagecore-demo');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('heading', { name: 'Content inventory' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  const newPost = page.getByRole('button', { name: 'New post' });
+  expect((await newPost.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await newPost.click();
+
+  const postDialog = page.getByRole('dialog', { name: 'New post' });
+  await expect(postDialog).toBeVisible();
+  await expect(postDialog.getByText('You can add the content on the next screen.')).toBeVisible();
+  expect((await postDialog.boundingBox()).width).toBeLessThanOrEqual(390);
+  await postDialog.getByLabel('Post title').fill('Mobile admin post');
+  await postDialog.getByLabel('Category').selectOption('news');
+  expect((await postDialog.getByRole('button', { name: 'Create' }).boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await postDialog.getByRole('button', { name: 'Create' }).click();
+
+  await expect(page).toHaveURL(/\/sample-site\/post\/mobile-admin-post\/#cms-edit$/);
+  const panel = page.locator('.cms-panel');
+  await expect(panel).toBeVisible();
+  expect((await panel.boundingBox()).width).toBeLessThanOrEqual(390);
+  await expect(panel.locator('.cms-textarea')).toBeVisible();
+  expect((await panel.getByRole('button', { name: 'Save draft' }).boundingBox()).height).toBeGreaterThanOrEqual(44);
+  expect((await panel.getByRole('button', { name: 'Publish' }).boundingBox()).height).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
 test('post links expose Facebook-friendly title, summary, canonical URL, and featured image', async ({ page }) => {
@@ -414,7 +466,11 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
     '',
     '[Unsafe link](javascript:window.__pagecoreExecutableHtml="link")'
   ].join('\n'));
-  page.once('dialog', dialog => dialog.accept());
+  let publishConfirmation;
+  page.once('dialog', dialog => {
+    publishConfirmation = dialog.message();
+    dialog.dismiss();
+  });
   await panel.getByRole('button', { name: 'Publish' }).click();
 
   await page.goto('/sample-site/');
@@ -423,6 +479,7 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
   await expect(page.locator('main script')).toHaveCount(0);
   await expect(page.locator('main img[src="x"]')).toHaveCount(0);
   await expect(page.locator('main')).toContainText('<script>');
+  expect(publishConfirmation).toBeUndefined();
 
   const unsafeLink = page.getByRole('link', { name: 'Unsafe link' });
   await expect(unsafeLink).toBeVisible();
@@ -436,15 +493,127 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.43.0');
-  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.43.0"]')).toHaveCount(1);
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.51.1');
+  // A source checkout carries no build stamp, so the asset token stays the
+  // bare version; a release stamps it with the commit as well.
+  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.51.1"]')).toHaveCount(1);
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.43.0');
+  expect((await version.json()).version).toBe('2.51.1');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.43.0')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.51.1')).toBeVisible();
+});
+
+test('update page reports the build and never offers to write without opt-in', async ({ page }) => {
+  await login(page);
+
+  await page.goto('/cms/update.php');
+  await expect(page.getByRole('heading', { name: 'Updates', exact: true })).toBeVisible();
+  await expect(page.getByText('2.51.1').first()).toBeVisible();
+
+  // update_apply defaults to false, so no write path is offered anywhere.
+  await expect(page.locator('#apply-update')).toHaveCount(0);
+  await expect(page.locator('#check-now')).toBeVisible();
+
+  // The sample site has never checked, so no notice is rendered.
+  await expect(page.locator('.pc-update-notice')).toHaveCount(0);
+
+  const status = await page.request.get('/cms/api.php?action=update-status');
+  expect(status.ok()).toBeTruthy();
+  const body = await status.json();
+  expect(body.ok).toBe(true);
+  expect(body.can_apply).toBe(false);
+  expect(body.installed).toContain('2.51.1');
+
+  // Applying is refused while update_apply is off, whatever the caller asks for.
+  const apply = await page.request.post('/cms/api.php?action=update-apply', {
+    headers: { 'X-CMS-Token': await page.evaluate(() => window.PAGECORE_UPDATE.token) },
+  });
+  expect(apply.ok()).toBeFalsy();
+});
+
+test('the keyed update endpoint stays invisible without a configured key', async ({ page }) => {
+  // The sample site leaves update_cron_key empty, so the endpoint must answer
+  // exactly as an installation without the feature would.
+  for (const url of ['/cms/update-cron.php', '/cms/update-cron.php?key=', '/cms/update-cron.php?key=wrong']) {
+    const response = await page.request.get(url);
+    expect(response.status(), `${url} should be indistinguishable from absent`).toBe(404);
+    expect((await response.text()).trim()).toBe('');
+  }
+
+  // The CLI entry is not reachable over HTTP at all.
+  const cli = await page.request.get('/cms/update-cli.php');
+  expect(cli.status()).toBe(404);
+});
+
+test('committed browser test site renders its page, post, navigation, and visibility contract', async ({ page }) => {
+  for (const expected of testSite.pages) {
+    const response = await page.goto(expected.route);
+    expect(response.ok(), `${expected.route} should resolve`).toBeTruthy();
+    await expect(page.getByRole('heading', { name: expected.heading, exact: true })).toBeVisible();
+  }
+
+  for (const expected of testSite.posts) {
+    const response = await page.request.get(`/sample-site/post/${expected.slug}/`);
+    if (expected.status === 'publish') {
+      expect(response.ok(), `${expected.slug} should be public`).toBeTruthy();
+    } else {
+      expect(response.status(), `${expected.slug} should stay private`).toBe(404);
+    }
+  }
+
+  await page.goto('/sample-site/');
+  const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
+  await expect(navigation.getByRole('link')).toHaveText(testSite.navigation);
+});
+
+test('editor can cancel and publish plain-text changes directly inline', async ({ page }) => {
+  await login(page);
+  const region = page.locator('[data-cms-key="home/hero"]');
+  const save = region.getByRole('button', { name: 'Save', exact: true });
+  const cancel = region.getByRole('button', { name: 'Cancel', exact: true });
+  const edit = region.getByRole('button', { name: 'Edit', exact: true });
+
+  await expect(save).toBeHidden();
+  await expect(cancel).toBeHidden();
+  await region.getByRole('heading', { name: 'Pagecore sample site' }).click();
+  await expect(save).toBeVisible();
+  await expect(cancel).toBeVisible();
+  await expect(edit).toBeVisible();
+  const inlineHeading = region.locator('h1[contenteditable="plaintext-only"]');
+  await expect(inlineHeading).toBeFocused();
+  await inlineHeading.fill('Temporary inline heading');
+  await cancel.click();
+  await expect(region.getByRole('heading', { name: 'Pagecore sample site' })).toBeVisible();
+  await expect(save).toBeHidden();
+  await expect(cancel).toBeHidden();
+
+  await region.getByRole('heading', { name: 'Pagecore sample site' }).click();
+  await expect(inlineHeading).toBeEditable();
+  await inlineHeading.fill('Saved inline heading');
+  await region.locator('p[contenteditable="plaintext-only"]').fill('Contact editor@example.com & pay $5 = exact.');
+  const publishRequest = page.waitForRequest(request =>
+    request.method() === 'POST' && request.url().includes('/cms/api.php?action=publish')
+  );
+  await save.click();
+  await publishRequest;
+
+  await expect(region).toContainText('Saved inline heading');
+  await expect(region).toContainText('Contact editor@example.com & pay $5 = exact.');
+  await expect(save).toBeHidden();
+  await expect(cancel).toBeHidden();
+
+  const response = await page.request.get('/cms/api.php?action=get&key=home%2Fhero');
+  const payload = await response.json();
+  expect(payload.markdown).toContain('Saved inline heading');
+
+  await region.hover();
+  await edit.click();
+  const fullEditor = page.getByRole('dialog', { name: 'Edit content' });
+  await expect(fullEditor).toBeVisible();
+  await expect(fullEditor.locator('.cms-textarea')).toHaveValue(payload.markdown);
 });
 
 test('admin design tokens preserve desktop, focus, disabled, and mobile states', async ({ page }) => {
@@ -625,10 +794,14 @@ test('application resource limits reject oversized work before writes and pagina
 test('reusable content and uploads directories ship Apache hardening', () => {
   const contentRules = fs.readFileSync(path.join(repoRoot, 'content', '.htaccess'), 'utf8');
   const uploadRules = fs.readFileSync(path.join(repoRoot, 'uploads', '.htaccess'), 'utf8');
+  const cmsRules = fs.readFileSync(path.join(repoRoot, 'cms', '.htaccess'), 'utf8');
+  const cmsReadme = fs.readFileSync(path.join(repoRoot, 'cms', 'README.md'), 'utf8');
 
   expect(contentRules).toContain('Require all denied');
   expect(uploadRules).toContain('php_flag engine off');
   expect(uploadRules).toMatch(/FilesMatch[\s\S]*php[\s\S]*Require all denied/);
+  expect(cmsRules).toContain('<FilesMatch "\\.md$">');
+  expect(cmsReadme.toLowerCase()).not.toContain('legalizm');
 });
 
 test('development HTTP boundary denies configuration, content, backups, and executable uploads', async ({ page }) => {
@@ -764,8 +937,9 @@ test('editor saves a draft, previews it, publishes, and restores a backup', asyn
   panel = await openEditor(page, 'home/hero');
   page.once('dialog', dialog => dialog.accept());
   await panel.locator('.cms-revision-restore').first().click();
-  await expect(page.locator('main').getByRole('heading', { name: 'Pagecore sample site' })).toBeVisible();
-  await expect(page.locator('main').getByRole('heading', { name: 'Draft-only headline' })).toHaveCount(0);
+  // The open modal correctly removes `main` from the accessibility tree, so inspect its visible DOM update directly.
+  await expect(page.locator('main h1')).toHaveText('Pagecore sample site');
+  await expect(page.locator('main h1')).not.toHaveText('Draft-only headline');
 });
 
 test('editor creates a post, publishes body changes, uploads media, and regenerates search and sitemap', async ({ page }) => {
@@ -779,11 +953,16 @@ test('editor creates a post, publishes body changes, uploads media, and regenera
   const panel = page.locator('.cms-panel');
   await expect(panel).toBeVisible();
   await panel.locator('textarea').fill('This post was authored through the sample site test.\n\nIt should appear in search and the sitemap after publishing.');
-  page.once('dialog', dialog => dialog.accept());
+  let publishConfirmation;
+  page.once('dialog', dialog => {
+    publishConfirmation = dialog.message();
+    dialog.dismiss();
+  });
   await panel.getByRole('button', { name: 'Publish' }).click();
 
   await page.goto('/sample-site/news/');
   await expect(page.getByRole('link', { name: 'Playwright Announcement' })).toBeVisible();
+  expect(publishConfirmation).toBeUndefined();
 
   const token = await page.evaluate(() => window.CMS_CONFIG && window.CMS_CONFIG.token);
   expect(token).toBeTruthy();
@@ -1115,6 +1294,7 @@ test('dialogs trap keyboard focus, make the background inert, and restore their 
   await editButton.click();
   const editorDialog = page.getByRole('dialog', { name: 'Edit content' });
   await expect(editorDialog).toBeVisible();
+  await expect(editorDialog.locator('.cms-textarea')).toBeEnabled();
   await expect(editorDialog.getByRole('button', { name: 'Close editor' })).toBeFocused();
   await expect(page.locator('.cms-toolbar')).toHaveAttribute('inert', '');
   await editorDialog.getByRole('button', { name: 'Cancel' }).focus();

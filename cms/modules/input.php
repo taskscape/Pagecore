@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/TimePolicy.php';
+require_once __DIR__ . '/time-policy.php';
 
 final class PagecoreInput {
     public static function scalarMapError(array $values) {

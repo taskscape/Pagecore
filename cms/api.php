@@ -7,6 +7,8 @@
  * GET  ?action=media-list&q=…       -> {ok, assets[]}
  * GET  ?action=content-inventory    -> {ok, inventory}
  * GET  ?action=version              -> {ok, version}
+ * GET  ?action=update-status        -> {ok, decision, installed, latest, …}
+ * POST ?action=update-apply         -> {ok, status, from, to}
  * GET  ?action=preview-draft&key=…  -> standalone HTML preview of saved draft
  * POST ?action=preview              -> {ok, html}
  * POST ?action=save                 -> {ok, html}
@@ -30,7 +32,7 @@
 require __DIR__ . '/engine.php';
 require __DIR__ . '/auth.php';
 require __DIR__ . '/api-registry.php';
-require __DIR__ . '/modules/Input.php';
+require __DIR__ . '/modules/input.php';
 
 header('Cache-Control: no-store');
 
@@ -282,6 +284,11 @@ if ($contentLength > $requestLimit) {
 }
 
 cms_require_auth();
+
+// Hold mutations while an update swaps the engine directory. Reads still work.
+if (isset($actionRegistry[$action]) && $actionRegistry[$action]['method'] === 'POST') {
+    cms_require_no_maintenance(true);
+}
 
 $actionHandlers = array(
 
@@ -752,6 +759,46 @@ $actionHandlers = array(
         'kind' => $asset['kind'],
         'markdown' => $asset['markdown'],
         'asset' => $asset,
+    ));
+
+    },
+    'update-status' => function () {
+    require_once __DIR__ . '/update-service.php';
+    // refresh=1 is the admin panel's asynchronous check; it is throttled and
+    // cached, so it never becomes a way to hammer the update host.
+    $refresh = isset($_GET['refresh']) && (string) $_GET['refresh'] === '1';
+    $state = $refresh ? cms_update_check(true) : cms_update_state();
+    $installed = cms_build_identity();
+    $latest = is_array($state['latest']) ? $state['latest'] : null;
+    cms_json(array(
+        'ok' => true,
+        'decision' => $state['decision'],
+        'reason' => $state['reason'],
+        'checked_at' => (int) $state['checked_at'],
+        'throttled' => !empty($state['throttled']),
+        'error' => $state['error'],
+        'installed' => PagecoreUpdatePolicy::describe($installed),
+        'latest' => $latest === null ? null : PagecoreUpdatePolicy::describe($latest),
+        'latest_version' => $latest === null ? null : $latest['version'],
+        'can_apply' => (bool) cms_cfg('update_apply', false),
+    ));
+
+    },
+    'update-apply' => function () {
+    require_once __DIR__ . '/update-service.php';
+    $result = cms_update_run(false);
+    if (in_array($result['status'], array('failed', 'blocked', 'disabled'), true)) {
+        cms_fail($result['message'], 409);
+    }
+    if ($result['status'] === 'busy') {
+        cms_fail($result['message'], 423);
+    }
+    cms_json(array(
+        'ok' => true,
+        'status' => $result['status'],
+        'message' => $result['message'],
+        'from' => isset($result['from']) ? $result['from'] : null,
+        'to' => isset($result['to']) ? $result['to'] : null,
     ));
 
     },

@@ -1,6 +1,6 @@
 <?php
-require dirname(__DIR__) . '/cms/modules/PathPolicy.php';
-require dirname(__DIR__) . '/cms/modules/TemplateDiscovery.php';
+require dirname(__DIR__) . '/cms/modules/path-policy.php';
+require dirname(__DIR__) . '/cms/modules/template-discovery.php';
 
 $failures = array();
 function template_check($condition, $message) { global $failures; if (!$condition) { $failures[] = $message; } }

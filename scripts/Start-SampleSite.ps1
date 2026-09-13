@@ -14,13 +14,13 @@ $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $PhpCandidate = if ($env:PAGECORE_PHP_EXE) {
     $env:PAGECORE_PHP_EXE
 } else {
-    Join-Path $RepoRoot 'php\php.exe'
+    'C:\Tools\PHP\php.exe'
 }
 $Router = Join-Path $RepoRoot 'sample-site\router.php'
 $Config = Join-Path $RepoRoot 'sample-site\config.php'
 
 if (-not (Test-Path -LiteralPath $PhpCandidate -PathType Leaf)) {
-    throw "PHP executable not found at $PhpCandidate. Set PAGECORE_PHP_EXE to a valid PHP executable."
+    throw "PHP executable not found at $PhpCandidate. Install PHP at C:\Tools\PHP or set PAGECORE_PHP_EXE to a valid PHP executable."
 }
 if (-not (Test-Path -LiteralPath $Router -PathType Leaf)) {
     throw "Sample-site router not found at $Router"

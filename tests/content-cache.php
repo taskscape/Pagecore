@@ -1,5 +1,5 @@
 <?php
-require dirname(__DIR__) . '/cms/modules/ContentCache.php';
+require dirname(__DIR__) . '/cms/modules/content-cache.php';
 
 $failures = array();
 function content_cache_check($condition, $message) { global $failures; if (!$condition) { $failures[] = $message; } }

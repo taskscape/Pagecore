@@ -1,0 +1,98 @@
+name: Publish update build
+
+# Packages every main commit and publishes the feed deployed instances poll.
+# The job commits release/latest.json back to main, so that path is ignored
+# here and the bot commit carries [skip ci]; without both guards the workflow
+# would retrigger itself.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'release/latest.json'
+      - 'docs/**'
+      - '**/*.md'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pagecore-release-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build the release archive
+        id: build
+        shell: pwsh
+        run: |
+          $release = & ./scripts/Build-PagecoreRelease.ps1 -OutputDirectory ./artifacts
+          "version=$($release.Version)"            >> $env:GITHUB_OUTPUT
+          "commit=$($release.Commit)"              >> $env:GITHUB_OUTPUT
+          "short=$($release.ShortCommit)"          >> $env:GITHUB_OUTPUT
+          "commit_time=$($release.CommitTime)"     >> $env:GITHUB_OUTPUT
+          "archive=$($release.Archive)"            >> $env:GITHUB_OUTPUT
+          "archive_name=$([System.IO.Path]::GetFileName($release.Archive))" >> $env:GITHUB_OUTPUT
+          "archive_bytes=$($release.ArchiveBytes)" >> $env:GITHUB_OUTPUT
+          "sha256=$($release.Sha256)"              >> $env:GITHUB_OUTPUT
+          "checksum=$($release.ChecksumFile)"      >> $env:GITHUB_OUTPUT
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "build-${{ steps.build.outputs.short }}" \
+            "${{ steps.build.outputs.archive }}" \
+            "${{ steps.build.outputs.checksum }}" \
+            --title "Pagecore ${{ steps.build.outputs.version }} (${{ steps.build.outputs.short }})" \
+            --notes "Automated build of ${{ steps.build.outputs.commit }}." \
+            --target "${{ github.sha }}"
+
+      - name: Write the update feed
+        shell: pwsh
+        run: |
+          $previous = $null
+          if (Test-Path ./release/latest.json) {
+            $previous = (Get-Content ./release/latest.json -Raw | ConvertFrom-Json).commit
+          }
+          $compare = if ($previous) {
+            "https://github.com/${{ github.repository }}/compare/$($previous.Substring(0,7))...${{ steps.build.outputs.short }}"
+          } else {
+            "https://github.com/${{ github.repository }}/commits/main"
+          }
+          $feed = [ordered]@{
+            schema         = 1
+            channel        = 'main'
+            version        = '${{ steps.build.outputs.version }}'
+            commit         = '${{ steps.build.outputs.commit }}'
+            commit_time    = '${{ steps.build.outputs.commit_time }}'
+            published_at   = [System.DateTimeOffset]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss\Z')
+            archive_url    = 'https://github.com/${{ github.repository }}/releases/download/build-${{ steps.build.outputs.short }}/${{ steps.build.outputs.archive_name }}'
+            archive_sha256 = '${{ steps.build.outputs.sha256 }}'
+            archive_bytes  = [int]'${{ steps.build.outputs.archive_bytes }}'
+            min_php        = '8.3.0'
+            notes_url      = $compare
+          }
+          New-Item -ItemType Directory -Path ./release -Force | Out-Null
+          $json = $feed | ConvertTo-Json -Depth 3
+          [System.IO.File]::WriteAllText(
+            (Join-Path (Get-Location) 'release/latest.json'),
+            $json + "`n",
+            (New-Object System.Text.UTF8Encoding($false)))
+
+      - name: Commit the feed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add release/latest.json
+          if git diff --cached --quiet; then
+            echo "Feed unchanged."
+            exit 0
+          fi
+          git commit -m "chore(release): publish ${{ steps.build.outputs.version }} (${{ steps.build.outputs.short }}) [skip ci]"
+          git push origin HEAD:main

@@ -5,16 +5,20 @@ this `cms/` directory. Nothing else is required.
 
 ## Credentials
 
-Initial login: **admin / legalizm-cms-2026** at `/cms/login.php` (the URL is
-not linked anywhere on the site — bookmark it).
+Sign in as **admin** at `/cms/login.php` (the URL is not linked anywhere on
+the site — bookmark it). This file must never print a password: a copied
+`cms/` tree is web-reachable until Apache deny rules are in place.
 
-**Change the password now:**
+The bundled sample uses public demo credentials documented in
+`sample-site/README.md`. Those credentials are `development_only` and cannot
+boot in production. For a real site, generate a hash into the private
+configuration (not into `cms/config.php`):
 
 ```
 php -r "echo password_hash('your-new-password', PASSWORD_DEFAULT);"
 ```
 
-Paste the output into `password_hash` in `cms/config.php`.
+Paste the output into `password_hash` in the file named by `PAGECORE_CONFIG`.
 
 ## Installing into another PHP site
 
@@ -24,7 +28,10 @@ Paste the output into `password_hash` in `cms/config.php`.
    Raw HTML is always escaped; configuration cannot disable safe mode. Convert
    trusted embeds into template components outside editor-authored Markdown.
 3. Add `require __DIR__ . '/cms/engine.php';` to the site's bootstrap
-   (any file included by every page).
+   (any file included by every page). If that bootstrap defines
+   `CMS_CONFIG_FILE`, resolve `PAGECORE_CONFIG` from `getenv()` and
+   `$_SERVER` first — the engine ignores the environment once the constant
+   is set. `sample-site/_bootstrap.php` is the reference pattern.
 4. Emit `<?= cms_assets() ?>` once before `</body>`.
 5. Replace editable fragments with `<?= cms_editable('page/region') ?>` —
    content then lives in `content/pages/<page>/<region>.md`.
@@ -45,7 +52,9 @@ Paste the output into `password_hash` in `cms/config.php`.
 
 ## Day-to-day editing
 
-- Log in → browse the site → hover an outlined fragment → **✎ Edit**.
+- Log in → browse the site → click an outlined fragment to edit plain text in
+  place. **Save** publishes immediately, **Cancel** restores the prior content,
+  and the existing **Edit** button still opens the full Markdown editor.
 - Post metadata includes a featured-image drop area. Drop or choose a JPEG/PNG
   within the configured upload limit; Pagecore uploads it and saves its URL to the post draft automatically.
   For a crisp Facebook preview, use a landscape image around 1200 x 630 pixels.
@@ -142,14 +151,31 @@ release artifact; individual dependency files are never copied to sites.
 
 ## Release and deployment
 
-`npm run release:build` creates `artifacts/pagecore-X.Y.Z.zip` from the tracked
-`cms/`, `content/`, and `uploads/` sources. The archive contains `VERSION` and a
-SHA-256 manifest. Install it with `scripts/Install-PagecoreRelease.ps1`; the
+`npm run release:build` creates `artifacts/pagecore-X.Y.Z-<short-sha>.zip` from
+the tracked `cms/`, `content/`, and `uploads/` sources. The archive contains
+`VERSION`, a SHA-256 manifest, and `cms/build.json` — the build stamp naming the
+version, the `main` commit, and that commit's time, which is what a deployed
+instance compares against the published feed.
+Install it with `scripts/Install-PagecoreRelease.ps1`; the
 installer validates every entry, replaces the managed CMS as a unit, preserves
 only site-specific `cms/config.php`, and writes `.pagecore-release.json`.
 Run `scripts/Test-PagecoreDeployment.ps1` after deployment to fail on drift or
 a version mismatch. `npm run release:test` exercises build, install,
 configuration preservation, checksum verification, and drift detection.
+
+## Staying current
+
+Open **Updates** in the sidebar to see the installed build, the published one,
+and whether this instance can apply the change. A newer build also adds one
+line of text beside the version in the sidebar.
+
+Applying is opt-in: `update_apply` is `false` until you decide the PHP worker
+may replace its own code. Until then the page prints the manual commands
+instead of an Update button. An update replaces `cms/` only — content, uploads,
+backups, and configuration are untouched, and the previous engine is kept as a
+rollback snapshot. Schedule unattended updates with cron; see
+`deployment/README.md` for both cron forms and `docs/auto-update.md` for the
+full design.
 
 ## Requirements
 

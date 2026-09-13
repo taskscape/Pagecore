@@ -26,5 +26,20 @@ sample-site/search-index.json
 sample-site/sitemap.xml
 php
 zagozda
+terapiawypalenia
 playwright.zagozda.config.js
 tests/zagozda.spec.js
+
+# Local SFTP credential (DPAPI-encrypted, per Windows account)
+*.sftp-credential.xml
+.sftp-credential.xml
+
+# WPF deployer build output
+tools/PagecoreDeployer/bin/
+tools/PagecoreDeployer/obj/
+tools/PagecoreDeployer/.vs
+.claude
+scripts/Start-TerapiaSite.ps1
+
+# Generated at package time; never committed from a working tree.
+cms/build.json

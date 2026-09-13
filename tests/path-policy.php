@@ -1,5 +1,5 @@
 <?php
-require dirname(__DIR__) . '/cms/modules/PathPolicy.php';
+require dirname(__DIR__) . '/cms/modules/path-policy.php';
 
 $failures = array();
 function path_check($condition, $message) { global $failures; if (!$condition) { $failures[] = $message; } }

@@ -1,5 +1,5 @@
 <?php
-require dirname(__DIR__) . '/cms/modules/Routes.php';
+require dirname(__DIR__) . '/cms/modules/routes.php';
 require dirname(__DIR__) . '/cms/config-schema.php';
 
 $failures = array();
