@@ -21,7 +21,7 @@ file-based content model and featured images stored as post front matter.
 CMS login:
 
 - Username: `admin`
-- Password: `pagecore-demo`
+- Password: `admin`
 
 These are public demo credentials, not a deployment default. The sample
 configuration is `development_only` and cannot start in production mode or

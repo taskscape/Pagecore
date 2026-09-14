@@ -7,7 +7,7 @@ function pagecore_api_registry() {
     $registry = array();
     foreach (array('get', 'revisions', 'media-list', 'media-impact', 'content-inventory', 'version', 'update-status') as $action) { $registry[$action] = $read; }
     $registry['preview-draft'] = array('method' => 'GET', 'authorization' => 'session', 'response' => 'html');
-    foreach (array('preview', 'save', 'save-draft', 'publish', 'discard-draft', 'restore', 'save-post-meta', 'create-post', 'delete-post', 'save-nav', 'create-region', 'save-media-meta', 'delete-media', 'upload', 'update-apply') as $action) { $registry[$action] = $write; }
+    foreach (array('preview', 'save', 'save-draft', 'publish', 'discard-draft', 'restore', 'save-post-meta', 'create-post', 'delete-post', 'delete-page', 'save-nav', 'create-region', 'save-media-meta', 'delete-media', 'upload', 'update-apply') as $action) { $registry[$action] = $write; }
     $registry['logout'] = array('method' => 'POST', 'authorization' => 'session+csrf', 'response' => 'redirect');
     return $registry;
 }

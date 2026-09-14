@@ -10,7 +10,7 @@ if (!defined('CMS_CONFIG_FILE')) {
     define('CMS_CONFIG_FILE', $siteConfig ?: __DIR__ . '/config.php');
     unset($siteConfig);
 }
-require dirname(__DIR__) . '/cms/engine.php';
+require_once dirname(__DIR__) . '/cms/engine.php';
 
 function sample_url($path = '') {
     return '/sample-site' . $path;

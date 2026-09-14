@@ -217,7 +217,7 @@ function cms_content_posts_url($page, $query, $category) {
       </div>
       <div class="table-wrap">
         <table class="post-table">
-          <!-- The actions column separates editorial work from opening the published post. -->
+          <!-- The actions column keeps editorial controls together. The URL remains available from its own column. -->
           <thead><tr><th>Title</th><th>Category</th><th>Date</th><th>URL</th><th>Actions</th></tr></thead>
           <tbody>
             <?php foreach ($inventory['posts'] as $post): ?>
@@ -229,10 +229,9 @@ function cms_content_posts_url($page, $query, $category) {
                 <td data-label="Date"><?= cms_content_e($post['date']) ?></td>
                 <td data-label="URL"><a href="<?= cms_content_e($post['url']) ?>"><?= cms_content_e($post['url']) ?></a></td>
                 <td data-label="Actions">
-                  <!-- Keep all post actions together so deletion is deliberate but available beside Edit and View. -->
+                  <!-- Keep post editing and deletion together while the URL column remains the viewing route. -->
                   <div class="post-actions">
                     <a class="button button-primary" href="<?= cms_content_e($post['url']) ?>#cms-edit">Edit</a>
-                    <a class="button" href="<?= cms_content_e($post['url']) ?>">View</a>
                     <button type="button" class="button button-danger" data-action="delete-post" data-slug="<?= cms_content_e($post['slug']) ?>" data-revision="<?= cms_content_e($post['revision']) ?>" data-title="<?= cms_content_e($post['title']) ?>">Delete</button>
                   </div>
                   <div class="status" role="status" aria-live="polite"></div>
@@ -317,21 +316,36 @@ function cms_content_posts_url($page, $query, $category) {
       <div id="pages-body" data-section-body hidden>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Title</th><th>URL</th><th>Type</th><th>Region</th><th>Status</th></tr></thead>
+            <thead><tr><th>Title</th><th>URL</th><th>Type</th><th>Region</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
               <?php foreach ($inventory['pages'] as $page): ?>
-                <tr>
+                <tr data-content-page="<?= cms_content_e($page['region']) ?>">
                   <td><?= cms_content_e($page['title']) ?></td>
                   <td><a href="<?= cms_content_e($page['url']) ?>"><?= cms_content_e($page['url']) ?></a></td>
                   <td><?= cms_content_e($page['type']) ?></td>
                   <td><?= $page['region'] !== '' ? '<code>' . cms_content_e($page['region']) . '</code>' : '<span class="muted">none</span>' ?></td>
-                  <td>
+                  <td data-page-status>
                     <?php if ($page['exists'] === null): ?>
                       <span class="tag">Listing</span>
                     <?php elseif ($page['exists']): ?>
                       <span class="tag tag-ok">Markdown present</span>
                     <?php else: ?>
                       <span class="tag tag-missing">Missing Markdown</span>
+                    <?php endif; ?>
+                  </td>
+                  <td>
+                    <?php if ($page['region'] === ''): ?>
+                      <span class="muted">No editable content</span>
+                    <?php else: ?>
+                      <div class="post-actions">
+                        <a class="button button-primary" href="<?= cms_content_e($page['url']) ?>#cms-edit">Edit</a>
+                        <?php if ($page['exists']): ?>
+                          <button type="button" class="button button-danger" data-action="delete-page" data-key="<?= cms_content_e($page['region']) ?>" data-revision="<?= cms_content_e($page['revision']) ?>" data-title="<?= cms_content_e($page['title']) ?>">Delete</button>
+                        <?php else: ?>
+                          <span class="muted">No Markdown to delete</span>
+                        <?php endif; ?>
+                      </div>
+                      <div class="status" role="status" aria-live="polite"></div>
                     <?php endif; ?>
                   </td>
                 </tr>
@@ -515,7 +529,7 @@ function cms_content_posts_url($page, $query, $category) {
         var postRow = remove.closest('[data-content-post]');
         var postStatus = postRow.querySelector('.status');
         var title = remove.getAttribute('data-title') || remove.getAttribute('data-slug');
-        // Confirmation prevents an accidental removal from the same compact action group as Edit and View.
+        // Confirmation prevents an accidental removal from the compact action group.
         if (!confirm('Delete the published post “' + title + '”? Its draft will also be removed.')) { return; }
         remove.disabled = true;
         setStatus(postStatus, 'Deleting...');
@@ -527,6 +541,27 @@ function cms_content_posts_url($page, $query, $category) {
           .catch(function (err) {
             remove.disabled = false;
             setStatus(postStatus, err.message, true);
+          });
+        return;
+      }
+      var removePage = ev.target.closest('[data-action="delete-page"]');
+      if (removePage) {
+        var pageRow = removePage.closest('[data-content-page]');
+        var pageStatus = pageRow.querySelector('.status');
+        var pageTitle = removePage.getAttribute('data-title') || removePage.getAttribute('data-key');
+        if (!confirm('Delete the page content for “' + pageTitle + '”? Its draft will also be removed.')) { return; }
+        removePage.disabled = true;
+        setStatus(pageStatus, 'Deleting...');
+        post('delete-page', { key: removePage.getAttribute('data-key'), revision: removePage.getAttribute('data-revision') })
+          .then(function () {
+            pageRow.setAttribute('data-content-missing', '1');
+            pageRow.querySelector('[data-page-status]').innerHTML = '<span class="tag tag-missing">Missing Markdown</span>';
+            removePage.remove();
+            setStatus(pageStatus, 'Page Markdown deleted.');
+          })
+          .catch(function (err) {
+            removePage.disabled = false;
+            setStatus(pageStatus, err.message, true);
           });
         return;
       }

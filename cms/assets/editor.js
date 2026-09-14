@@ -299,6 +299,8 @@
         if (panel) closeEditor(true);
         var key = regionEl.getAttribute('data-cms-key');
         var isPost = key.indexOf('post:') === 0;
+        var isPage = regionEl.getAttribute('data-cms-page') === '1';
+        var hasMeta = isPost || isPage;
         var currentDraft = null;
         var publishedRevision = 'missing';
         var busy = false;
@@ -306,15 +308,15 @@
         var overlay = h('div', 'cms-overlay');
         overlay.addEventListener('click', function () { closeEditor(false); });
 
-        panel = h('div', 'cms-panel ' + (isPost ? 'cms-panel-post' : 'cms-panel-region'));
+        panel = h('div', 'cms-panel ' + (hasMeta ? 'cms-panel-post' : 'cms-panel-region'));
         panel._overlay = overlay;
         panel._dirty = false;
         panel.setAttribute('aria-labelledby', 'cms-editor-title');
 
         var head = h('div', 'cms-panel-head');
         var titleWrap = h('div', 'cms-panel-title');
-        titleWrap.appendChild(h('span', 'cms-panel-kicker', isPost ? 'Post editor' : 'Page content'));
-        var editorTitle = h('strong', null, isPost ? 'Edit post' : 'Edit content');
+        titleWrap.appendChild(h('span', 'cms-panel-kicker', isPost ? 'Post editor' : (isPage ? 'Page editor' : 'Page content')));
+        var editorTitle = h('strong', null, isPost ? 'Edit post' : (isPage ? 'Edit page' : 'Edit content'));
         editorTitle.id = 'cms-editor-title';
         titleWrap.appendChild(editorTitle);
         titleWrap.appendChild(h('code', null, key));
@@ -342,15 +344,15 @@
         var featuredRemove = null;
         // Reuse the installation-wide upload limit instead of giving featured images a separate cap.
         var maxFeaturedImageMb = Number(CFG.maxUploadMb || 8);
-        if (isPost) {
+        if (hasMeta) {
             var meta = h('div', 'cms-meta');
             metaInputs = {};
-            [['title', 'Title', 'text', 'cms-field-wide'],
+            [["title", isPage ? 'Page title' : 'Title', 'text', 'cms-field-wide'],
              ['date', 'Date (YYYY-MM-DD)', 'text', ''],
              ['category', 'Category', 'select', ''],
              ['excerpt', 'Excerpt (optional)', 'text', 'cms-field-wide'],
              ['tags', 'Tags (comma-separated)', 'text', 'cms-field-wide']
-            ].forEach(function (def) {
+            ].filter(function (def) { return isPost || def[0] === 'title'; }).forEach(function (def) {
                 var field = h('div', 'cms-field' + (def[3] ? ' ' + def[3] : ''));
                 var lab = h('label', null, def[1]);
                 field.appendChild(lab);
@@ -366,6 +368,7 @@
                     input = document.createElement('input');
                     input.type = 'text';
                 }
+                input.setAttribute('aria-label', def[1]);
                 input.addEventListener('input', function () { panel._dirty = true; });
                 field.appendChild(input);
                 metaInputs[def[0]] = input;
@@ -516,7 +519,10 @@
             setStatus('Inserted file from media library.');
         };
         function currentMeta() {
-            if (!isPost || !metaInputs) { return {}; }
+            if (!hasMeta || !metaInputs) { return {}; }
+            if (isPage) {
+                return { title: metaInputs.title.value, image: metaInputs.image.value };
+            }
             return {
                 title: metaInputs.title.value,
                 date: metaInputs.date.value,
@@ -536,14 +542,18 @@
             return out;
         }
         function setMeta(meta) {
-            if (!isPost || !metaInputs) { return; }
+            if (!hasMeta || !metaInputs) { return; }
             meta = meta || {};
             metaInputs.title.value = meta.title || '';
-            metaInputs.date.value = meta.date || '';
-            metaInputs.category.value = meta.category || '';
+            if (isPost) {
+                metaInputs.date.value = meta.date || '';
+                metaInputs.category.value = meta.category || '';
+            }
             metaInputs.image.value = meta.image || '';
-            metaInputs.excerpt.value = meta.excerpt || '';
-            metaInputs.tags.value = meta.tags || '';
+            if (isPost) {
+                metaInputs.excerpt.value = meta.excerpt || '';
+                metaInputs.tags.value = meta.tags || '';
+            }
             updateFeaturedImageDisplay();
         }
         // Show the selected upload while retaining support for images stored by older posts.
@@ -572,9 +582,10 @@
         }
         function applyPayloadToPage(payload) {
             replaceRegionHtml(payload.html || '');
-            if (isPost && payload.meta) {
+            if (hasMeta && payload.meta) {
                 var h1 = document.querySelector('main h1');
                 if (h1 && payload.meta.title) { h1.textContent = payload.meta.title; }
+                if (isPage && payload.meta.title) { document.title = payload.meta.title; }
             }
         }
         function renderRevisions(items) {
@@ -640,6 +651,10 @@
                 panel._dirty = false;
                 updateDraftState(null);
                 applyPayloadToPage(res);
+                if (isPage && res.url && res.url !== window.location.pathname) {
+                    window.location.href = res.url + '#cms-edit';
+                    return;
+                }
                 closeEditor(true);
             }).catch(function (err) {
                 setStatus(err.message, true);
@@ -750,7 +765,7 @@
 
         // Upload a featured image and immediately persist its URL in the post's draft metadata.
         function saveFeaturedImage(file) {
-            if (!file || !isPost || busy || ta.disabled) { return; }
+            if (!file || !hasMeta || busy || ta.disabled) { return; }
             var validMime = file.type === 'image/jpeg' || file.type === 'image/png';
             var validExtension = /\.(jpe?g|png)$/i.test(file.name || '');
             if ((file.type && !validMime) || (!file.type && !validExtension)) {
@@ -818,7 +833,7 @@
                 if (files && files.length) { saveFeaturedImage(files[0]); }
             });
             featuredRemove.addEventListener('click', function () {
-                // Removing a selection keeps the existing asset intact and marks only post metadata as changed.
+                // Removing a selection keeps the existing asset intact and marks only page/post metadata as changed.
                 metaInputs.image.value = '';
                 updateFeaturedImageDisplay();
                 panel._dirty = true;

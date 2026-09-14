@@ -468,6 +468,14 @@ The third value is an optional editable fragment key used to generate a search
 excerpt for that page. Posts and category listing URLs are added automatically
 from `content/posts/` and `categories`.
 
+Configured pages expose **Page title** and **Featured image** in their editor.
+Those values are stored as front matter in the configured region's Markdown.
+Changing a page title creates a Polish-aware URL slug beneath `base_url` and
+updates the content inventory, generated search index, sitemap, and default
+navigation. A front controller can map that new URL back to its existing
+template with `cms_page_source_url($path)`; the sample site's router shows the
+small integration point.
+
 ### 8. Deployment checklist
 
 For the mechanics of getting these right on a control-panel host — directory
@@ -860,6 +868,20 @@ browsing hides.
   present, with a magic-byte fallback otherwise. The version is enforced at
   boot, so a host still defaulting the domain to an older branch fails every
   request until the per-domain PHP version is raised.
+- The PHP `zip` extension for the archive-installer contract in `npm run test:php`.
+  The default Windows runtime is `C:\Tools\PHP\php.exe`. If
+  `C:\Tools\PHP\ext\php_zip.dll` is missing, download the **same PHP version,
+  architecture, compiler, and Thread Safe/Non-Thread Safe build** shown by
+  `C:\Tools\PHP\php.exe -v` from [PHP for Windows](https://windows.php.net/download/),
+  then take `ext\php_zip.dll` from that archive. In `C:\Tools\PHP\php.ini`,
+  change `;extension=zip` to `extension=zip`, open a new shell, and verify:
+
+  ```powershell
+  & 'C:\Tools\PHP\php.exe' -m | Select-String '^zip$'
+  & 'C:\Tools\PHP\php.exe' -r "exit(class_exists('ZipArchive') ? 0 : 1);"
+  ```
+
+  Do not mix extension DLLs from different PHP builds.
 - A PHP-capable web server whose document root contains only public templates
   and `cms/`; private storage must be a sibling or otherwise external path.
   The bundled PHP router is for loopback development only.
@@ -885,7 +907,7 @@ npm run sample:start
 ```
 
 Open `http://127.0.0.1:8765/sample-site/` and sign in at `/cms/login.php` with
-`admin / pagecore-demo`.
+`admin / admin`.
 
 These credentials are intentionally public and cannot boot in production
 mode. The sample configuration is marked `development_only`; Pagecore requires

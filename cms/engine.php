@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.51.1');
+define('PAGECORE_VERSION', '2.52.3');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 // Shared hosts set these with `SetEnv` in .htaccess, which reaches getenv()
 // under mod_php/CGI but only $_SERVER under PHP-FPM. Read both so one
@@ -447,6 +447,77 @@ function cms_draft_path($kind, $id, $mustExist = false) {
         : cms_draft_region_path($id, $mustExist);
 }
 
+/** The configured public page that owns an editable region, if any. */
+function cms_page_definition($key) {
+    foreach (cms_cfg('search_pages', array()) as $url => $definition) {
+        if (isset($definition[2]) && (string) $definition[2] === (string) $key) {
+            return array('source_url' => (string) $url, 'definition' => $definition);
+        }
+    }
+    return null;
+}
+
+/** Read page front matter while falling back to its configured title. */
+function cms_page_meta($key, $path = null) {
+    $definition = cms_page_definition($key);
+    if ($definition === null) { return array(); }
+    if ($path === null) { $path = cms_region_path($key, false); }
+    $meta = array();
+    if ($path && is_file($path)) { list($meta, ) = cms_parse_front_matter(file_get_contents($path)); }
+    if (empty($meta['title'])) {
+        $meta['title'] = isset($definition['definition'][0]) ? (string) $definition['definition'][0] : $definition['source_url'];
+    }
+    return $meta;
+}
+
+/** The current public URL for a configured page, including its saved title-derived URL. */
+function cms_page_url($key, $fallback = '') {
+    $definition = cms_page_definition($key);
+    if ($definition === null) { return $fallback; }
+    $meta = cms_page_meta($key);
+    if (!empty($meta['url']) && PagecoreRoutes::isLocalRoute($meta['url'])) { return $meta['url']; }
+    return $definition['source_url'];
+}
+
+/** Build a readable, local page URL from a new page title. */
+function cms_page_url_for_title($key, $title) {
+    $definition = cms_page_definition($key);
+    if ($definition === null) { return ''; }
+    $slug = cms_post_slug_base($title);
+    $source = $definition['source_url'];
+    // Page titles map to sibling routes beneath the site's configured base,
+    // rather than nesting a renamed home page below its former route.
+    $base = rtrim((string) cms_cfg('base_url', ''), '/');
+    if ($base === '') { $base = rtrim(dirname(rtrim($source, '/')), '/'); }
+    $candidate = ($base === '' ? '' : $base) . '/' . rawurlencode($slug) . '/';
+    if ($candidate[0] !== '/') { $candidate = '/' . $candidate; }
+    $seen = array();
+    foreach (cms_cfg('search_pages', array()) as $url => $other) {
+        $otherKey = isset($other[2]) ? (string) $other[2] : '';
+        if ($otherKey !== '' && $otherKey !== $key) { $seen[cms_page_url($otherKey, (string) $url)] = true; }
+        elseif ($otherKey === '') { $seen[(string) $url] = true; }
+    }
+    if (!isset($seen[$candidate])) { return $candidate; }
+    $number = 2;
+    do {
+        $suffix = '-' . $number;
+        $available = max(1, PagecoreSlugPolicy::CONTENT_MAX_LENGTH - strlen($suffix));
+        $candidate = ($base === '' ? '' : $base) . '/' . rawurlencode(substr(rtrim($slug, '-'), 0, $available) . $suffix) . '/';
+        if ($candidate[0] !== '/') { $candidate = '/' . $candidate; }
+        $number++;
+    } while (isset($seen[$candidate]));
+    return $candidate;
+}
+
+/** Resolve a title-derived page URL back to the configured template route. */
+function cms_page_source_url($url) {
+    foreach (cms_cfg('search_pages', array()) as $sourceUrl => $definition) {
+        $key = isset($definition[2]) ? (string) $definition[2] : '';
+        if ($key !== '' && cms_page_url($key, (string) $sourceUrl) === $url) { return (string) $sourceUrl; }
+    }
+    return null;
+}
+
 function cms_remove_empty_dirs($dir, $stop) {
     $dir = rtrim($dir, '/\\');
     $stop = rtrim($stop, '/\\');
@@ -796,12 +867,14 @@ function cms_render_markdown($md) {
 function cms_editable($key, $tag = 'div') {
     $path = cms_region_path($key);
     $md = ($path && is_file($path)) ? file_get_contents($path) : '';
+    if (cms_page_definition($key) !== null) { list(, $md) = cms_parse_front_matter($md); }
     $html = $md !== '' ? cms_render_markdown($md) : '';
     if (!cms_is_logged_in()) { return $html; }
     if ($html === '') {
         $html = '<p class="cms-empty">(empty content — click to edit)</p>';
     }
-    return '<' . $tag . ' class="cms-editable" data-cms-key="' . htmlspecialchars($key, ENT_QUOTES, 'UTF-8') . '">'
+    $page = cms_page_definition($key) !== null ? ' data-cms-page="1"' : '';
+    return '<' . $tag . ' class="cms-editable" data-cms-key="' . htmlspecialchars($key, ENT_QUOTES, 'UTF-8') . '"' . $page . '>'
          . $html . '</' . $tag . '>';
 }
 
@@ -1202,8 +1275,8 @@ function cms_default_nav_items() {
     $items = array();
     foreach (cms_cfg('search_pages', array()) as $url => $def) {
         $items[] = array(
-            'label' => isset($def[0]) ? (string) $def[0] : $url,
-            'url' => $url,
+            'label' => !empty($def[2]) ? cms_page_meta((string) $def[2])['title'] : (isset($def[0]) ? (string) $def[0] : $url),
+            'url' => !empty($def[2]) ? cms_page_url((string) $def[2], (string) $url) : $url,
             'children' => array(),
         );
     }
@@ -1236,12 +1309,36 @@ function cms_normalize_nav_items($items) {
     return $out;
 }
 
+/** Keep authored navigation in step with configured pages whose titles changed. */
+function cms_apply_page_routes_to_nav(array $items) {
+    $pages = array();
+    foreach (cms_cfg('search_pages', array()) as $sourceUrl => $definition) {
+        $key = isset($definition[2]) ? (string) $definition[2] : '';
+        if ($key === '') { continue; }
+        $pages[(string) $sourceUrl] = array(
+            'title' => cms_page_meta($key)['title'],
+            'url' => cms_page_url($key, (string) $sourceUrl),
+            'configured_title' => isset($definition[0]) ? (string) $definition[0] : (string) $sourceUrl,
+        );
+    }
+    foreach ($items as &$item) {
+        if (isset($pages[$item['url']])) {
+            $page = $pages[$item['url']];
+            if ($item['label'] === $page['configured_title']) { $item['label'] = $page['title']; }
+            $item['url'] = $page['url'];
+        }
+        $item['children'] = cms_apply_page_routes_to_nav($item['children']);
+    }
+    unset($item);
+    return $items;
+}
+
 function cms_nav_items() {
     $file = cms_nav_file();
     if (is_file($file)) {
         $decoded = PagecoreJsonPolicy::decodeList((string) file_get_contents($file));
         $items = $decoded->ok ? cms_normalize_nav_items($decoded->value) : null;
-        if ($items !== null) { return $items; }
+        if ($items !== null) { return cms_apply_page_routes_to_nav($items); }
     }
     return cms_default_nav_items();
 }
@@ -1359,12 +1456,14 @@ function cms_content_inventory($postQuery = '', $postCategory = '', $postPage = 
             $regionUrls[$region] = $url;
         }
         $summary = $region !== '' ? cms_content_file_summary(cms_region_path($region, false)) : array('exists' => null, 'size' => 0, 'modified' => null);
+        $pageMeta = $region !== '' ? cms_page_meta($region) : array();
         $pages[] = array(
-            'title' => isset($def[0]) ? (string) $def[0] : $url,
+            'title' => !empty($pageMeta['title']) ? $pageMeta['title'] : (isset($def[0]) ? (string) $def[0] : $url),
             'type' => isset($def[1]) ? (string) $def[1] : 'Page',
-            'url' => $url,
+            'url' => $region !== '' ? cms_page_url($region, (string) $url) : $url,
             'region' => $region,
             'exists' => $summary['exists'],
+            'revision' => $region !== '' ? cms_content_revision(cms_region_path($region, false)) : null,
         );
     }
 
@@ -1541,9 +1640,14 @@ function cms_regenerate_indexes() {
         $excerpt = '';
         if (!empty($def[2])) {
             $p = cms_region_path($def[2]);
-            if ($p && is_file($p)) { $excerpt = cms_excerpt_from(file_get_contents($p), 30); }
+            if ($p && is_file($p)) {
+                list(, $body) = cms_parse_front_matter(file_get_contents($p));
+                $excerpt = cms_excerpt_from($body, 30);
+            }
         }
-        $index[] = array('t' => $def[0], 'u' => $url, 'k' => $def[1], 'e' => $excerpt);
+        $pageKey = !empty($def[2]) ? (string) $def[2] : '';
+        $index[] = array('t' => $pageKey !== '' ? cms_page_meta($pageKey)['title'] : $def[0],
+            'u' => $pageKey !== '' ? cms_page_url($pageKey, (string) $url) : $url, 'k' => $def[1], 'e' => $excerpt);
     }
     foreach ($posts as $p) {
         $index[] = array('t' => $p['title'], 'u' => $p['url'],
@@ -1557,7 +1661,10 @@ function cms_regenerate_indexes() {
         return array('ok' => false, 'error' => 'index_generation_failed', 'artifact' => 'search-index.json');
     }
 
-    $urls = array_keys(cms_cfg('search_pages', array()));
+    $urls = array();
+    foreach (cms_cfg('search_pages', array()) as $url => $def) {
+        $urls[] = !empty($def[2]) ? cms_page_url((string) $def[2], (string) $url) : $url;
+    }
     foreach ($posts as $p) { $urls[] = $p['url']; }
     foreach (cms_cfg('categories') as $def) { $urls[] = $def[1]; }
     foreach (cms_cfg('sitemap_extra_routes', array()) as $route) { $urls[] = $route; }

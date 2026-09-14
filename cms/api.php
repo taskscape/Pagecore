@@ -19,6 +19,7 @@
  * POST ?action=save-post-meta       -> {ok, meta}
  * POST ?action=create-post          -> {ok, slug, url}
  * POST ?action=delete-post          -> {ok, slug}
+ * POST ?action=delete-page          -> {ok, key}
  * POST ?action=save-media-meta      -> {ok, asset}
  * POST ?action=delete-media         -> {ok}
  * POST ?action=save-nav             -> {ok, nav}
@@ -104,10 +105,11 @@ function cms_preview_url($key) {
     return cms_admin_url('api.php') . '?action=preview-draft&key=' . rawurlencode($key);
 }
 
-function cms_editor_payload($kind, $path) {
+function cms_editor_payload($kind, $path, $key = null) {
     $raw = is_file($path) ? file_get_contents($path) : '';
-    if ($kind === 'post') {
+    if ($kind === 'post' || ($key !== null && cms_page_definition($key) !== null)) {
         list($meta, $body) = cms_parse_front_matter($raw);
+        if ($kind === 'region') { $meta = cms_page_meta($key, $path) + $meta; }
         return array(
             'markdown' => $body,
             'meta'     => $meta,
@@ -164,7 +166,7 @@ function cms_finish_indexed_mutation(array $snapshot) {
 function cms_draft_payload($kind, $id, $key) {
     $path = cms_draft_path($kind, $id, true);
     if (!$path) { return null; }
-    $payload = cms_editor_payload($kind, $path);
+    $payload = cms_editor_payload($kind, $path, $kind === 'post' ? null : $key);
     $payload['updated'] = PagecoreTimePolicy::formatEpoch(filemtime($path), 'Y-m-d H:i:s', cms_cfg('timezone', 'UTC'));
     $payload['preview_url'] = cms_preview_url($key);
     return $payload;
@@ -215,12 +217,37 @@ function cms_current_post_meta($path) {
     return $meta;
 }
 
+/** Validate the small, page-level front matter shared by configured pages. */
+function cms_page_meta_from_request(array $meta, $key, $strict) {
+    $current = cms_page_meta($key);
+    $title = trim(isset($_POST['title']) ? (string) $_POST['title'] : (isset($meta['title']) ? $meta['title'] : $current['title']));
+    $image = trim(isset($_POST['image']) ? (string) $_POST['image'] : (isset($meta['image']) ? $meta['image'] : ''));
+    cms_require_size($title, 'max_title_bytes', 255, 'Page title');
+    cms_require_size($image, 'max_metadata_bytes', 4096, 'Page metadata');
+    cms_utf8_or_fail($title, $image);
+    if ($strict && $title === '') { cms_fail('Page title is required.'); }
+    if ($strict && $image !== '' && !preg_match('~^(/|https?://)[^\s"<>]+$~', $image)) {
+        cms_fail('Featured image must be a path beginning with / or an http(s) URL.');
+    }
+    if ($title !== '') { $meta['title'] = $title; }
+    if ($image !== '') { $meta['image'] = $image; } else { unset($meta['image']); }
+    // Keep the configured route until an editor actually changes the title.
+    if ($title !== '' && ($title !== $current['title'] || !empty($meta['url']))) {
+        $meta['url'] = cms_page_url_for_title($key, $title);
+    } else {
+        unset($meta['url']);
+    }
+    return $meta;
+}
+
 function cms_write_editor_content($kind, $id, $path, $markdown, ?array $meta = null) {
     $snapshot = cms_mutation_snapshot(array($path, cms_draft_path($kind, $id, false)));
     $markdown = str_replace("\r\n", "\n", $markdown);
     if ($kind === 'post') {
         if (!is_file($path)) { cms_fail('Post not found.', 404); }
         $data = cms_build_front_matter($meta === null ? cms_current_post_meta($path) : $meta, $markdown);
+    } elseif ($meta !== null) {
+        $data = cms_build_front_matter($meta, $markdown);
     } else {
         $data = $markdown;
     }
@@ -232,11 +259,11 @@ function cms_write_editor_content($kind, $id, $path, $markdown, ?array $meta = n
     }
     cms_clear_draft($kind, $id);
     cms_finish_indexed_mutation($snapshot);
-    return cms_editor_payload($kind, $path);
+    return cms_editor_payload($kind, $path, $kind === 'post' ? null : $id);
 }
 
 function cms_preview_page($key, $kind, array $payload) {
-    $title = $kind === 'post' && !empty($payload['meta']['title'])
+    $title = ($kind === 'post' || cms_page_definition($key) !== null) && !empty($payload['meta']['title'])
         ? $payload['meta']['title']
         : 'Draft preview: ' . $key;
     http_response_code(200);
@@ -306,7 +333,7 @@ $actionHandlers = array(
         cms_json($payload);
     }
     $id = $kind === 'post' ? $slug : $key;
-    $payload = cms_editor_payload($kind, $path);
+    $payload = cms_editor_payload($kind, $path, $kind === 'post' ? null : $key);
     $payload['ok'] = true;
     $draft = cms_draft_payload($kind, $id, $key);
     if ($draft) { $payload['draft'] = $draft; }
@@ -365,7 +392,7 @@ $actionHandlers = array(
     $id = $kind === 'post' ? $slug : $key;
     $draftPath = cms_draft_path($kind, $id, true);
     if (!$draftPath) { cms_fail('Draft not found.', 404); }
-    cms_preview_page($key, $kind, cms_editor_payload($kind, $draftPath));
+    cms_preview_page($key, $kind, cms_editor_payload($kind, $draftPath, $kind === 'post' ? null : $key));
 
     },
     'preview' => function () {
@@ -391,6 +418,9 @@ $actionHandlers = array(
             if (!is_file($path)) { cms_fail('Post not found.', 404); }
             list($meta, ) = cms_parse_front_matter(file_get_contents($path));
             $data = cms_build_front_matter($meta, $md);
+        } elseif (cms_page_definition($key) !== null) {
+            list($meta, ) = cms_parse_front_matter(is_file($path) ? file_get_contents($path) : '');
+            $data = cms_build_front_matter(cms_page_meta_from_request($meta, $key, false), $md);
         } else {
             $data = $md;
         }
@@ -401,7 +431,7 @@ $actionHandlers = array(
         }
         cms_clear_draft($kind, $id);
         cms_finish_indexed_mutation($snapshot);
-        $saved = cms_editor_payload($kind, $path);
+        $saved = cms_editor_payload($kind, $path, $kind === 'post' ? null : $key);
         $saved['ok'] = true;
         return $saved;
     });
@@ -427,6 +457,10 @@ $actionHandlers = array(
             $basePath = cms_draft_path($kind, $id, true);
             $meta = cms_current_post_meta($basePath ? $basePath : $path);
             $data = cms_build_front_matter(cms_post_meta_from_request($meta, false), $md);
+        } elseif (cms_page_definition($key) !== null) {
+            $basePath = cms_draft_path($kind, $id, true);
+            list($meta, ) = cms_parse_front_matter($basePath ? file_get_contents($basePath) : (is_file($path) ? file_get_contents($path) : ''));
+            $data = cms_build_front_matter(cms_page_meta_from_request($meta, $key, false), $md);
         } else {
             $data = $md;
         }
@@ -445,14 +479,19 @@ $actionHandlers = array(
     if (!$t) { cms_fail('Invalid content identifier.'); }
     list($kind, $path, $slug) = $t;
     $id = $kind === 'post' ? $slug : $key;
-    $payload = cms_mutate_locked(cms_target_rel_key($kind, $id), function () use ($kind, $id, $path, $md) {
+    $payload = cms_mutate_locked(cms_target_rel_key($kind, $id), function () use ($kind, $id, $key, $path, $md) {
         cms_require_revision($path);
         $meta = $kind === 'post'
             ? cms_post_meta_from_request(cms_current_post_meta($path), true)
-            : null;
+            : (cms_page_definition($key) !== null
+                ? cms_page_meta_from_request(cms_page_meta($key, $path), $key, true)
+                : null);
         return cms_write_editor_content($kind, $id, $path, $md, $meta);
     });
     $payload['ok'] = true;
+    if ($kind === 'region' && cms_page_definition($key) !== null) {
+        $payload['url'] = cms_page_url($key);
+    }
     cms_audit_event('content.publish', 'success', array('kind' => $kind));
     cms_json($payload);
 
@@ -468,7 +507,7 @@ $actionHandlers = array(
         $draftPath = cms_draft_path($kind, $id, false);
         cms_require_revision($draftPath);
         cms_clear_draft($kind, $id);
-        return cms_editor_payload($kind, $path);
+        return cms_editor_payload($kind, $path, $kind === 'post' ? null : $id);
     });
     $payload['ok'] = true;
     cms_json($payload);
@@ -496,7 +535,7 @@ $actionHandlers = array(
         }
         cms_clear_draft($kind, $id);
         cms_finish_indexed_mutation($snapshot);
-        return cms_editor_payload($kind, $path);
+        return cms_editor_payload($kind, $path, $kind === 'post' ? null : $id);
     });
     $payload['ok'] = true;
     cms_audit_event('content.restore', 'success', array('kind' => $kind));
@@ -570,6 +609,29 @@ $actionHandlers = array(
     });
     cms_audit_event('content.delete', 'success', array('kind' => 'post'));
     cms_json(array('ok' => true, 'slug' => $slug));
+
+    },
+    'delete-page' => function () {
+    $key = trim(isset($_POST['key']) ? (string) $_POST['key'] : '');
+    cms_require_size($key, 'max_identifier_bytes', 512, 'Page identifier');
+    cms_utf8_or_fail($key);
+    $configured = false;
+    foreach (cms_cfg('search_pages', array()) as $definition) {
+        if (isset($definition[2]) && (string) $definition[2] === $key) { $configured = true; break; }
+    }
+    if (!$configured) { cms_fail('Page content not found.', 404); }
+    $path = cms_region_path($key, true);
+    if (!$path) { cms_fail('Page Markdown not found.', 404); }
+    cms_mutate_locked('pages/' . $key, function () use ($path, $key) {
+        cms_require_revision($path);
+        $snapshot = cms_mutation_snapshot(array($path, cms_draft_path('region', $key, false)));
+        cms_backup('pages/' . $key, $path);
+        if (!PagecoreOperationalBoundary::delete($path, 'page.delete', false)->ok) { cms_fail('Could not delete page Markdown.', 500); }
+        cms_clear_draft('region', $key);
+        cms_finish_indexed_mutation($snapshot);
+    });
+    cms_audit_event('content.delete', 'success', array('kind' => 'page'));
+    cms_json(array('ok' => true, 'key' => $key));
 
     },
     'save-nav' => function () {

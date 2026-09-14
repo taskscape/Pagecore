@@ -8,6 +8,7 @@ const testRoot = path.resolve(process.env.PAGECORE_TEST_ROOT);
 const workerToken = 'worker-0';
 const workerRoot = path.join(testRoot, workerToken);
 const testSite = assertTestSiteContract();
+const defaultCredentials = Object.freeze({ username: 'admin', password: 'admin' });
 
 test.use({ extraHTTPHeaders: { 'X-Pagecore-Test-Worker': workerToken } });
 
@@ -55,8 +56,8 @@ test('migration output keeps non-public posts anonymous-inaccessible and editor-
   const page = await editor.newPage();
   try {
     await page.goto('/cms/login.php?next=%2Fsample-site%2F');
-    await page.getByLabel('Username').fill('admin');
-    await page.getByLabel('Password').fill('pagecore-demo');
+    await page.getByLabel('Username').fill(defaultCredentials.username);
+    await page.getByLabel('Password').fill(defaultCredentials.password);
     await page.getByRole('button', { name: 'Sign in' }).click();
     for (const post of posts) {
       const response = await page.goto(`/sample-site/post/${post.slug}/`);

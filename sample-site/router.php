@@ -17,6 +17,28 @@ if ($path === false || pagecore_request_is_denied(
     return true;
 }
 
+// Let physical sample PHP pages execute directly. Loading the CMS solely to
+// inspect a title-derived route would otherwise make PHP's built-in server
+// dispatch the same script after the engine has already bootstrapped.
+if (preg_match('~^/sample-site/[^/]+\.php$~', $path)
+    && pagecore_public_file($root, $path) !== false) {
+    return false;
+}
+
+if ($path === '/sample-site' || strncmp($path, '/sample-site/', 13) === 0) {
+    // Page titles can create a friendly public URL without rewriting the site's
+    // configuration file. Resolve that URL to the existing template route first.
+    if (!defined('CMS_CONFIG_FILE')) {
+        $routerConfig = getenv('PAGECORE_CONFIG');
+        if (!$routerConfig && isset($_SERVER['PAGECORE_CONFIG'])) { $routerConfig = (string) $_SERVER['PAGECORE_CONFIG']; }
+        define('CMS_CONFIG_FILE', $routerConfig ?: __DIR__ . '/config.php');
+        unset($routerConfig);
+    }
+    require dirname(__DIR__) . '/cms/engine.php';
+    $pageSource = cms_page_source_url($path);
+    if ($pageSource !== null) { $path = $pageSource; }
+}
+
 if ($path === '/sample-site' || $path === '/sample-site/') {
     require __DIR__ . '/index.php';
     return true;

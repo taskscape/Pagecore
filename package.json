@@ -1,6 +1,6 @@
 {
   "name": "pagecore",
-  "version": "2.51.1",
+  "version": "2.52.3",
   "private": true,
   "description": "Pagecore CMS sample site and end-to-end tests.",
   "scripts": {

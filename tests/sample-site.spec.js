@@ -16,13 +16,14 @@ const generatedFiles = [
   path.join(workerRoot, 'generated', 'sitemap.xml')
 ];
 const testSite = assertTestSiteContract();
+const defaultCredentials = Object.freeze({ username: 'admin', password: 'admin' });
 
 test.use({ extraHTTPHeaders: { 'X-Pagecore-Test-Worker': workerToken } });
 
 async function login(page, next = '/sample-site/') {
   await page.goto(`/cms/login.php?next=${encodeURIComponent(next)}`);
-  await page.getByLabel('Username').fill('admin');
-  await page.getByLabel('Password').fill('pagecore-demo');
+  await page.getByLabel('Username').fill(defaultCredentials.username);
+  await page.getByLabel('Password').fill(defaultCredentials.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.locator('.cms-toolbar')).toBeVisible();
 }
@@ -157,7 +158,7 @@ test('security audit log records outcomes with correlation and hashed identities
   expect(uploadEvent.correlation_id).toBe(rejectedRequestId);
   expect(uploadEvent.account_hash).toMatch(/^[a-f0-9]{64}$/);
   expect(uploadEvent.source_hash).toMatch(/^[a-f0-9]{64}$/);
-  expect(rawAudit).not.toContain('pagecore-demo');
+  expect(rawAudit).not.toContain(defaultCredentials.password);
   expect(rawAudit).not.toContain(token);
   expect(rawAudit).not.toContain('private-filename');
   expect(rawAudit).not.toContain(path.resolve(workingContent));
@@ -205,14 +206,14 @@ test('login requires its pre-authentication token and rejects cross-site origins
   expect(token).toMatch(/^[a-f0-9]{64}$/);
 
   const missingToken = await page.request.post('/cms/login.php?next=%2Fsample-site%2F', {
-    form: { username: 'admin', password: 'pagecore-demo' },
+    form: defaultCredentials,
     maxRedirects: 0
   });
   expect(missingToken.status()).toBe(403);
 
   const crossSite = await page.request.post('/cms/login.php?next=%2Fsample-site%2F', {
     headers: { Origin: 'https://attacker.example' },
-    form: { username: 'admin', password: 'pagecore-demo', login_token: token },
+    form: { ...defaultCredentials, login_token: token },
     maxRedirects: 0
   });
   expect(crossSite.status()).toBe(403);
@@ -220,8 +221,8 @@ test('login requires its pre-authentication token and rejects cross-site origins
   expect(stillLoggedOut.status()).toBe(401);
 
   await page.reload();
-  await page.getByLabel('Username').fill('admin');
-  await page.getByLabel('Password').fill('pagecore-demo');
+  await page.getByLabel('Username').fill(defaultCredentials.username);
+  await page.getByLabel('Password').fill(defaultCredentials.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.locator('.cms-toolbar')).toBeVisible();
 });
@@ -242,8 +243,8 @@ test('mobile admin supports password managers and a touch-friendly new-post flow
   expect((await password.boundingBox()).height).toBeGreaterThanOrEqual(44);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
-  await username.fill('admin');
-  await password.fill('pagecore-demo');
+  await username.fill(defaultCredentials.username);
+  await password.fill(defaultCredentials.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('heading', { name: 'Content inventory' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -316,8 +317,8 @@ test('CMS responses enforce security headers without inline-policy exceptions', 
   expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
   expect(headers['permissions-policy']).toContain('camera=()');
 
-  await page.getByLabel('Username').fill('admin');
-  await page.getByLabel('Password').fill('pagecore-demo');
+  await page.getByLabel('Username').fill(defaultCredentials.username);
+  await page.getByLabel('Password').fill(defaultCredentials.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('heading', { name: 'Content inventory' })).toBeVisible();
   await page.goto('/cms/media.php');
@@ -331,7 +332,7 @@ test('API action table rejects every unintended method and tokenless mutation', 
   const reads = ['get', 'revisions', 'media-list', 'media-impact', 'content-inventory', 'version', 'preview-draft'];
   const mutations = [
     'preview', 'save', 'save-draft', 'publish', 'discard-draft', 'restore', 'save-post-meta',
-    'create-post', 'delete-post', 'save-nav', 'create-region', 'save-media-meta', 'delete-media',
+    'create-post', 'delete-post', 'delete-page', 'save-nav', 'create-region', 'save-media-meta', 'delete-media',
     'upload', 'logout'
   ];
 
@@ -493,17 +494,17 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.51.1');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.52.3');
   // A source checkout carries no build stamp, so the asset token stays the
   // bare version; a release stamps it with the commit as well.
-  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.51.1"]')).toHaveCount(1);
+  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.52.3"]')).toHaveCount(1);
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.51.1');
+  expect((await version.json()).version).toBe('2.52.3');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.51.1')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.52.3')).toBeVisible();
 });
 
 test('update page reports the build and never offers to write without opt-in', async ({ page }) => {
@@ -511,7 +512,7 @@ test('update page reports the build and never offers to write without opt-in', a
 
   await page.goto('/cms/update.php');
   await expect(page.getByRole('heading', { name: 'Updates', exact: true })).toBeVisible();
-  await expect(page.getByText('2.51.1').first()).toBeVisible();
+  await expect(page.getByText('2.52.3').first()).toBeVisible();
 
   // update_apply defaults to false, so no write path is offered anywhere.
   await expect(page.locator('#apply-update')).toHaveCount(0);
@@ -525,7 +526,7 @@ test('update page reports the build and never offers to write without opt-in', a
   const body = await status.json();
   expect(body.ok).toBe(true);
   expect(body.can_apply).toBe(false);
-  expect(body.installed).toContain('2.51.1');
+  expect(body.installed).toContain('2.52.3');
 
   // Applying is refused while update_apply is off, whatever the caller asks for.
   const apply = await page.request.post('/cms/api.php?action=update-apply', {
@@ -698,6 +699,35 @@ test('featured image upload accepts JPEG and PNG, saves drafts, and enforces typ
   });
   expect(oversizedUpload.status()).toBe(413);
   expect((await oversizedUpload.json()).error).toContain('8 MB');
+});
+
+test('page editor saves title and featured image and derives its public URL from the title', async ({ page }) => {
+  await login(page, '/sample-site/');
+  const panel = await openEditor(page, 'home/hero');
+  const featuredInput = panel.getByLabel('Choose featured image');
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+    'base64'
+  );
+
+  await expect(panel.getByLabel('Page title')).toHaveValue('Home');
+  await featuredInput.setInputFiles({ name: 'page-feature.png', mimeType: 'image/png', buffer: png });
+  await expect(panel.locator('.cms-status')).toHaveText('Featured image saved automatically to draft.');
+  await panel.getByLabel('Page title').fill('Edited sample home');
+  await panel.getByRole('button', { name: 'Publish' }).click();
+
+  await expect(page).toHaveURL(/\/sample-site\/edited-sample-home\/#cms-edit$/);
+  const pageFile = fs.readFileSync(path.join(workingContent, 'pages', 'home', 'hero.md'), 'utf8');
+  expect(pageFile).toContain('title: Edited sample home');
+  expect(pageFile).toContain('image: /cms/media-file.php?path=');
+  expect(pageFile).toContain('url: /sample-site/edited-sample-home/');
+  await expect(page.getByRole('link', { name: 'Edited sample home' })).toHaveAttribute('href', '/sample-site/edited-sample-home/');
+
+  const inventory = await page.request.get('/cms/api.php?action=content-inventory');
+  const payload = await inventory.json();
+  expect(payload.inventory.pages).toContainEqual(expect.objectContaining({
+    title: 'Edited sample home', url: '/sample-site/edited-sample-home/'
+  }));
 });
 
 test('application resource limits reject oversized work before writes and paginate inventories', async ({ page }) => {
@@ -1126,6 +1156,10 @@ test('content inventory lists pages, regions, posts, categories, creates missing
   await expect(page.getByRole('cell', { name: 'Home', exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Launch notes for the sample site' })).toBeVisible();
   await expect(page.locator('[data-content-region="home/hero"]')).toContainText('Markdown present');
+  const homePage = page.locator('[data-content-page="home/hero"]');
+  await expect(homePage.getByRole('link', { name: 'Edit' })).toHaveAttribute('href', '/sample-site/#cms-edit');
+  await expect(homePage.getByRole('button', { name: 'Delete' })).toBeVisible();
+  await expect(pagesSection.getByRole('cell', { name: 'News', exact: true }).locator('..')).toContainText('No editable content');
 
   // Inventory creation requires an explicit category because it is not scoped to a public listing page.
   await page.getByRole('button', { name: '＋ Add post' }).click();
@@ -1167,6 +1201,14 @@ test('content inventory lists pages, regions, posts, categories, creates missing
   const navFile = JSON.parse(fs.readFileSync(path.join(workingContent, 'nav.json'), 'utf8'));
   expect(navFile[1].label).toBe('Articles');
   expect(navFile.some(item => item.label === 'Inventory')).toBe(true);
+
+  // Configured pages keep their route but can remove their linked Markdown and draft from the inventory.
+  await pagesSection.getByRole('button', { name: 'Expand' }).click();
+  page.once('dialog', dialog => dialog.accept());
+  await homePage.getByRole('button', { name: 'Delete' }).click();
+  await expect(homePage).toContainText('Missing Markdown');
+  await expect(homePage.getByRole('button', { name: 'Delete' })).toHaveCount(0);
+  expect(fs.existsSync(path.join(workingContent, 'pages', 'home', 'hero.md'))).toBe(false);
 
   await page.goto('/sample-site/');
   const primaryNav = page.getByRole('navigation', { name: 'Primary navigation' });

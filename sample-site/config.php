@@ -24,7 +24,7 @@ return array(
     'hsts' => false,
     'trusted_proxies' => array(),
     'username' => 'admin',
-    'password_hash' => '$2y$12$Hrcs3OvrwJiwrIItDZyS7eP3q1EE4iH8CaaSjk1PAfBnUe8aFsIL6',
+    'password_hash' => '$2y$12$eKuNB2VExKkHrHRD.8Lo/.srDlAQ70P5w02duDM4cwmkBTMgplNlm',
     'login_rate_limit_dir' => $content . '/.state',
     'login_rate_window_seconds' => 300,
     'login_rate_source_limit' => 5,
