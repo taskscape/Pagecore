@@ -31,7 +31,7 @@ final class PagecoreWordPressSqlDump {
         return $map;
     }
 
-    public static function rows($sql, $table, array $canonicalColumns = null) {
+    public static function rows($sql, $table, ?array $canonicalColumns = null) {
         $rows = array();
         $len = strlen($sql);
         $pattern = '~INSERT INTO\s+`' . preg_quote($table, '~') . '`\s*(?:\(([^()]*)\))?\s*VALUES\s*~';
