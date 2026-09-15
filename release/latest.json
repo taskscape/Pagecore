@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "channel": "main",
-  "version": "2.52.3",
-  "commit": "ebec3001e4bd639e55f043b1c3db94860777701b",
-  "commit_time": "2026-09-14T10:32:23Z",
-  "published_at": "2026-09-14T10:30:44Z",
-  "archive_url": "https://github.com/taskscape/Pagecore/releases/download/build-ebec300/pagecore-2.52.3-ebec300.zip",
-  "archive_sha256": "c27cb6df0f289f0fc8f5a9f4c077f06f6041eab279d76997f961baf890168cdc",
+  "version": "2.52.4",
+  "commit": "e342b9aa8b3725f84f68268eded1b13690b91026",
+  "commit_time": "2026-09-15T10:03:21Z",
+  "published_at": "2026-09-15T10:03:39Z",
+  "archive_url": "https://github.com/taskscape/Pagecore/releases/download/build-e342b9a/pagecore-2.52.4-e342b9a.zip",
+  "archive_sha256": "9a03365fe5a3a4845c242bc3d3f7fa7f81a5752371ae2d1e7d794ccfc18202a6",
   "archive_bytes": 137606,
   "min_php": "8.3.0",
-  "notes_url": "https://github.com/taskscape/Pagecore/compare/309525a...ebec300"
+  "notes_url": "https://github.com/taskscape/Pagecore/compare/ebec300...e342b9a"
 }
