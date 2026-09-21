@@ -49,7 +49,8 @@ subdomain is permanently HTTPS-capable.
 
 The browser never reads Markdown or upload files directly. `/cms/media-file.php`
 validates the requested relative media path and supplies a fixed MIME policy;
-PDFs are attachments and raster images may render inline. Content migrated from
+PDFs may render inline when the browser is set to display them, and raster
+images may render inline. Content migrated from
 another CMS usually carries literal `/uploads/...` URLs; map them onto that
 endpoint in the fronting server rather than rewriting the content, so the
 files stay outside the document root:

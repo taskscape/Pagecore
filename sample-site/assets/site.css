@@ -91,6 +91,9 @@ main { min-height: 70vh; }
   max-width: 920px;
 }
 .prose img { max-width: 100%; height: auto; border-radius: 8px; }
+.prose .pdf-embed { margin: 1.25rem 0; }
+.prose .pdf-embed object { display: block; width: 100%; height: 640px; border: 0; background: var(--panel); }
+.prose .pdf-download { margin: 8px 0 0; }
 .prose table { background: var(--panel); }
 .post-grid {
   display: grid;

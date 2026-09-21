@@ -38,8 +38,8 @@ files, and a folder of uploads.
      **Publish** copies the current editor state to the live Markdown file.
    - **Images and PDFs** can be pasted or dragged straight into the editor —
      they are uploaded automatically and the correct Markdown snippet is
-     inserted. PDFs render on the page as an embedded viewer with a download
-     fallback link.
+     inserted. PDFs render inline on the page when the browser is set to
+     display PDFs, with a download fallback link.
    - The **Media** link opens `/cms/media.php`, a searchable library of
      existing uploads. Editors can reuse an asset in the current editor,
      update alt text and captions stored in sidecar metadata files, preview
@@ -114,8 +114,9 @@ extras:
 - Raw HTML is always escaped and unsafe Markdown URL schemes are neutralized.
   The WordPress importer converts its maintained safe-tag allowlist to Markdown,
   turns supported embeds into ordinary links, and discards active markup.
-- `pdf:/uploads/path/file.pdf "Label"` on its own line becomes a labelled PDF
-  download link.
+- `pdf:/uploads/path/file.pdf "Label"` on its own line becomes an inline PDF
+  viewer when the browser is set to display PDFs, with a labelled download
+  fallback.
 - Standalone images are wrapped in `<figure>` for styling.
 - Tables get a `cms-table` class hook.
 - Dates display in long form (*15 June 2026*). Set `date_months` to twelve
@@ -987,10 +988,11 @@ if a post-upgrade issue is discovered.
 - **Upload validation and isolation** — the upload allowlist is limited to
   raster images and PDFs, with a size limit, server-side MIME sniffing (never
   trusts the client), and raster decoding checks. Active SVG/XML uploads are
-  rejected. PDFs are served through a download-only endpoint with `nosniff`
+  rejected. PDFs are served through a controlled endpoint with `nosniff`
   and a restrictive sandbox policy. Uploaded files get randomized names, and
   uploads live outside the document root. Both raster images and PDFs are
-  delivered through a controlled handler; PDFs cannot render inline.
+  delivered through a controlled handler; PDFs render inline when the browser
+  is set to display them.
 - **Engine internals** (`config.php`, `engine.php`, `auth.php`, `cms/lib/`)
   are not reachable over HTTP.
 - **Atomic writes** (temp file + rename, Windows-safe) so a failed save never

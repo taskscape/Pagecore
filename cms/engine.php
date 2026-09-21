@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.52.4');
+define('PAGECORE_VERSION', '2.52.5');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 // Shared hosts set these with `SetEnv` in .htaccess, which reaches getenv()
 // under mod_php/CGI but only $_SERVER under PHP-FPM. Read both so one
@@ -162,7 +162,7 @@ function cms_send_security_headers() {
         "frame-ancestors 'none'",
         "frame-src 'none'",
         "img-src 'self' data: blob: https:",
-        "object-src 'none'",
+        "object-src 'self'",
         "script-src 'self' 'nonce-$nonce'",
         "script-src-attr 'none'",
         "style-src 'self' https://fonts.googleapis.com 'nonce-$nonce'",
@@ -824,7 +824,7 @@ function cms_parsedown() {
 
 /**
  * Markdown -> HTML: Parsedown, then post-processing:
- *  - "pdf:/uploads/x.pdf \"Label\"" paragraphs -> download links
+ *  - "pdf:/uploads/x.pdf \"Label\"" paragraphs -> inline PDF viewer with download fallback
  *  - markdown-born <img> wrapped in <figure class="wp-block-image">
  *  - tables get class="cms-table"
  */
@@ -841,7 +841,10 @@ function cms_render_markdown($md) {
             elseif (isset($m[2]) && $m[2] !== '') { $label = $m[2]; }
             if ($label === '') { $label = basename($m[1], '.pdf'); }
             $lab = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
-            return '<p class="pdf-download"><a href="' . $url . '" download>Download PDF: ' . $lab . '</a></p>';
+            return '<figure class="pdf-embed">'
+                . '<object data="' . $url . '" type="application/pdf" width="100%" height="640" aria-label="' . $lab . '"></object>'
+                . '<figcaption class="pdf-download"><a href="' . $url . '" download>Download PDF: ' . $lab . '</a></figcaption>'
+                . '</figure>';
         },
         $html
     );

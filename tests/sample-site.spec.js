@@ -57,6 +57,8 @@ test('visitor sees rendered sample site without editor chrome', async ({ page })
 
   await expect(page.getByRole('heading', { name: 'Pagecore sample site' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'CMS features on this page' })).toBeVisible();
+  await expect(page.locator('object[type="application/pdf"]')).toHaveAttribute('data', '/sample-site/assets/sample.pdf');
+  await expect(page.getByRole('link', { name: 'Download PDF: Sample PDF' }).first()).toBeVisible();
   await expect(page.getByRole('link', { name: 'Launch notes for the sample site' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Showcase' })).toBeVisible();
   await expect(page.locator('.cms-toolbar')).toHaveCount(0);
@@ -494,17 +496,17 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.52.4');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.52.5');
   // A source checkout carries no build stamp, so the asset token stays the
   // bare version; a release stamps it with the commit as well.
-  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.52.4"]')).toHaveCount(1);
+  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.52.5"]')).toHaveCount(1);
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.52.4');
+  expect((await version.json()).version).toBe('2.52.5');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.52.4')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.52.5')).toBeVisible();
 });
 
 test('update page reports the build and never offers to write without opt-in', async ({ page }) => {
@@ -512,7 +514,7 @@ test('update page reports the build and never offers to write without opt-in', a
 
   await page.goto('/cms/update.php');
   await expect(page.getByRole('heading', { name: 'Updates', exact: true })).toBeVisible();
-  await expect(page.getByText('2.52.4').first()).toBeVisible();
+  await expect(page.getByText('2.52.5').first()).toBeVisible();
 
   // update_apply defaults to false, so no write path is offered anywhere.
   await expect(page.locator('#apply-update')).toHaveCount(0);
@@ -526,7 +528,7 @@ test('update page reports the build and never offers to write without opt-in', a
   const body = await status.json();
   expect(body.ok).toBe(true);
   expect(body.can_apply).toBe(false);
-  expect(body.installed).toContain('2.52.4');
+  expect(body.installed).toContain('2.52.5');
 
   // Applying is refused while update_apply is off, whatever the caller asks for.
   const apply = await page.request.post('/cms/api.php?action=update-apply', {
@@ -868,7 +870,7 @@ test('development HTTP boundary denies configuration, content, backups, and exec
   }
 });
 
-test('active uploads are rejected and PDFs are delivered only as downloads', async ({ page }) => {
+test('active uploads are rejected and PDFs are delivered for inline display', async ({ page }) => {
   await login(page);
   const token = await page.evaluate(() => window.CMS_CONFIG && window.CMS_CONFIG.token);
   expect(token).toBeTruthy();
@@ -928,10 +930,11 @@ test('active uploads are rejected and PDFs are delivered only as downloads', asy
   const download = await page.request.get(pdf.url);
   expect(download.ok()).toBeTruthy();
   expect(download.headers()['content-type']).toContain('application/pdf');
-  expect(download.headers()['content-disposition']).toContain('attachment');
+  expect(download.headers()['content-disposition']).toContain('inline');
   expect(download.headers()['x-content-type-options']).toBe('nosniff');
   expect(download.headers()['content-security-policy']).toContain("sandbox");
   expect(download.headers()['content-security-policy']).toContain("default-src 'none'");
+  expect(download.headers()['content-security-policy']).toContain("frame-ancestors 'self'");
   expect((await download.body()).subarray(0, 5).toString()).toBe('%PDF-');
 
   const svgDelivery = await page.request.get('/cms/media-file.php?path=2026%2F07%2Fsample-logo.svg');

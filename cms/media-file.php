@@ -27,11 +27,12 @@ $filename = basename($path);
 header('Content-Type: ' . $types[$ext]);
 header('Content-Length: ' . filesize($path));
 if ($ext === 'pdf') {
-    header('Content-Disposition: attachment; filename="download.pdf"; filename*=UTF-8\'\'' . rawurlencode($filename));
+    header('Content-Disposition: inline; filename="download.pdf"; filename*=UTF-8\'\'' . rawurlencode($filename));
+    header("Content-Security-Policy: sandbox; default-src 'none'; frame-ancestors 'self'");
 } else {
     header('Content-Disposition: inline; filename*=UTF-8\'\'' . rawurlencode($filename));
+    header("Content-Security-Policy: sandbox; default-src 'none'; frame-ancestors 'none'");
 }
 header('X-Content-Type-Options: nosniff');
-header("Content-Security-Policy: sandbox; default-src 'none'; frame-ancestors 'none'");
 header('Cache-Control: public, max-age=3600');
 readfile($path);

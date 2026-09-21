@@ -59,7 +59,8 @@ Paste the output into `password_hash` in the file named by `PAGECORE_CONFIG`.
   within the configured upload limit; Pagecore uploads it and saves its URL to the post draft automatically.
   For a crisp Facebook preview, use a landscape image around 1200 x 630 pixels.
 - Markdown with tables; paste or drag raster images/PDFs straight into the
-  editor. SVG uploads are rejected because SVG is active XML.
+  editor. PDFs render inline when the browser is set to display them. SVG
+  uploads are rejected because SVG is active XML.
 - Open **Content** in the toolbar to browse `/cms/content.php`, which lists
   configured pages, editable regions, posts, categories, missing Markdown
   files, and the editable navigation JSON.
@@ -79,7 +80,8 @@ Paste the output into `password_hash` in the file named by `PAGECORE_CONFIG`.
 
 `/cms/media.php` lists files from the configured `uploads_dir` and searches by
 relative path, alt text and caption. Images show as thumbnails; PDFs show as a
-file tile with a download-only link. Picker mode (`/cms/media.php?picker=1`)
+file tile. Opening a PDF displays it inline when the browser is set to show
+PDFs. Picker mode (`/cms/media.php?picker=1`)
 inserts the correct Markdown back into the active editor panel.
 
 Metadata is stored beside the upload as JSON, for example
