@@ -83,16 +83,16 @@
         if (actions) regionEl.appendChild(actions);
     }
 
-    function inlineText(regionEl) {
-        var actions = regionEl._cmsInlineActions;
-        if (actions) actions.hidden = true;
-        var text = (regionEl.innerText || '').replace(/\u00a0/g, ' ');
-        if (actions) actions.hidden = false;
-        return text.replace(/\r\n?/g, '\n');
+    function inlineMarkdown(state) {
+        // A no-op save must retain the exact source, including reference
+        // definitions and Markdown syntax that has no visible representation.
+        if (regionContentHtml(state.region) === state.editingHtml) return state.markdown;
+        return window.PagecoreEditorState.inlineMarkdown(state.region);
     }
 
     function enableInlineSurfaces(state) {
         var regionEl = state.region;
+        state.surfaces = [];
         var children = Array.prototype.slice.call(regionEl.childNodes);
         children.forEach(function (node) {
             if (node === state.actions) return;
@@ -103,9 +103,13 @@
                 node = span;
             }
             if (node.nodeType === 1) {
-                if (node.classList.contains('cms-empty')) node.textContent = '';
-                node.setAttribute('contenteditable', 'plaintext-only');
+                if (node.classList.contains('cms-empty')) {
+                    node.textContent = '';
+                    node.removeAttribute('class');
+                }
+                node.setAttribute('contenteditable', 'true');
                 node.setAttribute('spellcheck', 'true');
+                state.surfaces.push(node);
             }
         });
         regionEl.classList.add('cms-inline-editing');
@@ -113,9 +117,10 @@
         state.ready = true;
         state.save.disabled = false;
         state.status.classList.remove('cms-inline-error');
-        state.status.textContent = 'Editing plain text';
+        state.status.textContent = 'Editing content';
+        state.editingHtml = regionContentHtml(regionEl);
         var first = Array.prototype.find.call(regionEl.children, function (child) {
-            return child !== state.actions && child.getAttribute('contenteditable') === 'plaintext-only';
+            return child !== state.actions && child.getAttribute('contenteditable') === 'true';
         });
         if (first) {
             first.focus();
@@ -145,7 +150,7 @@
     }
 
     function cancelInline(state, restoreFocus) {
-        if (!state || !state.active) return;
+        if (!state || !state.active || state.busy) return;
         leaveInline(state, state.originalHtml);
         if (restoreFocus) state.edit.focus();
     }
@@ -165,6 +170,7 @@
         apiGet(state.key).then(function (res) {
             if (!state.active) return;
             state.revision = res.revision || 'missing';
+            state.markdown = res.markdown || '';
             state.originalHtml = res.html || '';
             replaceRegionContent(state.region, state.originalHtml);
             enableInlineSurfaces(state);
@@ -178,15 +184,36 @@
 
     function saveInline(state) {
         if (!state.active || !state.ready || state.busy) return;
+        var markdown;
+        try {
+            markdown = inlineMarkdown(state);
+        } catch (err) {
+            state.status.textContent = err.message;
+            state.status.classList.add('cms-inline-error');
+            return;
+        }
         state.busy = true;
         state.save.disabled = true;
         state.cancel.disabled = true;
         state.edit.disabled = true;
         state.status.classList.remove('cms-inline-error');
         state.status.textContent = 'Saving…';
+        var expectedContent = window.PagecoreEditorState.inlineContentSignature(state.region);
+        var unchanged = regionContentHtml(state.region) === state.editingHtml;
+        // Freeze the submitted snapshot until validation and publishing finish.
+        state.surfaces.forEach(function (surface) { surface.setAttribute('contenteditable', 'false'); });
+        var validation = unchanged ? Promise.resolve() : api('preview', { markdown: markdown }).then(function (preview) {
+            var rendered = document.createElement('div');
+            rendered.innerHTML = preview.html;
+            if (window.PagecoreEditorState.inlineContentSignature(rendered) !== expectedContent) {
+                throw new Error('This edit cannot be saved inline without changing formatting. Use Edit to update the Markdown.');
+            }
+        });
         // Inline and full-window publishing intentionally use the same action,
         // validation, Markdown parser, escaping policy, lock, and write path.
-        api('publish', { key: state.key, markdown: inlineText(state.region), revision: state.revision }).then(function (res) {
+        validation.then(function () {
+            return api('publish', { key: state.key, markdown: markdown, revision: state.revision });
+        }).then(function (res) {
             if (!state.active) return;
             state.revision = res.revision || state.revision;
             state.originalHtml = res.html || '';
@@ -195,6 +222,7 @@
         }).catch(function (err) {
             if (!state.active) return;
             state.busy = false;
+            state.surfaces.forEach(function (surface) { surface.setAttribute('contenteditable', 'true'); });
             state.save.disabled = false;
             state.cancel.disabled = false;
             state.edit.disabled = false;

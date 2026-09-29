@@ -572,7 +572,7 @@ test('committed browser test site renders its page, post, navigation, and visibi
   await expect(navigation.getByRole('link')).toHaveText(testSite.navigation);
 });
 
-test('editor can cancel and publish plain-text changes directly inline', async ({ page }) => {
+test('editor can cancel and publish text changes directly inline without losing headings', async ({ page }) => {
   await login(page);
   const region = page.locator('[data-cms-key="home/hero"]');
   const save = region.getByRole('button', { name: 'Save', exact: true });
@@ -585,7 +585,7 @@ test('editor can cancel and publish plain-text changes directly inline', async (
   await expect(save).toBeVisible();
   await expect(cancel).toBeVisible();
   await expect(edit).toBeVisible();
-  const inlineHeading = region.locator('h1[contenteditable="plaintext-only"]');
+  const inlineHeading = region.locator('h1[contenteditable="true"]');
   await expect(inlineHeading).toBeFocused();
   await inlineHeading.fill('Temporary inline heading');
   await cancel.click();
@@ -596,7 +596,7 @@ test('editor can cancel and publish plain-text changes directly inline', async (
   await region.getByRole('heading', { name: 'Pagecore sample site' }).click();
   await expect(inlineHeading).toBeEditable();
   await inlineHeading.fill('Saved inline heading');
-  await region.locator('p[contenteditable="plaintext-only"]').fill('Contact editor@example.com & pay $5 = exact.');
+  await region.locator('p[contenteditable="true"]').fill('Contact editor@example.com & pay $5 = exact.');
   const publishRequest = page.waitForRequest(request =>
     request.method() === 'POST' && request.url().includes('/cms/api.php?action=publish')
   );
@@ -610,13 +610,114 @@ test('editor can cancel and publish plain-text changes directly inline', async (
 
   const response = await page.request.get('/cms/api.php?action=get&key=home%2Fhero');
   const payload = await response.json();
-  expect(payload.markdown).toContain('Saved inline heading');
+  expect(payload.markdown).toContain('# Saved inline heading');
+  await expect(region.getByRole('heading', { name: 'Saved inline heading', exact: true })).toBeVisible();
 
   await region.hover();
   await edit.click();
-  const fullEditor = page.getByRole('dialog', { name: 'Edit content' });
+  const fullEditor = page.getByRole('dialog', { name: 'Edit page' });
   await expect(fullEditor).toBeVisible();
   await expect(fullEditor.locator('.cms-textarea')).toHaveValue(payload.markdown);
+});
+
+for (const target of [
+  { key: 'home/hero', route: '/sample-site/', file: 'pages/home/hero.md' },
+  { key: 'post:launch-notes', route: '/sample-site/post/launch-notes/', file: 'posts/launch-notes.md' }
+]) {
+  test(`inline editing preserves Markdown content and metadata for ${target.key}`, async ({ page }) => {
+    const markdown = [
+      '# Markdown preservation', '',
+      'A **bold** and *italic* and ~~deleted~~ paragraph with [a reference][guide] and `inline code`.', '',
+      '![Sample image](/sample-site/working-uploads/2026/07/featured-pagecore.png "Image title")', '',
+      '- First item', '- Second item', '    - Nested item', '',
+      '3. Third item', '4. Fourth item', '',
+      '> A **quoted** paragraph.', '> ', '> Another paragraph.', '',
+      '| Left | Middle | Right |', '| :--- | :---: | ---: |', '| **bold cell** | a\\|b | [link](/sample-site/) |', '',
+      '````javascript', 'const code = "``` <tag> & *literal*";', '', 'console.log(code);', '````', '',
+      'A hard break  ', 'on the next line with &amp; and \\*literal stars\\*.', '',
+      'pdf:/uploads/manual.pdf "User manual"', '',
+      '---', '',
+      '[guide]: /sample-site/about/ "Guide title"', ''
+    ].join('\n');
+    const file = path.join(workingContent, target.file);
+    const existing = fs.readFileSync(file, 'utf8');
+    const frontMatter = existing.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n/);
+    fs.writeFileSync(file, (frontMatter ? frontMatter[0] : '') + markdown);
+    await login(page, target.route);
+    const region = page.locator(`[data-cms-key="${target.key}"]`);
+    const getContent = async () => (await page.request.get(`/cms/api.php?action=get&key=${encodeURIComponent(target.key)}`)).json();
+    const original = await getContent();
+
+    // No-op saves must preserve source syntax, reference definitions, and metadata exactly.
+    await region.getByRole('heading', { name: 'Markdown preservation', exact: true }).click();
+    await region.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(region.getByRole('button', { name: 'Save', exact: true })).toBeHidden();
+    expect((await getContent()).markdown).toBe(original.markdown);
+
+    // A real rendered edit must not flatten any of the surrounding Markdown.
+    await region.getByRole('heading', { name: 'Markdown preservation', exact: true }).click();
+    await region.locator('h1[contenteditable="true"]').fill('Updated Markdown heading');
+    await region.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(region.getByRole('button', { name: 'Save', exact: true })).toBeHidden();
+    const saved = await getContent();
+    expect(saved.html).toBe(original.html.replace('Markdown preservation', 'Updated Markdown heading'));
+    expect(saved.meta).toEqual(original.meta);
+
+    // Typing within emphasis must keep its format and the surrounding links.
+    await region.getByRole('heading', { name: 'Updated Markdown heading', exact: true }).click();
+    await expect(region.locator('h1[contenteditable="true"]')).toBeEditable();
+    const bold = region.locator('p strong').first();
+    await bold.click();
+    await bold.evaluate(element => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      range.collapse(false);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    await page.keyboard.insertText(' updated');
+    await region.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(region.getByRole('button', { name: 'Save', exact: true })).toBeHidden();
+    const edited = await getContent();
+    expect(edited.html).toBe(saved.html.replace('<strong>bold</strong>', '<strong>bold updated</strong>'));
+    await expect(region.locator('a').first()).toHaveAttribute('href', '/sample-site/about/');
+    await page.reload();
+    await expect(region.getByRole('heading', { name: 'Updated Markdown heading', exact: true })).toBeVisible();
+    await expect(region.locator('img')).toHaveAttribute('alt', 'Sample image');
+    await expect(region.locator('a[download]')).toHaveAttribute('href', '/uploads/manual.pdf');
+    const panel = await openEditor(page, target.key);
+    await expect(panel.locator('.cms-textarea')).toHaveValue(edited.markdown);
+  });
+}
+
+test('inline editing can populate an empty region without treating typed Markdown punctuation as formatting', async ({ page }) => {
+  fs.writeFileSync(path.join(workingContent, 'pages/home/hero.md'), '');
+  await login(page);
+  const region = page.locator('[data-cms-key="home/hero"]');
+  await region.locator('.cms-empty').click();
+  await region.locator('p[contenteditable="true"]').fill('# Literal heading with *literal stars*');
+  await region.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(region.getByRole('button', { name: 'Save', exact: true })).toBeHidden();
+  await page.reload();
+  await expect(region.locator('p')).toHaveText('# Literal heading with *literal stars*');
+  await expect(region.locator('h1, em')).toHaveCount(0);
+});
+
+test('inline save refuses formatting it cannot preserve and leaves the published Markdown intact', async ({ page }) => {
+  await login(page);
+  const region = page.locator('[data-cms-key="home/hero"]');
+  const original = await (await page.request.get('/cms/api.php?action=get&key=home%2Fhero')).json();
+  await region.locator('h1').click();
+  await expect(region.locator('h1[contenteditable="true"]')).toBeEditable();
+  // A host editor can introduce formatting which has no Markdown equivalent.
+  await region.locator('h1').evaluate(heading => { heading.innerHTML = '<span style="color: red">Colored heading</span>'; });
+  await region.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(region.getByRole('status')).toContainText('cannot be saved inline');
+  expect((await (await page.request.get('/cms/api.php?action=get&key=home%2Fhero')).json()).markdown).toBe(original.markdown);
+  await expect(region.locator('h1')).toHaveText('Colored heading');
+  await region.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(region.locator('h1')).toHaveText('Pagecore sample site');
 });
 
 test('admin design tokens preserve desktop, focus, disabled, and mobile states', async ({ page }) => {
