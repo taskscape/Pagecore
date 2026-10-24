@@ -39,6 +39,37 @@ async function openEditor(page, key) {
   return panel;
 }
 
+async function expectAnonymousSocialImage(browser, url, title, type, expectedImage) {
+  // Social crawlers receive the initial HTML without a login or JavaScript.
+  const context = await browser.newContext({
+    javaScriptEnabled: false,
+    extraHTTPHeaders: { 'X-Pagecore-Test-Worker': workerToken }
+  });
+  try {
+    const crawler = await context.newPage();
+    for (const userAgent of ['facebookexternalhit/1.1', 'Twitterbot/1.0', 'LinkedInBot/1.0']) {
+      await context.setExtraHTTPHeaders({ 'X-Pagecore-Test-Worker': workerToken, 'User-Agent': userAgent });
+      const response = await crawler.goto(url);
+      expect(response.status()).toBe(200);
+      expect(await response.text()).toContain('<meta property="og:image"');
+      await expect(crawler.locator('head meta[property="og:type"]')).toHaveAttribute('content', type);
+      await expect(crawler.locator('head meta[property="og:title"]')).toHaveAttribute('content', title);
+      await expect(crawler.locator('head meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image');
+      const image = await crawler.locator('head meta[property="og:image"]').getAttribute('content');
+      expect(image).toMatch(/^https?:\/\//);
+      if (expectedImage) expect(image).toBe(expectedImage);
+      await expect(crawler.locator('head meta[name="twitter:image"]')).toHaveAttribute('content', image);
+      await expect(crawler.locator('head meta[name="twitter:image:alt"]')).toHaveAttribute('content', title);
+      const asset = await context.request.get(image);
+      expect(asset.status()).toBe(200);
+      expect(asset.headers()['content-type']).toMatch(/^image\/(png|jpeg)/);
+      expect((await asset.body()).length).toBeGreaterThan(0);
+    }
+  } finally {
+    await context.close();
+  }
+}
+
 test.beforeEach(() => {
   resetSampleSite(workerRoot, testRoot);
 });
@@ -274,7 +305,7 @@ test('mobile admin supports password managers and a touch-friendly new-post flow
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
-test('post links expose Facebook-friendly title, summary, canonical URL, and featured image', async ({ page }) => {
+test('post links expose social title, summary, canonical URL, and featured image', async ({ page }) => {
   const samplePort = process.env.PAGECORE_SAMPLE_PORT || '8765';
   const baseUrl = process.env.PAGECORE_BASE_URL || `http://127.0.0.1:${samplePort}`;
   await page.goto('/sample-site/post/launch-notes/');
@@ -291,6 +322,11 @@ test('post links expose Facebook-friendly title, summary, canonical URL, and fea
     `${baseUrl}/sample-site/working-uploads/2026/07/featured-pagecore.png`
   );
   await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute('content', 'Launch notes for the sample site');
+  await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image');
+  await expect(page.locator('meta[name="twitter:image"]')).toHaveAttribute(
+    'content', `${baseUrl}/sample-site/working-uploads/2026/07/featured-pagecore.png`
+  );
+  await expect(page.locator('meta[name="twitter:title"]')).toHaveAttribute('content', 'Launch notes for the sample site');
   await expect(page.locator('meta[name="description"]')).toHaveAttribute(
     'content',
     'The first sample post demonstrates Markdown body editing, excerpts, categories, generated URLs, and listing pages.'
@@ -407,6 +443,39 @@ test('social summary falls back to post body when no excerpt is authored', async
     /This event entry demonstrates category filtering and sitemap generation/
   );
   await expect(page.locator('meta[property="og:image"]')).toHaveCount(0);
+  await expect(page.locator('meta[name="twitter:image"]')).toHaveCount(0);
+  await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary');
+});
+
+test('page social metadata uses published title, escaped excerpt, image and canonical URL', async ({ page }) => {
+  const pagePath = path.join(workingContent, 'pages', 'home', 'hero.md');
+  const body = fs.readFileSync(pagePath, 'utf8');
+  fs.writeFileSync(pagePath, '---\ntitle: Contact & "talk"\nexcerpt: A "quote" & <b>clear</b> summary\nimage: https://cdn.example.com/feature.png?a=1&b=2\nurl: /sample-site/talk/\n---\n' + body);
+  fs.mkdirSync(path.join(workingContent, '.drafts', 'pages', 'home'), { recursive: true });
+  fs.writeFileSync(path.join(workingContent, '.drafts', 'pages', 'home', 'hero.md'),
+    '---\ntitle: Unpublished title\nimage: https://cdn.example.com/draft.png\n---\nDraft body');
+  for (const route of ['/sample-site/', '/sample-site/talk/?utm_source=social']) {
+    await page.goto(route);
+    const origin = new URL(page.url()).origin;
+    await expect(page.locator('head meta[property="og:type"]')).toHaveAttribute('content', 'website');
+    await expect(page.locator('head meta[property="og:title"]')).toHaveAttribute('content', 'Contact & "talk"');
+    await expect(page.locator('head meta[property="og:description"]')).toHaveAttribute('content', 'A "quote" & clear summary');
+    await expect(page.locator('head meta[name="twitter:description"]')).toHaveAttribute('content', 'A "quote" & clear summary');
+    await expect(page.locator('head meta[property="og:image"]')).toHaveAttribute('content', 'https://cdn.example.com/feature.png?a=1&b=2');
+    await expect(page.locator('head meta[property="og:image:secure_url"]')).toHaveAttribute('content', 'https://cdn.example.com/feature.png?a=1&b=2');
+    await expect(page.locator('head link[rel="canonical"]')).toHaveAttribute('href', `${origin}/sample-site/talk/`);
+    await expect(page.locator('head meta[property="og:url"]')).toHaveAttribute('content', `${origin}/sample-site/talk/`);
+    await expect(page.locator('head meta[property^="article:"]')).toHaveCount(0);
+    await expect(page.locator('head meta[property="og:image"]')).toHaveCount(1);
+  }
+});
+
+test('page social summary falls back to body and omits missing images', async ({ page }) => {
+  await page.goto('/sample-site/showcase/');
+  await expect(page.locator('head meta[property="og:description"]')).toHaveAttribute('content', /This page demonstrates how Pagecore/);
+  await expect(page.locator('head meta[name="twitter:card"]')).toHaveAttribute('content', 'summary');
+  await expect(page.locator('head meta[property="og:image"]')).toHaveCount(0);
+  await expect(page.locator('head meta[name="twitter:image"]')).toHaveCount(0);
 });
 
 test('non-public posts stay out of every anonymous surface but remain editor-reviewable', async ({ browser }) => {
@@ -496,17 +565,17 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.52.5');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.53.0');
   // A source checkout carries no build stamp, so the asset token stays the
   // bare version; a release stamps it with the commit as well.
-  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.52.5"]')).toHaveCount(1);
+  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.53.0"]')).toHaveCount(1);
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.52.5');
+  expect((await version.json()).version).toBe('2.53.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.52.5')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.53.0')).toBeVisible();
 });
 
 test('update page reports the build and never offers to write without opt-in', async ({ page }) => {
@@ -514,7 +583,7 @@ test('update page reports the build and never offers to write without opt-in', a
 
   await page.goto('/cms/update.php');
   await expect(page.getByRole('heading', { name: 'Updates', exact: true })).toBeVisible();
-  await expect(page.getByText('2.52.5').first()).toBeVisible();
+  await expect(page.getByText('2.53.0').first()).toBeVisible();
 
   // update_apply defaults to false, so no write path is offered anywhere.
   await expect(page.locator('#apply-update')).toHaveCount(0);
@@ -528,7 +597,7 @@ test('update page reports the build and never offers to write without opt-in', a
   const body = await status.json();
   expect(body.ok).toBe(true);
   expect(body.can_apply).toBe(false);
-  expect(body.installed).toContain('2.52.5');
+  expect(body.installed).toContain('2.53.0');
 
   // Applying is refused while update_apply is off, whatever the caller asks for.
   const apply = await page.request.post('/cms/api.php?action=update-apply', {
@@ -735,7 +804,7 @@ test('admin design tokens preserve desktop, focus, disabled, and mobile states',
   expect((await page.getByRole('button', { name: 'New post' }).boundingBox()).height).toBeGreaterThanOrEqual(44);
 });
 
-test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page }) => {
+test('featured image upload accepts JPEG and PNG, saves drafts, and enforces type and size limits', async ({ page, browser }) => {
   await login(page, '/sample-site/post/launch-notes/');
   const panel = await openEditor(page, 'post:launch-notes');
   const png = Buffer.from(
@@ -802,9 +871,16 @@ test('featured image upload accepts JPEG and PNG, saves drafts, and enforces typ
   });
   expect(oversizedUpload.status()).toBe(413);
   expect((await oversizedUpload.json()).error).toContain('8 MB');
+  const draftImage = draft.match(/^image: (.+)$/m)[1].trim();
+  const published = await page.request.get('/sample-site/post/launch-notes/');
+  expect(await published.text()).not.toContain(draftImage.replace(/&/g, '&amp;'));
+  await panel.getByRole('button', { name: 'Publish' }).click();
+  await expect(panel).toBeHidden();
+  await expectAnonymousSocialImage(browser, page.url().split('#')[0], 'Launch notes for the sample site', 'article',
+    new URL(draftImage, page.url()).href);
 });
 
-test('page editor saves title and featured image and derives its public URL from the title', async ({ page }) => {
+test('page editor saves title and featured image and derives its public URL from the title', async ({ page, browser }) => {
   await login(page, '/sample-site/');
   const panel = await openEditor(page, 'home/hero');
   const featuredInput = panel.getByLabel('Choose featured image');
@@ -820,6 +896,7 @@ test('page editor saves title and featured image and derives its public URL from
   await panel.getByRole('button', { name: 'Publish' }).click();
 
   await expect(page).toHaveURL(/\/sample-site\/edited-sample-home\/#cms-edit$/);
+  await page.locator('.cms-panel-close').click();
   const pageFile = fs.readFileSync(path.join(workingContent, 'pages', 'home', 'hero.md'), 'utf8');
   expect(pageFile).toContain('title: Edited sample home');
   expect(pageFile).toContain('image: /cms/media-file.php?path=');
@@ -831,6 +908,9 @@ test('page editor saves title and featured image and derives its public URL from
   expect(payload.inventory.pages).toContainEqual(expect.objectContaining({
     title: 'Edited sample home', url: '/sample-site/edited-sample-home/'
   }));
+  const image = pageFile.match(/^image: (.+)$/m)[1].trim();
+  await expectAnonymousSocialImage(browser, page.url().split('#')[0], 'Edited sample home', 'website',
+    new URL(image, page.url()).href);
 });
 
 test('application resource limits reject oversized work before writes and paginate inventories', async ({ page }) => {

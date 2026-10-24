@@ -39,12 +39,18 @@ Paste the output into `password_hash` in the file named by `PAGECORE_CONFIG`.
    `title`, `date`, `category`, optional `excerpt`), render listings with
    `cms_posts('category')`, single posts with `cms_post($slug)` and add
    `<?= cms_post_social_meta($post) ?>` inside the post template's `<head>` for
-   Facebook/Open Graph previews. The helper uses the featured image and the
+   Facebook, LinkedIn (Open Graph), and X (Twitter Card) previews. The helper uses the featured image and the
    authored excerpt, falling back to a summary derived from the post body.
    `<?= cms_listing_controls('category') ?>` to listing pages.
    Configure `post_url` with a literal `{slug}` placeholder. `cms_post_url()`
    derives every public URL from the stored slug and repairs malformed legacy
    patterns that omitted the placeholder.
+   For pages, add `<?= cms_page_social_meta('home/hero') ?>` inside `<head>`,
+   using that page's primary region key from `search_pages`. A shared header can
+   call `<?= cms_page_social_meta() ?>` to resolve the current configured route,
+   including title-derived page URLs. The helper reads the published title,
+   featured image, and excerpt (or a summary of the region body). Emit one social
+   helper per page, as demonstrated by `sample-site/_bootstrap.php` and `post.php`.
 7. Create private `content/`, `backups/`, and `uploads/` directories beside the
    document root. New media is served only through `/cms/media-file.php`.
 8. The web server user needs **write access** to those private directories and the files regenerated on publish
@@ -55,8 +61,13 @@ Paste the output into `password_hash` in the file named by `PAGECORE_CONFIG`.
 - Log in → browse the site → click an outlined fragment to edit plain text in
   place. **Save** publishes immediately, **Cancel** restores the prior content,
   and the existing **Edit** button still opens the full Markdown editor.
-- Post metadata includes a featured-image drop area. Drop or choose a JPEG/PNG
-  within the configured upload limit; Pagecore uploads it and saves its URL to the post draft automatically.
+- Page and post metadata includes a featured-image drop area. Drop or choose a JPEG/PNG
+  within the configured upload limit; Pagecore uploads it and saves its URL to the draft automatically.
+  Publish the draft to use that image in public link previews. Both helpers emit
+  absolute image URLs in the initial HTML, with `og:image` and `twitter:image`;
+  images request the `summary_large_image` card on X. Set `site_url` to the public
+  HTTPS origin and allow anonymous crawlers to fetch the page and media endpoint.
+  Social networks may retain an older preview until they fetch the link again.
   For a crisp Facebook preview, use a landscape image around 1200 x 630 pixels.
 - Markdown with tables; paste or drag raster images/PDFs straight into the
   editor. PDFs render inline when the browser is set to display them. SVG

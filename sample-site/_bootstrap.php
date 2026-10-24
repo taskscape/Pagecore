@@ -17,6 +17,7 @@ function sample_url($path = '') {
 }
 
 function sample_header($title, $head = '') {
+    if ($head === '') { $head = cms_page_social_meta(); }
 ?><!doctype html>
 <html lang="en">
 <head>

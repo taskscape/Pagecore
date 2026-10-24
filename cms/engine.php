@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.52.5');
+define('PAGECORE_VERSION', '2.53.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 // Shared hosts set these with `SetEnv` in .htaccess, which reaches getenv()
 // under mod_php/CGI but only $_SERVER under PHP-FPM. Read both so one
@@ -1222,10 +1222,41 @@ function cms_render_markdown_cached($markdown) {
 }
 
 /**
- * Metadata for rich post previews on Facebook and other Open Graph consumers.
+ * Metadata for rich post previews on Facebook, LinkedIn, and X.
  * Call this inside <head> after loading a post with cms_post().
  */
 function cms_post_social_meta(array $post) {
+    return cms_social_meta($post, 'article');
+}
+
+/**
+ * Public page previews, using the configured primary region's published metadata.
+ * Call inside <head>; omit the key to resolve the current configured page route.
+ */
+function cms_page_social_meta($key = '') {
+    if ($key === '') {
+        $requestPath = parse_url(isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '', PHP_URL_PATH);
+        foreach (cms_cfg('search_pages', array()) as $sourceUrl => $definition) {
+            $candidate = isset($definition[2]) ? (string) $definition[2] : '';
+            if ($candidate !== '' && (rtrim((string) $requestPath, '/') === rtrim((string) $sourceUrl, '/')
+                || rtrim((string) $requestPath, '/') === rtrim(cms_page_url($candidate), '/'))) {
+                $key = $candidate;
+                break;
+            }
+        }
+    }
+    $meta = cms_page_meta($key);
+    if (!$meta) { return ''; }
+    $path = cms_region_path($key, true);
+    $body = '';
+    if ($path) { list(, $body) = cms_parse_front_matter(file_get_contents($path)); }
+    if (empty($meta['excerpt'])) { $meta['excerpt'] = cms_excerpt_from($body); }
+    $meta['url'] = cms_page_url($key);
+    return cms_social_meta($meta, 'website');
+}
+
+/** Shared, server-rendered Open Graph and Twitter Card tags; no crawler JavaScript required. */
+function cms_social_meta(array $post, $type) {
     $escape = function ($value) {
         return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
     };
@@ -1240,11 +1271,14 @@ function cms_post_social_meta(array $post) {
 
     $tags = array(
         '<meta name="description" content="' . $escape($description) . '">',
-        '<meta property="og:type" content="article">',
+        '<meta property="og:type" content="' . $escape($type) . '">',
         '<meta property="og:title" content="' . $escape($title) . '">',
         '<meta property="og:description" content="' . $escape($description) . '">',
         '<meta property="og:url" content="' . $escape($url) . '">',
         '<link rel="canonical" href="' . $escape($url) . '">',
+        '<meta name="twitter:card" content="' . ($image !== '' ? 'summary_large_image' : 'summary') . '">',
+        '<meta name="twitter:title" content="' . $escape($title) . '">',
+        '<meta name="twitter:description" content="' . $escape($description) . '">',
     );
     if ($siteName !== '') {
         $tags[] = '<meta property="og:site_name" content="' . $escape($siteName) . '">';
@@ -1252,14 +1286,19 @@ function cms_post_social_meta(array $post) {
     if ($image !== '') {
         $tags[] = '<meta property="og:image" content="' . $escape($image) . '">';
         $tags[] = '<meta property="og:image:alt" content="' . $escape($title) . '">';
+        $tags[] = '<meta name="twitter:image" content="' . $escape($image) . '">';
+        $tags[] = '<meta name="twitter:image:alt" content="' . $escape($title) . '">';
+        if (stripos($image, 'https://') === 0) {
+            $tags[] = '<meta property="og:image:secure_url" content="' . $escape($image) . '">';
+        }
     }
-    if (!empty($post['date'])) {
+    if ($type === 'article' && !empty($post['date'])) {
         $tags[] = '<meta property="article:published_time" content="' . $escape($post['date']) . '">';
     }
-    if (!empty($post['category_label'])) {
+    if ($type === 'article' && !empty($post['category_label'])) {
         $tags[] = '<meta property="article:section" content="' . $escape($post['category_label']) . '">';
     }
-    if (!empty($post['tags']) && is_array($post['tags'])) {
+    if ($type === 'article' && !empty($post['tags']) && is_array($post['tags'])) {
         foreach ($post['tags'] as $tag) {
             if (!empty($tag['label'])) {
                 $tags[] = '<meta property="article:tag" content="' . $escape($tag['label']) . '">';
