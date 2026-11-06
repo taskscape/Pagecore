@@ -47,9 +47,21 @@ function cms_login_request_same_origin() {
     $source = isset($_SERVER['HTTP_ORIGIN']) ? (string) $_SERVER['HTTP_ORIGIN'] : '';
     if ($source === '' && isset($_SERVER['HTTP_REFERER'])) { $source = (string) $_SERVER['HTTP_REFERER']; }
     if ($source === '') { return true; }
-    $expected = parse_url((string) cms_cfg('site_url'));
+    // The form posts to a root-relative URL on the serving origin. site_url is
+    // the canonical public URL and may name a different hostname or scheme.
+    $target = (string) cms_cfg('site_url');
+    if (isset($_SERVER['HTTP_HOST']) && $_SERVER['HTTP_HOST'] !== '') {
+        $https = cms_transport_is_https($_SERVER, cms_cfg('trusted_proxies', array()));
+        $target = ($https ? 'https://' : 'http://') . (string) $_SERVER['HTTP_HOST'];
+    }
+    $expected = parse_url($target);
     $actual = parse_url($source);
     if (!is_array($expected) || !is_array($actual) || empty($expected['scheme']) || empty($expected['host']) || empty($actual['scheme']) || empty($actual['host'])) {
+        return false;
+    }
+    if (isset($_SERVER['HTTP_HOST']) && $_SERVER['HTTP_HOST'] !== ''
+        && (isset($expected['path']) || isset($expected['query']) || isset($expected['fragment'])
+            || isset($expected['user']) || isset($expected['pass']))) {
         return false;
     }
     $portFor = function ($parts) {

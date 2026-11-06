@@ -233,6 +233,40 @@ test('post-login redirects stay on unambiguous local application paths', async (
   expect(valid.headers().location).toBe(validTarget);
 });
 
+test('login can retry incorrect credentials and recover after reloading the form', async ({ page }) => {
+  const loginUrl = '/cms/login.php?next=%2Fsample-site%2F';
+  await page.goto(loginUrl);
+  for (const password of ['first-wrong-password', 'second-wrong-password']) {
+    await page.getByLabel('Username').fill(defaultCredentials.username);
+    await page.getByLabel('Password').fill(password);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await expect(page.locator('.error')).toHaveText('Invalid username or password.');
+  }
+
+  await page.goto(loginUrl);
+  await page.reload();
+  await page.getByLabel('Username').fill(defaultCredentials.username);
+  await page.getByLabel('Password').fill(defaultCredentials.password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.locator('.cms-toolbar')).toBeVisible();
+});
+
+test('login replaces a stale form token after the session cookie is lost', async ({ page, context }) => {
+  await page.goto('/cms/login.php?next=%2Fsample-site%2F');
+  const staleToken = await page.locator('input[name="login_token"]').inputValue();
+  await context.clearCookies();
+  await page.getByLabel('Username').fill(defaultCredentials.username);
+  await page.getByLabel('Password').fill(defaultCredentials.password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.locator('.error')).toHaveText('The sign-in form expired or came from another site. Reload and try again.');
+  expect(await page.locator('input[name="login_token"]').inputValue()).not.toBe(staleToken);
+
+  await page.getByLabel('Username').fill(defaultCredentials.username);
+  await page.getByLabel('Password').fill(defaultCredentials.password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.locator('.cms-toolbar')).toBeVisible();
+});
+
 test('login requires its pre-authentication token and rejects cross-site origins', async ({ page }) => {
   await page.goto('/cms/login.php?next=%2Fsample-site%2F');
   const token = await page.locator('input[name="login_token"]').inputValue();
@@ -565,17 +599,17 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.54.1');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.54.2');
   // A source checkout carries no build stamp, so the asset token stays the
   // bare version; a release stamps it with the commit as well.
-  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.54.1"]')).toHaveCount(1);
+  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.54.2"]')).toHaveCount(1);
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.54.1');
+  expect((await version.json()).version).toBe('2.54.2');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.54.1')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.54.2')).toBeVisible();
 });
 
 test('update page reports the build and never offers to write without opt-in', async ({ page }) => {
@@ -583,7 +617,7 @@ test('update page reports the build and never offers to write without opt-in', a
 
   await page.goto('/cms/update.php');
   await expect(page.getByRole('heading', { name: 'Updates', exact: true })).toBeVisible();
-  await expect(page.getByText('2.54.1').first()).toBeVisible();
+  await expect(page.getByText('2.54.2').first()).toBeVisible();
 
   // update_apply defaults to false, so no write path is offered anywhere.
   await expect(page.locator('#apply-update')).toHaveCount(0);
@@ -597,7 +631,7 @@ test('update page reports the build and never offers to write without opt-in', a
   const body = await status.json();
   expect(body.ok).toBe(true);
   expect(body.can_apply).toBe(false);
-  expect(body.installed).toContain('2.54.1');
+  expect(body.installed).toContain('2.54.2');
 
   // Applying is refused while update_apply is off, whatever the caller asks for.
   const apply = await page.request.post('/cms/api.php?action=update-apply', {

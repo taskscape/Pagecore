@@ -14,6 +14,7 @@ $tests = @(
     'input-validation.php',
     'json-policy.php',
     'login-redirect.php',
+    'login-request.php',
     'login-throttle.php',
     'media-references.php',
     'modules.php',
