@@ -30,6 +30,7 @@ return array(
     'content_dir' => $private . '/content',
     'external_edit_validation' => true,
     'rendered_content_cache' => true,
+    'statistics_enabled' => false,
     'backup_dir' => $private . '/backups',
     'backup_keep' => 20,
     'site_root' => '/var/www/example/public',

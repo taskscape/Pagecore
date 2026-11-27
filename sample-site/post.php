@@ -32,4 +32,5 @@ sample_header($post['title'], cms_post_social_meta($post));
     </div>
   </article>
 </main>
+<?= cms_statistics_tracker('post', $post['slug'], $post['title'], 'article .prose') ?>
 <?php sample_footer(); ?>

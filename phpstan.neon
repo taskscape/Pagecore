@@ -1,5 +1,7 @@
 parameters:
     level: 3
+    scanFiles:
+        - cms/engine.php
     paths:
         - cms/modules
         - scripts/lib/wordpress-html-converter.php

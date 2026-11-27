@@ -27,6 +27,7 @@ $tests = @(
     'routes.php',
     'runtime-policy.php',
     'slug-policy.php',
+    'statistics.php',
     'template-discovery.php',
     'time-policy.php',
     'transport-config.php',

@@ -33,4 +33,5 @@ $posts = $active === 'all' ? cms_posts() : cms_posts($active);
     </div>
   </section>
 </main>
+<?= cms_statistics_tracker('page', 'news', 'Posts') ?>
 <?php sample_footer(); ?>

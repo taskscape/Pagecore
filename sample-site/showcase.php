@@ -58,4 +58,5 @@ image: /sample-site/working-uploads/2026/07/featured-pagecore.png
     </div>
   </section>
 </main>
+<?= cms_statistics_tracker('page', 'showcase', 'Showcase') ?>
 <?php sample_footer(); ?>

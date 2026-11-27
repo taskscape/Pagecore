@@ -23,6 +23,8 @@ admin_view_check(strpos($content, 'href="/control/content.php" aria-current="pag
 admin_view_check(strpos($content, 'Version test-version') !== false, 'Content shell version is missing.');
 $media = cms_admin_sidebar('media', false);
 admin_view_check(strpos($media, '/control/media.php?picker=1') !== false, 'Media picker route is missing.');
+$statistics = cms_admin_sidebar('statistics');
+admin_view_check(strpos($statistics, 'href="/control/statistics.php" aria-current="page"') !== false, 'Statistics navigation does not expose its current page.');
 $bootstrap = cms_admin_client_assets('PAGECORE_TEST', array('api' => '/control/api.php', 'token' => '<token>'));
 admin_view_check(strpos($bootstrap, 'window.PAGECORE_TEST') !== false && strpos($bootstrap, 'admin-client.js') !== false, 'Shared client bootstrap is incomplete.');
 admin_view_check(substr_count($bootstrap, '?v=test-version') === 2, 'Shared client assets are not versioned consistently.');

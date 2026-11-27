@@ -13,4 +13,5 @@ sample_header('Contact');
     </div>
   </section>
 </main>
+<?= cms_statistics_tracker('page', 'contact', 'Contact') ?>
 <?php sample_footer(); ?>

@@ -153,7 +153,8 @@ function cms_validate_config($config, $production) {
 
     if (!isset($config['external_edit_validation'])) { $config['external_edit_validation'] = true; }
     if (!isset($config['rendered_content_cache'])) { $config['rendered_content_cache'] = false; }
-    foreach (array('development_only', 'demo_credentials', 'require_https', 'cookie_secure', 'hsts', 'external_edit_validation', 'rendered_content_cache') as $key) {
+    if (!array_key_exists('statistics_enabled', $config)) { $config['statistics_enabled'] = false; }
+    foreach (array('development_only', 'demo_credentials', 'require_https', 'cookie_secure', 'hsts', 'external_edit_validation', 'rendered_content_cache', 'statistics_enabled') as $key) {
         if (!array_key_exists($key, $config) || !is_bool($config[$key])) { $errors[] = $key . ' must be boolean'; }
     }
     if (!isset($config['static_media_references'])) { $config['static_media_references'] = array(); }

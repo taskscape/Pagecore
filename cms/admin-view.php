@@ -41,10 +41,12 @@ function cms_admin_update_refresh() {
 function cms_admin_sidebar($active, $picker = false) {
     $content = cms_admin_e(cms_admin_url('content.php'));
     $media = cms_admin_e(cms_admin_url('media.php'));
+    $statistics = cms_admin_e(cms_admin_url('statistics.php'));
     $update = cms_admin_e(cms_admin_url('update.php'));
     $home = cms_admin_e(cms_site_url());
     $contentCurrent = $active === 'content' ? ' aria-current="page"' : '';
     $mediaCurrent = $active === 'media' ? ' aria-current="page"' : '';
+    $statisticsCurrent = $active === 'statistics' ? ' aria-current="page"' : '';
     $updateCurrent = $active === 'update' ? ' aria-current="page"' : '';
     $html = '<aside class="pc-sidebar">'
         . '<a class="pc-brand" href="' . $home . '" aria-label="Pagecore site home">'
@@ -55,6 +57,7 @@ function cms_admin_sidebar($active, $picker = false) {
         . '<a href="' . $content . '#posts-title"><span class="material-symbols-rounded" aria-hidden="true">edit_note</span>Posts</a>'
         . '<a href="' . $content . '#pages-title"><span class="material-symbols-rounded" aria-hidden="true">article</span>Pages</a>'
         . '<a href="' . $media . '"' . $mediaCurrent . '><span class="material-symbols-rounded" aria-hidden="true">photo_library</span>Media</a>'
+        . '<a href="' . $statistics . '"' . $statisticsCurrent . '><span class="material-symbols-rounded" aria-hidden="true">bar_chart</span>Statistics</a>'
         . '<a href="' . $update . '"' . $updateCurrent . '><span class="material-symbols-rounded" aria-hidden="true">system_update_alt</span>Updates</a>'
         . '</nav></div>';
     if ($active === 'media') {
@@ -62,7 +65,7 @@ function cms_admin_sidebar($active, $picker = false) {
             . '<a href="' . $media . '"><span class="material-symbols-rounded" aria-hidden="true">grid_view</span>All files</a>'
             . (!$picker ? '<a href="' . $media . '?picker=1"><span class="material-symbols-rounded" aria-hidden="true">add_photo_alternate</span>Picker mode</a>' : '')
             . '</nav></div>';
-    } else {
+    } elseif ($active !== 'statistics') {
         $html .= '<div class="pc-nav-group"><p class="pc-nav-label">Structure</p><nav class="pc-nav" aria-label="Structure navigation">'
             . '<a href="#regions-title"><span class="material-symbols-rounded" aria-hidden="true">dashboard_customize</span>Regions</a>'
             . '<a href="#nav-title"><span class="material-symbols-rounded" aria-hidden="true">account_tree</span>Navigation</a>'

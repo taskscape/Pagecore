@@ -96,6 +96,84 @@ test('visitor sees rendered sample site without editor chrome', async ({ page })
   await expect(page.locator('link[href="/cms/assets/editor.css"]')).toHaveCount(0);
 });
 
+test('statistics counts engaged public readers and keeps the report private', async ({ browser, page, baseURL }) => {
+  test.setTimeout(60_000);
+  const agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0.0.0 Safari/537.36';
+  const context = await browser.newContext({
+    userAgent: agent,
+    viewport: { width: 1000, height: 1000 },
+    extraHTTPHeaders: { 'X-Pagecore-Test-Worker': workerToken }
+  });
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false });
+  });
+  const dashboard = '/cms/statistics.php';
+  const collector = '/cms/statistics-read.php';
+  const tracker = 'script[data-pagecore-read-url]';
+  const contactFile = path.join(workingContent, 'pages', 'contact', '.readers.jsonl');
+  const postFile = path.join(workingContent, 'posts', 'launch-notes.readers.jsonl');
+  try {
+    const anonymous = await context.request.get(dashboard, { maxRedirects: 0 });
+    expect(anonymous.status()).toBe(302);
+    expect(anonymous.headers().location).toContain('/cms/login.php?next=');
+    expect(anonymous.headers()['cache-control']).toContain('no-store');
+    expect((await context.request.get(collector)).status()).toBe(405);
+    const bot = await context.request.get('/sample-site/contact.php', { headers: { 'User-Agent': 'Googlebot/2.1' } });
+    expect(await bot.text()).not.toContain('data-pagecore-read-url');
+
+    const visitor = await context.newPage();
+    await visitor.goto('/sample-site/');
+    await expect(visitor.locator(tracker)).toHaveCount(1);
+    const contactRead = visitor.waitForResponse(response => response.url().endsWith(collector), { timeout: 25_000 });
+    await visitor.goto('/sample-site/contact.php');
+    const ticket = await visitor.locator(tracker).getAttribute('data-ticket');
+    const early = await context.request.post(collector, {
+      headers: { Origin: new URL(baseURL).origin, 'Content-Type': 'text/plain' },
+      data: ticket
+    });
+    expect(early.status()).toBe(400);
+    const crossOrigin = await context.request.post(collector, {
+      headers: { Origin: 'https://example.invalid', 'Content-Type': 'text/plain' },
+      data: ticket
+    });
+    expect(crossOrigin.status()).toBe(403);
+    expect(fs.existsSync(contactFile)).toBe(false);
+    expect((await contactRead).status()).toBe(204);
+    expect(fs.existsSync(contactFile)).toBe(true);
+    expect(fs.existsSync(path.join(workingContent, 'pages', 'home', '.readers.jsonl'))).toBe(false);
+
+    await visitor.goto('/sample-site/post/launch-notes/');
+    await visitor.locator('article .prose').evaluate(element => { element.style.minHeight = '2400px'; });
+    await visitor.waitForTimeout(15_500);
+    expect(fs.existsSync(postFile)).toBe(false);
+    const postRead = visitor.waitForResponse(response => response.url().endsWith(collector));
+    await visitor.mouse.wheel(0, 1300);
+    expect((await postRead).status()).toBe(204);
+    const postEntry = JSON.parse(fs.readFileSync(postFile, 'utf8').trim());
+    const contactEntry = JSON.parse(fs.readFileSync(contactFile, 'utf8').trim());
+    expect(postEntry[1]).toBe(contactEntry[1]);
+    expect((await context.request.get('/sample-site/working-content/posts/launch-notes.readers.jsonl')).status()).toBe(404);
+  } finally {
+    await context.close();
+  }
+
+  await login(page);
+  await expect(page.locator(tracker)).toHaveCount(0);
+  await page.goto('/cms/content.php');
+  await page.getByRole('link', { name: 'Statistics' }).click();
+  await expect(page.getByRole('heading', { name: 'Statistics', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Statistics' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('.summary strong')).toHaveText(['1', '0', '1']);
+  await expect(page.getByRole('table', { name: 'Posts' }).getByText('Launch notes for the sample site')).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Pages' }).getByRole('row', { name: /\bContact\b/ })).toBeVisible();
+  for (const period of ['week', 'month', 'year']) {
+    await page.getByRole('combobox', { name: 'Period', exact: true }).selectOption(period);
+    await page.getByRole('button', { name: 'View statistics' }).click();
+    await expect(page).toHaveURL(new RegExp(`period=${period}&date=`));
+    await expect(page.locator('.summary strong')).toHaveText(['1', '0', '1']);
+  }
+});
+
 test('anonymous search is read-only, bounded, and paginated', async ({ page }) => {
   const indexPath = generatedFiles[0];
   expect(fs.existsSync(indexPath)).toBe(false);
@@ -599,17 +677,17 @@ test('published Markdown escapes executable HTML and unsafe links by default', a
 test('editor can see the installed Pagecore version', async ({ page }) => {
   await login(page);
 
-  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.54.2');
+  await expect(page.locator('.cms-toolbar')).toContainText('Pagecore 2.55.0');
   // A source checkout carries no build stamp, so the asset token stays the
   // bare version; a release stamps it with the commit as well.
-  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.54.2"]')).toHaveCount(1);
+  await expect(page.locator('link[href="/cms/assets/editor.css?v=2.55.0"]')).toHaveCount(1);
 
   const version = await page.request.get('/cms/api.php?action=version');
   expect(version.ok()).toBeTruthy();
-  expect((await version.json()).version).toBe('2.54.2');
+  expect((await version.json()).version).toBe('2.55.0');
 
   await page.goto('/cms/content.php');
-  await expect(page.getByText('Pagecore 2.54.2')).toBeVisible();
+  await expect(page.getByText('Pagecore 2.55.0')).toBeVisible();
 });
 
 test('update page reports the build and never offers to write without opt-in', async ({ page }) => {
@@ -617,7 +695,7 @@ test('update page reports the build and never offers to write without opt-in', a
 
   await page.goto('/cms/update.php');
   await expect(page.getByRole('heading', { name: 'Updates', exact: true })).toBeVisible();
-  await expect(page.getByText('2.54.2').first()).toBeVisible();
+  await expect(page.getByText('2.55.0').first()).toBeVisible();
 
   // update_apply defaults to false, so no write path is offered anywhere.
   await expect(page.locator('#apply-update')).toHaveCount(0);
@@ -631,7 +709,7 @@ test('update page reports the build and never offers to write without opt-in', a
   const body = await status.json();
   expect(body.ok).toBe(true);
   expect(body.can_apply).toBe(false);
-  expect(body.installed).toContain('2.54.2');
+  expect(body.installed).toContain('2.55.0');
 
   // Applying is refused while update_apply is off, whatever the caller asks for.
   const apply = await page.request.post('/cms/api.php?action=update-apply', {

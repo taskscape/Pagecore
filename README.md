@@ -164,6 +164,10 @@ Templates can render that file with `cms_nav_items()` or `cms_nav_html()`.
 If `nav.json` does not exist or is invalid, Pagecore falls back to the
 configured `search_pages`.
 
+### Reader statistics
+
+The **Statistics** admin page shows new and returning engaged readers for the site and for individual posts and pages. Collection is opt-in. It uses first-party tracking and private text sidecars beside the Markdown content. See [reader statistics configuration](docs/configuration.md#reader-statistics) for template setup and counting rules.
+
 ### Integration API (developer perspective)
 
 Add `require 'cms/engine.php';` to the site bootstrap, then:

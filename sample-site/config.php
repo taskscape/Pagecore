@@ -45,6 +45,7 @@ return array(
     'generated_dir' => $generated,
     'external_edit_validation' => true,
     'rendered_content_cache' => true,
+    'statistics_enabled' => true,
     'backup_dir' => $content . '/.backups',
     'backup_keep' => 20,
     'site_root' => $root,

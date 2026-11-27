@@ -21,7 +21,7 @@ define('CMS_LOADED', 1);
 
 define('CMS_DIR', __DIR__);
 require_once __DIR__ . '/runtime.php';
-define('PAGECORE_VERSION', '2.54.2');
+define('PAGECORE_VERSION', '2.55.0');
 $cmsConfigFile = defined('CMS_CONFIG_FILE') ? CMS_CONFIG_FILE : getenv('PAGECORE_CONFIG');
 // Shared hosts set these with `SetEnv` in .htaccess, which reaches getenv()
 // under mod_php/CGI but only $_SERVER under PHP-FPM. Read both so one
@@ -71,6 +71,7 @@ require_once __DIR__ . '/modules/time-policy.php';
 require_once __DIR__ . '/modules/slug-policy.php';
 require_once __DIR__ . '/modules/update-policy.php';
 require_once __DIR__ . '/modules/update-state.php';
+require_once __DIR__ . '/modules/statistics-integration.php';
 list($cmsConfig, $cmsConfigErrors) = cms_validate_config(require $cmsConfigFile, !$cmsDevelopment);
 if ($cmsConfigErrors) {
     error_log('Pagecore configuration invalid: ' . implode('; ', $cmsConfigErrors));

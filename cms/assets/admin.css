@@ -235,6 +235,19 @@ body.pc-admin .post-pagination { background: var(--pc-surface-soft); border-top-
 body.pc-admin .post-modal { background: rgba(30,30,28,.45); backdrop-filter: blur(5px); }
 body.pc-admin .post-modal-box { border: 1px solid var(--pc-border); border-radius: 14px; box-shadow: 0 24px 70px rgba(20,20,18,.22); }
 
+.pc-statistics-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.pc-statistics-field { display: grid; gap: 4px; }
+.pc-statistics-field label { font-weight: 650; }
+.pc-statistics-filters select, .pc-statistics-filters input { min-height: 40px; padding: 7px 10px; }
+.pc-statistics-range { color: var(--pc-muted); }
+.pc-statistics h2 { font-size: 17px; }
+body.pc-admin .pc-statistics .summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pc-statistics-table { overflow-x: auto; }
+.pc-statistics-table td:first-child { overflow-wrap: anywhere; }
+.pc-statistics-table small { display: block; color: var(--pc-muted); }
+body.pc-admin .pc-statistics-table :is(th, td):not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.pc-statistics-empty { padding: 0 22px; color: var(--pc-muted); }
+
 /* Login */
 body.pc-login { display: grid; place-items: center; padding: 24px; }
 .pc-login-shell {

@@ -24,6 +24,12 @@ sample-site/working-content/
 sample-site/working-uploads/
 sample-site/search-index.json
 sample-site/sitemap.xml
+
+# Private reader statistics generated at runtime.
+/content/posts/*.readers.jsonl*
+/content/pages/**/.readers.jsonl*
+/content/.state/statistics-rate.json*
+
 php
 zagozda
 terapiawypalenia

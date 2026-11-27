@@ -59,4 +59,5 @@ $news = array_slice(cms_posts('news'), 0, 3);
     </div>
   </section>
 </main>
+<?= cms_statistics_tracker('page', 'home', 'Home') ?>
 <?php sample_footer(); ?>
